@@ -3,10 +3,13 @@
 #include "ui/preview/preview_widget.h"
 
 #include <QApplication>
+#include <QCheckBox>
 #include <QComboBox>
+#include <QContextMenuEvent>
 #include <QDoubleSpinBox>
 #include <QElapsedTimer>
 #include <QInputDialog>
+#include <QKeyEvent>
 #include <QLabel>
 #include <QListWidget>
 #include <QMenu>
@@ -17,6 +20,7 @@
 #include <QSlider>
 #include <QThread>
 #include <QTimer>
+#include <QTest>
 
 #include <creative_suite/effects/effects.h>
 
@@ -188,6 +192,94 @@ int main(int argc, char** argv) {
         require(std::any_of(graph.nodes.begin(), graph.nodes.end(), [](const auto& node) {
                     return node.effect && node.effect->id == "video.saturation";
                 }), "Color must add the chosen effect type to its graph.");
+        workspace.resize(1100, 900);
+        workspace.show();
+        application.processEvents();
+        const auto input_graph_node = std::find_if(graph.nodes.begin(), graph.nodes.end(),
+            [](const color::Node& node) { return node.type == color::NodeType::Input; });
+        require(input_graph_node != graph.nodes.end(),
+                "The Color graph input must exist before opening its menu.");
+        nodes->setGraph(graph, input_graph_node->id);
+        const auto node_position = nodes->mapFromScene(QPointF(
+            input_graph_node->x + 24.0, input_graph_node->y + 24.0));
+        bool add_curves_triggered = false;
+        QTimer::singleShot(0, [nodes, &add_curves_triggered] {
+            auto* menu = nodes->findChild<QMenu*>(QStringLiteral("colorNodeCanvasContextMenu"));
+            if (!menu || menu->actions().empty()) return;
+            menu->setActiveAction(menu->actions().front());
+            QKeyEvent activate(QEvent::KeyPress, Qt::Key_Return, Qt::NoModifier);
+            QApplication::sendEvent(menu, &activate);
+            add_curves_triggered = true;
+        });
+        QContextMenuEvent add_curves_menu(QContextMenuEvent::Mouse, node_position,
+            nodes->viewport()->mapToGlobal(node_position));
+        QApplication::sendEvent(nodes->viewport(), &add_curves_menu);
+        require(add_curves_triggered,
+                "The Color canvas context menu must present the Curves action.");
+        const auto selected_curves = nodes->selectedNode();
+        const auto* curves_node = selected_curves
+            ? color::findNode(graph, *selected_curves) : nullptr;
+        require(curves_node && curves_node->type == color::NodeType::Curves &&
+                    curves_node->curves,
+                "The Color canvas context menu must insert a Curves node after the selection.");
+        const auto curves_id = curves_node->id;
+        auto* curve_kind = workspace.findChild<QComboBox*>("colorCurveKind");
+        require(curve_kind && curve_kind->count() == 9 &&
+                    workspace.findChild<QWidget*>("colorCurveEditor"),
+                "The Curves controls must expose all nine curve families.");
+        auto* curve_editor = workspace.findChild<QWidget*>("colorCurveEditor");
+        require(curve_kind && curve_editor,
+                "The selected Curves node must retain its curve controls.");
+        curve_editor->resize(280, 210);
+        curve_editor->show();
+        application.processEvents();
+        curve_kind = workspace.findChild<QComboBox*>("colorCurveKind");
+        curve_editor = workspace.findChild<QWidget*>("colorCurveEditor");
+        require(curve_kind && curve_editor,
+                "The curve controls must remain available after layout processing.");
+        curve_kind->setCurrentIndex(curve_kind->findData(
+            static_cast<int>(color::CurveKind::HueVsHue)));
+        require(curve_kind->currentData().toInt() ==
+                    static_cast<int>(color::CurveKind::HueVsHue),
+                "The requested curve family must remain selected during editing.");
+        const QPointF curve_point(14.0 + 128.0 * 252.0 / 255.0,
+            10.0 + (1.0 - 200.0 / 255.0) * 174.0);
+        const auto curve_batches_before = grade_batches_started;
+        const auto curve_finishes_before = grade_batches_finished;
+        QTest::mousePress(curve_editor, Qt::LeftButton, Qt::NoModifier,
+            curve_point.toPoint());
+        QTest::mouseMove(curve_editor, (curve_point + QPointF(25.0, -18.0)).toPoint());
+        QTest::mouseRelease(curve_editor, Qt::LeftButton, Qt::NoModifier,
+            (curve_point + QPointF(25.0, -18.0)).toPoint());
+        const auto* adjusted_curves_node = color::findNode(graph, curves_id);
+        require(adjusted_curves_node &&
+                    adjusted_curves_node->curves->parameters.targeted[0].size() == 3 &&
+                    grade_batches_started == curve_batches_before + 1 &&
+                    grade_batches_finished == curve_finishes_before + 1,
+                "Editing a curve point must update the selected family in one shared history batch.");
+        auto* hue_min = workspace.findChild<QDoubleSpinBox*>("colorQualifier_hue_min");
+        auto* hue_max = workspace.findChild<QDoubleSpinBox*>("colorQualifier_hue_max");
+        auto* qualifier_enabled = workspace.findChild<QCheckBox*>(
+            "colorCurvesQualifierEnabled");
+        require(hue_min && hue_max && qualifier_enabled,
+                "Curves must expose its tonal qualifier controls.");
+        hue_min->setValue(350);
+        QMetaObject::invokeMethod(hue_min, "editingFinished");
+        application.processEvents();
+        hue_max = workspace.findChild<QDoubleSpinBox*>("colorQualifier_hue_max");
+        qualifier_enabled = workspace.findChild<QCheckBox*>(
+            "colorCurvesQualifierEnabled");
+        hue_max->setValue(12);
+        QMetaObject::invokeMethod(hue_max, "editingFinished");
+        application.processEvents();
+        qualifier_enabled = workspace.findChild<QCheckBox*>(
+            "colorCurvesQualifierEnabled");
+        qualifier_enabled->setChecked(true);
+        const auto* qualified_curves_node = color::findNode(graph, curves_id);
+        require(qualified_curves_node && qualified_curves_node->curves->parameters.qualifier.enabled &&
+                    qualified_curves_node->curves->parameters.qualifier.hue_min == 350 &&
+                    qualified_curves_node->curves->parameters.qualifier.hue_max == 12,
+                "The UI must preserve a qualifier hue range that wraps across zero.");
         QImage thumbnail(4, 3, QImage::Format_RGBA8888);
         thumbnail.fill(Qt::red);
         workspace.setClips({{7, QStringLiteral("Shot A"), thumbnail}}, 7, graph);
@@ -326,6 +418,26 @@ int main(int argc, char** argv) {
         remove_button->click();
         require(removed_id == QStringLiteral("still-a"),
                 "Color Gallery removal did not target the selected still.");
+        auto scope_curves_graph = color::makePassthroughGraph();
+        require(color::insertCurvesAfter(scope_curves_graph, 1),
+                "Could not create the scope matte-preview Curves fixture.");
+        const auto scope_curves_node = std::find_if(scope_curves_graph.nodes.begin(),
+            scope_curves_graph.nodes.end(), [](const color::Node& node) {
+                return node.type == color::NodeType::Curves;
+            });
+        require(scope_curves_node != scope_curves_graph.nodes.end(),
+                "The scope matte-preview Curves node is missing.");
+        const auto scope_curves_id = scope_curves_node->id;
+        auto scope_qualifier = scope_curves_node->curves->parameters.qualifier;
+        scope_qualifier.enabled = true;
+        require(color::setCurvesQualifier(scope_curves_graph, scope_curves_id,
+                    scope_qualifier), "Could not enable the scope matte preview qualifier.");
+        workspace.setClips({{7, QStringLiteral("Shot A"), thumbnail}}, 7,
+            scope_curves_graph);
+        const QPoint curves_canvas_position = nodes->mapFromScene(QPointF(
+            scope_curves_node->x + 77.0, scope_curves_node->y + 20.0));
+        QTest::mouseClick(nodes->viewport(), Qt::LeftButton, Qt::NoModifier,
+            curves_canvas_position);
         auto* viewer = new PreviewWidget(&workspace);
         auto frame = std::make_shared<media::VideoFrame>();
         frame->width = 2; frame->height = 2; frame->stride = 8;
@@ -344,6 +456,9 @@ int main(int argc, char** argv) {
         }
         require(!waveform->pixmap().isNull() && waveform->pixmap().size() == QSize(480, 256),
                 "Waveform must process the composed RGBA frame asynchronously at bounded resolution.");
+        auto* matte_preview = workspace.findChild<QLabel*>("colorQualifierMattePreview");
+        require(matte_preview && !matte_preview->pixmap().isNull(),
+                "The Curves qualifier must provide a preview from the composed scope frame.");
         auto* scope_mode = workspace.findChild<QComboBox*>("colorScopeMode");
         const std::array<QString, 4> scope_modes{QStringLiteral("waveform"),
             QStringLiteral("parade"), QStringLiteral("vectorscope"),

@@ -24,6 +24,8 @@ public:
 
     explicit BackupManager(QObject* parent = nullptr);
     explicit BackupManager(const QString& customBackupDir, QObject* parent = nullptr);
+    BackupManager(const QString& customBackupDir, const QString& customSettingsFile,
+                  QObject* parent = nullptr);
 
     [[nodiscard]] static QString defaultBackupDirectory();
     [[nodiscard]] QString backupDirectory() const;
@@ -50,6 +52,7 @@ private:
     void saveSettings() const;
 
     QString m_backupDirectory;
+    QString m_settingsFilePath;
 };
 
 } // namespace creative_suite::hub

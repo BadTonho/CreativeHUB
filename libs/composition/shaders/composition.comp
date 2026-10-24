@@ -22,8 +22,105 @@ layout(push_constant) uniform Parameters {
     REAL2 trig; REAL2 scale_opacity;
     vec4 color;
 } p;
+float sampleCurve(int index, int curve, float input_value) {
+    int x = int(floor(clamp(input_value, 0.0, 1.0) * 255.0 + 0.5));
+    int base = index * 586 + 7 + curve * 64 + x / 4;
+    vec4 packed = adjustment_values[base];
+    int component = x - (x / 4) * 4;
+    float value = component == 0 ? packed.x : component == 1 ? packed.y :
+        component == 2 ? packed.z : packed.w;
+    return floor(value * 255.0 + 0.5) / 255.0;
+}
+float curveOffset(int index, int curve, float input_value) {
+    return (sampleCurve(index, curve, input_value) * 255.0 - 128.0) / 127.0;
+}
+float rangeWeight(float value, float minimum, float maximum, float softness) {
+    float lower = softness <= 0.0 ? float(value >= minimum) :
+        smoothstep(minimum - softness, minimum + softness, value);
+    float upper = softness <= 0.0 ? float(value <= maximum) :
+        1.0 - smoothstep(maximum - softness, maximum + softness, value);
+    return min(lower, upper);
+}
+struct Hsv { float h; float s; float v; };
+Hsv toHsv(vec3 rgb) {
+    float maximum = max(max(rgb.r, rgb.g), rgb.b);
+    float minimum = min(min(rgb.r, rgb.g), rgb.b);
+    float delta = maximum - minimum;
+    Hsv result; result.h = 0.0; result.s = maximum <= 0.0 ? 0.0 : delta / maximum;
+    result.v = maximum;
+    if (delta <= 0.0) return result;
+    if (maximum == rgb.r) result.h = 60.0 * mod((rgb.g - rgb.b) / delta, 6.0);
+    else if (maximum == rgb.g) result.h = 60.0 * ((rgb.b - rgb.r) / delta + 2.0);
+    else result.h = 60.0 * ((rgb.r - rgb.g) / delta + 4.0);
+    if (result.h < 0.0) result.h += 360.0;
+    return result;
+}
+vec3 fromHsv(Hsv hsv) {
+    hsv.h = mod(hsv.h, 360.0); if (hsv.h < 0.0) hsv.h += 360.0;
+    hsv.s = clamp(hsv.s, 0.0, 1.0); hsv.v = clamp(hsv.v, 0.0, 1.0);
+    float chroma = hsv.v * hsv.s;
+    float x = chroma * (1.0 - abs(mod(hsv.h / 60.0, 2.0) - 1.0));
+    float m = hsv.v - chroma;
+    if (hsv.h < 60.0) return vec3(chroma + m, x + m, m);
+    if (hsv.h < 120.0) return vec3(x + m, chroma + m, m);
+    if (hsv.h < 180.0) return vec3(m, chroma + m, x + m);
+    if (hsv.h < 240.0) return vec3(m, x + m, chroma + m);
+    if (hsv.h < 300.0) return vec3(x + m, m, chroma + m);
+    return vec3(chroma + m, m, x + m);
+}
+float qualifierMatte(vec3 rgb, int index) {
+    int base = index * 586;
+    vec4 range = adjustment_values[base + 583];
+    vec4 softness = adjustment_values[base + 584];
+    vec4 flags = adjustment_values[base + 585];
+    if (flags.y < 0.5) return 1.0;
+    Hsv hsv = toHsv(rgb);
+    float hue = hsv.h;
+    float end = range.y;
+    float hue_sample = hue;
+    if (!(range.x == 0.0 && range.y == 360.0) && end < range.x) {
+        end += 360.0;
+        if (hue_sample < range.x) hue_sample += 360.0;
+    }
+    float hue_weight = range.x == 0.0 && range.y == 360.0 ? 1.0 :
+        rangeWeight(hue_sample, range.x, end, softness.z);
+    float sat_weight = rangeWeight(hsv.s * 100.0, range.z, range.w, softness.w);
+    precise float luma = clamp(rgb.r * 0.2126 + rgb.g * 0.7152 + rgb.b * 0.0722,
+        0.0, 1.0) * 100.0;
+    float luma_weight = rangeWeight(luma, softness.x, softness.y, flags.x);
+    return hue_weight * sat_weight * luma_weight;
+}
+vec3 applyVideoCurves(vec3 source_rgb, int index) {
+    int base = index * 586;
+    precise float luminance = clamp(source_rgb.r * 0.2126 + source_rgb.g * 0.7152 +
+        source_rgb.b * 0.0722, 0.0, 1.0);
+    float mapped = sampleCurve(index, 0, luminance);
+    vec3 rgb = luminance > 1e-12 ? clamp(source_rgb * (mapped / luminance), 0.0, 1.0) : vec3(mapped);
+    rgb = vec3(sampleCurve(index, 1, rgb.r), sampleCurve(index, 2, rgb.g),
+        sampleCurve(index, 3, rgb.b));
+    precise float old_luma = clamp(rgb.r * 0.2126 + rgb.g * 0.7152 +
+        rgb.b * 0.0722, 0.0, 1.0);
+    Hsv hsv = toHsv(rgb);
+    float hue_offset = curveOffset(index, 4, hsv.h / 360.0);
+    hsv.h += hue_offset * (360.0 / 255.0);
+    hsv.s += curveOffset(index, 5, hsv.h / 360.0);
+    float luma_delta = curveOffset(index, 6, hsv.h / 360.0);
+    hsv.s += curveOffset(index, 7, old_luma);
+    hsv.s += curveOffset(index, 8, hsv.s);
+    vec3 adjusted = fromHsv(hsv);
+    float target_luma = clamp(old_luma + luma_delta, 0.0, 1.0);
+    if (luma_delta != 0.0) {
+        precise float adjusted_luma = adjusted.r * 0.2126 + adjusted.g * 0.7152 +
+            adjusted.b * 0.0722;
+        if (adjusted_luma > 1e-12) adjusted = clamp(adjusted * (target_luma / adjusted_luma), 0.0, 1.0);
+    }
+    float matte = qualifierMatte(source_rgb, index);
+    return floor(clamp(mix(source_rgb, adjusted, matte), 0.0, 1.0) * 255.0 + 0.5) / 255.0;
+}
 vec3 adjustColor(vec3 rgb, int index) {
-    int base = index * 7;
+    int base = index * 586;
+    if (adjustment_values[base + 585].z > 0.5)
+        return applyVideoCurves(rgb, index);
     vec4 affine = adjustment_values[base];
     vec4 lift_saturation = adjustment_values[base + 1];
     vec4 gamma_gain_red = adjustment_values[base + 2];
@@ -94,6 +191,7 @@ void main() {
             vec3 rgb=vec3(adjusted)/255.0;
             for(int i=0;i<p.control.y;++i) {
                 rgb=adjustColor(rgb,i);
+                rgb=floor(clamp(rgb,0.0,1.0)*255.0+0.5)/255.0;
             }
             adjusted=uvec3(floor(rgb*255.0+0.5));
         }
@@ -105,7 +203,10 @@ void main() {
         c=source(pixel);
         if(op==2) {
             vec3 rgb=vec3(c.rgb)/255.0;
-            for(int i=0;i<p.control.y;++i)rgb=adjustColor(rgb,i);
+            for(int i=0;i<p.control.y;++i) {
+                rgb=adjustColor(rgb,i);
+                rgb=floor(clamp(rgb,0.0,1.0)*255.0+0.5)/255.0;
+            }
             c.rgb=uvec3(floor(rgb*255.0+0.5));
         } else if(op==3) {
             ivec2 fs=imageSize(foreground_image);

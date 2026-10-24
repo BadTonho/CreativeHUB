@@ -16,6 +16,9 @@ add_creative_suite_test(
 add_creative_suite_test(
     NAME creative-suite-effects-primary-grade
     COMMAND creative-suite-effects-tests --primary-grade-only)
+add_creative_suite_test(
+    NAME creative-suite-effects-video-curves
+    COMMAND creative-suite-effects-tests --video-curves-only)
 
 add_executable(creative-suite-composition-tests
     composition_test.cpp

@@ -145,13 +145,20 @@ bool validate(const Graph& graph) noexcept {
             maximum_id = std::max(maximum_id, node.id);
             if (node.type == NodeType::Input) {
                 ++input_count;
-                if (node.effect) return false;
+                if (node.effect || node.curves) return false;
             } else if (node.type == NodeType::Output) {
                 ++output_count;
-                if (node.effect) return false;
+                if (node.effect || node.curves) return false;
             } else if (node.type == NodeType::ParallelMixer) {
-                if (node.effect) return false;
-            } else if (!node.effect || !creative_suite::effects::isValid(*node.effect)) {
+                if (node.effect || node.curves) return false;
+            } else if (node.type == NodeType::Effect) {
+                if (!node.effect || node.curves || !creative_suite::effects::isValid(*node.effect))
+                    return false;
+            } else if (node.type == NodeType::Curves) {
+                if (node.effect || !node.curves ||
+                    !creative_suite::effects::validVideoCurves(node.curves->parameters))
+                    return false;
+            } else {
                 return false;
             }
         }
@@ -168,7 +175,8 @@ bool validate(const Graph& graph) noexcept {
                 !std::isfinite(edge.weight) || edge.weight < 0.0 || edge.weight > 1.0)
                 return false;
             if (!input_slots.emplace(edge.to, edge.input).second) return false;
-            if ((to->type == NodeType::Effect || to->type == NodeType::Output) &&
+            if ((to->type == NodeType::Effect || to->type == NodeType::Curves ||
+                 to->type == NodeType::Output) &&
                 edge.input != 0) return false;
             if (to->type != NodeType::ParallelMixer && edge.weight != 1.0) return false;
             node_inputs[edge.to].push_back(&edge);
@@ -177,7 +185,8 @@ bool validate(const Graph& graph) noexcept {
             const auto found = node_inputs.find(node.id);
             const auto count = found == node_inputs.end() ? 0U : found->second.size();
             if ((node.type == NodeType::Input && count != 0) ||
-                ((node.type == NodeType::Effect || node.type == NodeType::Output) && count > 1))
+                ((node.type == NodeType::Effect || node.type == NodeType::Curves ||
+                  node.type == NodeType::Output) && count > 1))
                 return false;
             if (node.type == NodeType::ParallelMixer && found != node_inputs.end()) {
                 double total_weight = 0.0;
@@ -225,6 +234,12 @@ linearEffectStack(const Graph& graph) {
         if (!node) return std::nullopt;
         if (node->type == NodeType::ParallelMixer) return std::nullopt;
         if (node->type == NodeType::Effect) result.push_back(*node->effect);
+        else if (node->type == NodeType::Curves) {
+            auto effect = creative_suite::effects::makeDefaultInstance("video.curves");
+            effect.enabled = node->curves->enabled;
+            effect.video_curves = node->curves->parameters;
+            result.push_back(std::move(effect));
+        }
         if (node->type == NodeType::Output) {
             if (node->id != output->id || !outgoing(graph, node->id).empty())
                 return std::nullopt;
@@ -243,7 +258,8 @@ std::vector<NodeId> effectNodesInOrder(const Graph& graph) {
     if (!order) return result;
     for (const auto id : *order) {
         const auto* node = findNode(graph, id);
-        if (node && node->type == NodeType::Effect) result.push_back(id);
+        if (node && (node->type == NodeType::Effect || node->type == NodeType::Curves))
+            result.push_back(id);
     }
     return result;
 }
@@ -254,6 +270,12 @@ std::vector<creative_suite::effects::EffectInstance> effectInstancesInOrder(
     for (const auto id : effectNodesInOrder(graph)) {
         const auto* node = findNode(graph, id);
         if (node && node->effect) result.push_back(*node->effect);
+        else if (node && node->curves) {
+            auto effect = creative_suite::effects::makeDefaultInstance("video.curves");
+            effect.enabled = node->curves->enabled;
+            effect.video_curves = node->curves->parameters;
+            result.push_back(std::move(effect));
+        }
     }
     return result;
 }
@@ -282,13 +304,37 @@ bool insertEffectAfter(
     return true;
 }
 
+bool insertCurvesAfter(Graph& graph, NodeId anchor) {
+    auto candidate = graph;
+    const auto* anchor_node = findNode(candidate, anchor);
+    if (!anchor_node || anchor_node->type == NodeType::Output || !validate(candidate))
+        return false;
+    std::vector<Connection> next;
+    for (const auto* edge : outgoing(candidate, anchor)) next.push_back(*edge);
+    const auto anchor_x = anchor_node->x;
+    const auto anchor_y = anchor_node->y;
+    const auto id = allocateId(candidate);
+    if (id == 0) return false;
+    candidate.nodes.push_back({id, NodeType::Curves, anchor_x + 170.0, anchor_y,
+        std::nullopt, CurvesNode{}});
+    for (const auto& edge : next)
+        eraseConnection(candidate, edge.from, edge.to, edge.input);
+    candidate.connections.push_back({anchor, id, 0, 1.0});
+    for (const auto& edge : next)
+        candidate.connections.push_back({id, edge.to, edge.input, edge.weight});
+    if (!validate(candidate)) return false;
+    graph = std::move(candidate);
+    return true;
+}
+
 bool addParallelBranch(
     Graph& graph, NodeId anchor, creative_suite::effects::EffectInstance effect) {
     if (!validate(graph)) return false;
     auto candidate = graph;
     const auto* anchor_node = findNode(candidate, anchor);
     if (!anchor_node || (anchor_node->type != NodeType::Input &&
-                         anchor_node->type != NodeType::Effect) ||
+                         anchor_node->type != NodeType::Effect &&
+                         anchor_node->type != NodeType::Curves) ||
         !creative_suite::effects::isValid(effect)) return false;
     const auto anchor_x = anchor_node->x;
     const auto anchor_y = anchor_node->y;
@@ -358,7 +404,7 @@ bool connect(Graph& graph, NodeId from, NodeId to, std::uint32_t input,
 bool removeEffect(Graph& graph, NodeId id) {
     auto candidate = graph;
     const auto* node = findNode(candidate, id);
-    if (!node || node->type != NodeType::Effect) return false;
+    if (!node || (node->type != NodeType::Effect && node->type != NodeType::Curves)) return false;
     std::vector<Connection> previous;
     std::vector<Connection> next;
     for (const auto* edge : incoming(candidate, id)) previous.push_back(*edge);
@@ -449,6 +495,48 @@ bool setEffectEnabled(Graph& graph, NodeId id, bool enabled) {
     if (!node || node->type != NodeType::Effect || !node->effect ||
         node->effect->enabled == enabled) return false;
     node->effect->enabled = enabled;
+    return true;
+}
+
+bool setCurvesEnabled(Graph& graph, NodeId id, bool enabled) {
+    auto* node = findNode(graph, id);
+    if (!node || node->type != NodeType::Curves || !node->curves ||
+        node->curves->enabled == enabled) return false;
+    node->curves->enabled = enabled;
+    return true;
+}
+
+bool setCurvePoints(Graph& graph, NodeId id, CurveKind kind,
+                    creative_suite::effects::CurvesPointList points) {
+    auto candidate = graph;
+    auto* node = findNode(candidate, id);
+    if (!node || node->type != NodeType::Curves || !node->curves ||
+        !creative_suite::effects::validCurvePoints(points)) return false;
+    auto& parameters = node->curves->parameters;
+    switch (kind) {
+    case CurveKind::Master: parameters.rgb.points = std::move(points); break;
+    case CurveKind::Red: parameters.rgb.channels[0] = std::move(points); break;
+    case CurveKind::Green: parameters.rgb.channels[1] = std::move(points); break;
+    case CurveKind::Blue: parameters.rgb.channels[2] = std::move(points); break;
+    case CurveKind::HueVsHue: parameters.targeted[0] = std::move(points); break;
+    case CurveKind::HueVsSaturation: parameters.targeted[1] = std::move(points); break;
+    case CurveKind::HueVsLuminance: parameters.targeted[2] = std::move(points); break;
+    case CurveKind::LuminanceVsSaturation: parameters.targeted[3] = std::move(points); break;
+    case CurveKind::SaturationVsSaturation: parameters.targeted[4] = std::move(points); break;
+    }
+    if (!creative_suite::effects::validVideoCurves(parameters)) return false;
+    graph = std::move(candidate);
+    return true;
+}
+
+bool setCurvesQualifier(Graph& graph, NodeId id,
+                        creative_suite::effects::TonalQualifier qualifier) {
+    auto candidate = graph;
+    auto* node = findNode(candidate, id);
+    if (!node || node->type != NodeType::Curves || !node->curves ||
+        !creative_suite::effects::validTonalQualifier(qualifier)) return false;
+    node->curves->parameters.qualifier = qualifier;
+    graph = std::move(candidate);
     return true;
 }
 

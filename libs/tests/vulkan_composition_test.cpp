@@ -28,11 +28,12 @@ media::RgbaFrame fixture(int w,int h,bool alpha=true) {
         p[3]=alpha?uint8_t((x*31+y*11)%256):255;}
     return f;
 }
-void parity(const media::RgbaFrame& a,const media::RgbaFrame& b,int tolerance=2) {
+void parity(const media::RgbaFrame& a,const media::RgbaFrame& b,int tolerance=2,
+            const char* context="Vulkan") {
     require(a.width==b.width && a.height==b.height,"Vulkan output dimensions differ.");
     for(int y=0;y<a.height;++y)for(int x=0;x<a.width*4;++x){
         auto av=a.rgba_pixels[size_t(y)*a.stride+x],bv=b.rgba_pixels[size_t(y)*b.stride+x];
-        if(std::abs(int(av)-int(bv))>(x%4==3?0:tolerance))throw std::runtime_error("Vulkan pixel mismatch at "+std::to_string(x/4)+","+std::to_string(y)+" channel "+std::to_string(x%4)+": "+std::to_string(av)+" vs "+std::to_string(bv));
+        if(std::abs(int(av)-int(bv))>(x%4==3?0:tolerance))throw std::runtime_error(std::string(context)+" pixel mismatch at "+std::to_string(x/4)+","+std::to_string(y)+" channel "+std::to_string(x%4)+": "+std::to_string(av)+" vs "+std::to_string(bv));
     }
 }
 void correctness(const std::shared_ptr<VulkanDevice>& device) {
@@ -83,10 +84,27 @@ void correctness(const std::shared_ptr<VulkanDevice>& device) {
     }
     {auto empty=gpu.compose(41,29,{});require(empty.status==OpenGlCompositionStatus::Complete,empty.cause);parity(*FrameCompositor::compose(41,29,{}),*empty.frame);
         auto grade = effects::makeDefaultInstance("video.primary_grade");
+        auto curves = effects::makeDefaultInstance("video.curves");
+        curves.video_curves->rgb.points = {{0, 0}, {92, 124}, {255, 255}};
+        curves.video_curves->targeted[0] = {{0, 143}, {255, 114}};
+        curves.video_curves->targeted[1] = {{0, 128}, {255, 203}};
+        curves.video_curves->targeted[2] = {{0, 128}, {255, 76}};
+        curves.video_curves->targeted[3] = {{0, 151}, {255, 128}};
+        curves.video_curves->targeted[4] = {{0, 128}, {255, 171}};
+        curves.video_curves->qualifier.enabled = true;
+        curves.video_curves->qualifier.hue_min = 338.0;
+        curves.video_curves->qualifier.hue_max = 24.0;
+        curves.video_curves->qualifier.hue_softness = 8.0;
+        curves.video_curves->qualifier.saturation_min = 12.0;
+        curves.video_curves->qualifier.saturation_max = 95.0;
+        curves.video_curves->qualifier.saturation_softness = 5.0;
+        curves.video_curves->qualifier.luminance_min = 8.0;
+        curves.video_curves->qualifier.luminance_max = 94.0;
+        curves.video_curves->qualifier.luminance_softness = 4.0;
         require(effects::setParameterValue(grade, "red_gain", 135) &&
             effects::setParameterValue(grade, "blue_gain", 76), "Vulkan grade setup failed.");
         const std::vector<effects::EffectInstance> stack{{"video.brightness",{{"amount",7}},true},
-            grade,{"video.saturation",{{"amount",80}},true}};
+            grade, curves,{"video.saturation",{{"amount",80}},true}};
         std::vector<CompositionLayer> layers{{&a},{&b}};layers[0].effect_stack=stack;
         auto actual=gpu.compose(61,47,layers);require(actual.status==OpenGlCompositionStatus::Complete,actual.cause);parity(*FrameCompositor::compose(61,47,layers),*actual.frame);checkMemory();}
     OpenGlImageOperation op;op.background.rgba=&b;op.kind=OpenGlImageOperationKind::Color;
@@ -270,12 +288,74 @@ void primaryGradeOnly(const std::shared_ptr<VulkanDevice>& device) {
         effects::setParameterValue(grade, "log_shadows_red", 38) &&
         effects::setParameterValue(grade, "log_midtones_green", -22) &&
         effects::setParameterValue(grade, "log_highlights_blue", 17), "Vulkan grade fixture failed.");
-    const std::array<effects::EffectInstance, 1> stack{grade};
+    auto curves_effect = effects::makeDefaultInstance("video.curves");
+    curves_effect.video_curves->rgb.points = {{0, 0}, {92, 124}, {255, 255}};
+    curves_effect.video_curves->targeted[0] = {{0, 129}, {255, 127}};
+    curves_effect.video_curves->targeted[1] = {{0, 128}, {255, 129}};
+    curves_effect.video_curves->targeted[2] = {{0, 128}, {255, 127}};
+    curves_effect.video_curves->targeted[3] = {{0, 129}, {255, 128}};
+    curves_effect.video_curves->targeted[4] = {{0, 128}, {255, 129}};
+    curves_effect.video_curves->qualifier.enabled = true;
+    curves_effect.video_curves->qualifier.hue_min = 338.0;
+    curves_effect.video_curves->qualifier.hue_max = 24.0;
+    curves_effect.video_curves->qualifier.hue_softness = 8.0;
+    curves_effect.video_curves->qualifier.saturation_min = 12.0;
+    curves_effect.video_curves->qualifier.saturation_max = 95.0;
+    curves_effect.video_curves->qualifier.saturation_softness = 5.0;
+    curves_effect.video_curves->qualifier.luminance_min = 8.0;
+    curves_effect.video_curves->qualifier.luminance_max = 94.0;
+    curves_effect.video_curves->qualifier.luminance_softness = 4.0;
+    const auto neutral_targeted = effects::VideoCurvesParameters{}.targeted;
+    const std::array<effects::CurvesPointList, 5> targeted_stress{{
+        {{0, 143}, {255, 114}}, {{0, 128}, {255, 203}},
+        {{0, 128}, {255, 76}}, {{0, 151}, {255, 128}},
+        {{0, 128}, {255, 171}}}};
+    for (std::size_t targeted_index = 0;
+         targeted_index < curves_effect.video_curves->targeted.size(); ++targeted_index) {
+        auto isolated = curves_effect;
+        isolated.video_curves->rgb = effects::CurvesParameters{};
+        isolated.video_curves->targeted = neutral_targeted;
+        isolated.video_curves->targeted[targeted_index] =
+            targeted_stress[targeted_index];
+        isolated.video_curves->qualifier.enabled = false;
+        const std::array<effects::EffectInstance, 1> isolated_stack{isolated};
+        CompositionLayer isolated_layer{&source};
+        isolated_layer.effect_stack = isolated_stack;
+        const auto isolated_cpu = FrameCompositor::compose(
+            source.width, source.height, {isolated_layer});
+        const auto isolated_gpu = gpu.compose(
+            source.width, source.height, {isolated_layer});
+        require(isolated_cpu && isolated_gpu.frame,
+            "Vulkan isolated targeted Curves pass failed: " + isolated_gpu.cause);
+        parity(*isolated_cpu, *isolated_gpu.frame, 1,
+            ("Vulkan isolated targeted Curves family " +
+             std::to_string(targeted_index)).c_str());
+    }
+    const std::array<effects::EffectInstance, 1> curves_only_stack{curves_effect};
+    const auto curves_only_passes = effects::colorAdjustmentPasses(curves_only_stack);
+    require(curves_only_passes && curves_only_passes->size() == 1 &&
+                curves_only_passes->front().video_curves,
+            "The Vulkan Curves graph node must create one typed GPU color pass.");
+    CompositionLayer direct_curves_only_layer{&source};
+    direct_curves_only_layer.gpu_color_adjustments = *curves_only_passes;
+    CompositionLayer curves_only_layer{&source};
+    curves_only_layer.effect_stack = curves_only_stack;
+    const auto curves_only_cpu = FrameCompositor::compose(
+        source.width, source.height, {curves_only_layer});
+    const auto direct_curves_only = gpu.compose(
+        source.width, source.height, {direct_curves_only_layer});
+    require(curves_only_cpu && direct_curves_only.frame, direct_curves_only.cause);
+    parity(*curves_only_cpu, *direct_curves_only.frame, 1, "Vulkan direct Curves-only");
+    const auto curves_only_gpu = gpu.compose(
+        source.width, source.height, {curves_only_layer});
+    require(curves_only_cpu && curves_only_gpu.frame, curves_only_gpu.cause);
+    parity(*curves_only_cpu, *curves_only_gpu.frame, 1, "Vulkan effect-stack Curves-only");
+    const std::array<effects::EffectInstance, 2> stack{grade, curves_effect};
     CompositionLayer layer{&source}; layer.effect_stack = stack;
     const auto cpu = FrameCompositor::compose(source.width, source.height, {layer});
     const auto gpu_frame = gpu.compose(source.width, source.height, {layer});
     require(cpu && gpu_frame.frame, gpu_frame.cause);
-    parity(*cpu, *gpu_frame.frame);
+    parity(*cpu, *gpu_frame.frame, 1, "Vulkan Primary Grade + Curves");
     OpenGlImageOperation operation; operation.kind = OpenGlImageOperationKind::Color;
     operation.background.rgba = &source;
     effects::ColorAdjustmentParameters expanded{15, 125, 85, 145, 82, 115};
@@ -285,11 +365,28 @@ void primaryGradeOnly(const std::shared_ptr<VulkanDevice>& device) {
     expanded.pivot_percent = 43; expanded.temperature = 34; expanded.tint = -19;
     expanded.log_shadows_red = 38; expanded.log_midtones_green = -22;
     expanded.log_highlights_blue = 17;
+    effects::VideoCurvesParameters curves;
+    curves.rgb.points = {{0, 0}, {104, 137}, {255, 255}};
+    curves.targeted[0] = {{0, 129}, {255, 127}};
+    curves.targeted[1] = {{0, 128}, {255, 129}};
+    curves.targeted[2] = {{0, 128}, {255, 127}};
+    curves.targeted[3] = {{0, 129}, {255, 128}};
+    curves.targeted[4] = {{0, 128}, {255, 129}};
+    curves.qualifier.enabled = true;
+    curves.qualifier.hue_min = 340.0;
+    curves.qualifier.hue_max = 20.0;
+    curves.qualifier.hue_softness = 6.0;
+    curves.qualifier.saturation_min = 8.0;
+    curves.qualifier.saturation_max = 98.0;
+    curves.qualifier.luminance_min = 5.0;
+    curves.qualifier.luminance_max = 97.0;
+    effects::ColorAdjustmentParameters curve_adjustment;
+    curve_adjustment.video_curves = curves;
     auto second_expanded = expanded;
     second_expanded.log_shadows_blue = -33;
     second_expanded.log_midtones_red = 18;
     second_expanded.log_highlights_green = 27;
-    operation.colors = {expanded, second_expanded};
+    operation.colors = {expanded, second_expanded, curve_adjustment};
     auto expected = source;
     for (const auto& parameters : operation.colors)
         require(effects::applyColorAdjustment(expected, parameters) ==
@@ -298,14 +395,14 @@ void primaryGradeOnly(const std::shared_ptr<VulkanDevice>& device) {
     require(bool(texture.frame), texture.cause);
     const auto readback = gpu.readback(texture.frame);
     require(bool(readback.frame), readback.cause);
-    parity(expected, *readback.frame);
+    parity(expected, *readback.frame, 1);
     operation.kind = OpenGlImageOperationKind::Adjustment;
     operation.foreground.rgba = &source;
     const auto adjustment = gpu.processImage(operation);
     require(bool(adjustment.frame), adjustment.cause);
     const auto adjustment_pixels = gpu.readback(adjustment.frame);
     require(bool(adjustment_pixels.frame), adjustment_pixels.cause);
-    parity(expected, *adjustment_pixels.frame);
+    parity(expected, *adjustment_pixels.frame, 1);
 }
 
 int main(int argc,char** argv) {

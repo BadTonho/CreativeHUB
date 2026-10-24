@@ -1,6 +1,6 @@
 # Application Architecture
 
-[Composition interchange](../../COMPOSITION_INTERCHANGE.md) uses a shared format/presentation library with application-owned converters and worker-backed UI commands. Native CSP schema is v37: v33 added Color Gallery metadata and PNG sidecars, v34 stores the Color correction graph, v35 expanded Primary Grade, v36 adds independent Log controls, and v37 stores named per-clip Color graph snapshots. Primary Grade was introduced in v32 and Gaussian Blur in v31. Blur transfers through cscomp v3.
+[Composition interchange](../../COMPOSITION_INTERCHANGE.md) uses a shared format/presentation library with application-owned converters and worker-backed UI commands. Native CSP schema is v38: v33 added Color Gallery metadata and PNG sidecars, v34 stores the Color correction graph, v35 expanded Primary Grade, v36 adds independent Log controls, v37 stores named per-clip Color graph snapshots, and v38 adds Color Curves and tonal qualifiers. Primary Grade was introduced in v32 and Gaussian Blur in v31. Blur transfers through cscomp v3.
 
 Color owns a graph model and evaluator separate from Fusion. The render order
 is Fusion graph evaluation, Color graph evaluation, then clip transform and
@@ -61,7 +61,7 @@ under `docs/video-editor/architecture/` so each document can remain focused and 
 
 The Color workspace owns a per-clip correction graph with Input, effect,
 Parallel Mixer and Output nodes. Its connections define processing, and the
-graph and its named per-clip versions are saved in CSP v37. Serial graphs use the existing GPU effect pipeline
+graph and its named per-clip versions are saved in CSP v38. Serial graphs use the existing GPU effect pipeline
 when available; branched graphs use Color's CPU RGBA evaluator after Fusion.
 Edit Inspector edits the same effect nodes' parameters and enabled state, while
 Color owns topology and layout. Primary Grade offers Wheels and Bars views over

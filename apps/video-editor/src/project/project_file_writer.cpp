@@ -65,10 +65,36 @@ const char* colorNodeTypeName(color::NodeType type) {
     switch (type) {
     case color::NodeType::Input: return "input";
     case color::NodeType::Effect: return "effect";
+    case color::NodeType::Curves: return "curves";
     case color::NodeType::ParallelMixer: return "parallel_mixer";
     case color::NodeType::Output: return "output";
     }
     return "input";
+}
+
+QJsonArray curvesPointsJson(const creative_suite::effects::CurvesPointList& points) {
+    QJsonArray result;
+    for (const auto& point : points)
+        result.append(QJsonArray{point.input, point.output});
+    return result;
+}
+
+QJsonObject videoCurvesJson(const creative_suite::effects::VideoCurvesParameters& curves) {
+    QJsonObject rgb;
+    rgb.insert("master", curvesPointsJson(curves.rgb.points));
+    rgb.insert("red", curvesPointsJson(curves.rgb.channels[0]));
+    rgb.insert("green", curvesPointsJson(curves.rgb.channels[1]));
+    rgb.insert("blue", curvesPointsJson(curves.rgb.channels[2]));
+    QJsonArray targeted;
+    for (const auto& points : curves.targeted) targeted.append(curvesPointsJson(points));
+    const auto& q = curves.qualifier;
+    QJsonObject qualifier{{"enabled", q.enabled}, {"hue_min", q.hue_min},
+        {"hue_max", q.hue_max}, {"saturation_min", q.saturation_min},
+        {"saturation_max", q.saturation_max}, {"luminance_min", q.luminance_min},
+        {"luminance_max", q.luminance_max}, {"hue_softness", q.hue_softness},
+        {"saturation_softness", q.saturation_softness},
+        {"luminance_softness", q.luminance_softness}};
+    return {{"rgb", rgb}, {"targeted", targeted}, {"qualifier", qualifier}};
 }
 
 QJsonObject colorEffectJson(const creative_suite::effects::EffectInstance& effect) {
@@ -99,6 +125,10 @@ QJsonObject colorGraphJson(const color::Graph& graph) {
         value.insert("x", node.x);
         value.insert("y", node.y);
         if (node.effect) value.insert("effect", colorEffectJson(*node.effect));
+        if (node.curves) {
+            value.insert("curves", QJsonObject{{"enabled", node.curves->enabled},
+                {"parameters", videoCurvesJson(node.curves->parameters)}});
+        }
         nodes.append(value);
     }
     object.insert("nodes", nodes);

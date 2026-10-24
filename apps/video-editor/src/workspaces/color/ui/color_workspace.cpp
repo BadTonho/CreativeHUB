@@ -4,6 +4,7 @@
 #include "workspaces/color/evaluation/color_graph_evaluator.h"
 
 #include <QCoreApplication>
+#include <QCheckBox>
 #include <QComboBox>
 #include <QDoubleSpinBox>
 #include <QFrame>
@@ -23,6 +24,7 @@
 #include <QPointer>
 #include <QPushButton>
 #include <QInputDialog>
+#include <QLineF>
 #include <QLineEdit>
 #include <QMessageBox>
 #include <QScrollArea>
@@ -37,6 +39,7 @@
 #include <array>
 #include <cmath>
 #include <cstdint>
+#include <cstring>
 #include <functional>
 #include <numbers>
 #include <vector>
@@ -568,6 +571,200 @@ private:
     std::function<void(std::array<double, 3>)> changed_;
 };
 
+const creative_suite::effects::CurvesPointList& curvePointsFor(
+    const creative_suite::effects::VideoCurvesParameters& parameters,
+    color::CurveKind kind) {
+    using creative_suite::effects::CurvesPointList;
+    switch (kind) {
+    case color::CurveKind::Master: return parameters.rgb.points;
+    case color::CurveKind::Red: return parameters.rgb.channels[0];
+    case color::CurveKind::Green: return parameters.rgb.channels[1];
+    case color::CurveKind::Blue: return parameters.rgb.channels[2];
+    case color::CurveKind::HueVsHue: return parameters.targeted[0];
+    case color::CurveKind::HueVsSaturation: return parameters.targeted[1];
+    case color::CurveKind::HueVsLuminance: return parameters.targeted[2];
+    case color::CurveKind::LuminanceVsSaturation: return parameters.targeted[3];
+    case color::CurveKind::SaturationVsSaturation: return parameters.targeted[4];
+    }
+    return parameters.rgb.points;
+}
+
+class CurveEditor final : public QWidget {
+public:
+    explicit CurveEditor(QWidget* parent = nullptr) : QWidget(parent) {
+        setObjectName(QStringLiteral("colorCurveEditor"));
+        setMinimumSize(250, 190);
+        setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+        setFixedHeight(210);
+        setMouseTracking(true);
+        setToolTip(QCoreApplication::translate("ColorWorkspace",
+            "Click the curve to add a point; drag points to edit; right-click a point to remove it."));
+    }
+
+    void setPoints(color::CurveKind kind,
+        creative_suite::effects::CurvesPointList points) {
+        kind_ = kind;
+        points_ = std::move(points);
+        update();
+    }
+
+    void setHandlers(std::function<void()> started, std::function<void()> finished,
+        std::function<void(creative_suite::effects::CurvesPointList)> changed) {
+        started_ = std::move(started);
+        finished_ = std::move(finished);
+        changed_ = std::move(changed);
+    }
+
+protected:
+    void paintEvent(QPaintEvent*) override {
+        QPainter painter(this);
+        painter.setRenderHint(QPainter::Antialiasing);
+        painter.fillRect(rect(), QColor(20, 25, 32));
+        const auto plot = plotRect();
+        painter.setPen(QPen(QColor(54, 64, 76), 1.0));
+        for (int tick = 0; tick <= 4; ++tick) {
+            const double ratio = tick / 4.0;
+            painter.drawLine(QPointF(plot.left() + ratio * plot.width(), plot.top()),
+                QPointF(plot.left() + ratio * plot.width(), plot.bottom()));
+            painter.drawLine(QPointF(plot.left(), plot.bottom() - ratio * plot.height()),
+                QPointF(plot.right(), plot.bottom() - ratio * plot.height()));
+        }
+        if (isTargeted()) {
+            painter.setPen(QPen(QColor(80, 91, 105), 1.0, Qt::DashLine));
+            painter.drawLine(QPointF(plot.left(), plot.center().y()),
+                QPointF(plot.right(), plot.center().y()));
+        } else {
+            painter.setPen(QPen(QColor(80, 91, 105), 1.0, Qt::DashLine));
+            painter.drawLine(plot.bottomLeft(), plot.topRight());
+        }
+        QPainterPath curve;
+        const auto lut = creative_suite::effects::curvesLut(points_);
+        for (int x = 0; x < 256; ++x) {
+            const auto point = QPointF(plot.left() + x * plot.width() / 255.0,
+                plot.bottom() - lut[x] * plot.height() / 255.0);
+            if (x == 0) curve.moveTo(point);
+            else curve.lineTo(point);
+        }
+        QColor color(236, 241, 247);
+        if (kind_ == color::CurveKind::Red) color = QColor(255, 94, 94);
+        else if (kind_ == color::CurveKind::Green) color = QColor(100, 230, 130);
+        else if (kind_ == color::CurveKind::Blue) color = QColor(107, 164, 255);
+        painter.setPen(QPen(color, 2.0));
+        painter.drawPath(curve);
+        for (std::size_t i = 0; i < points_.size(); ++i) {
+            painter.setPen(QPen(QColor(15, 19, 25), 1.5));
+            painter.setBrush(i == active_point_ ? QColor(255, 184, 79) : color);
+            painter.drawEllipse(toWidget(points_[i]), 4.5, 4.5);
+        }
+        painter.setPen(QColor(146, 159, 175));
+        painter.drawText(QRectF(0, height() - 18, width(), 16), Qt::AlignCenter,
+            QStringLiteral("Input 0–255     Output 0–255"));
+    }
+
+    void mousePressEvent(QMouseEvent* event) override {
+        if (event->button() == Qt::RightButton) {
+            const auto point = closestPoint(event->position());
+            if (point > 0 && point + 1 < static_cast<int>(points_.size())) {
+                if (started_) started_();
+                points_.erase(points_.begin() + point);
+                if (changed_) changed_(points_);
+                update();
+                if (finished_) finished_();
+                event->accept();
+                return;
+            }
+        }
+        if (event->button() != Qt::LeftButton) return;
+        active_point_ = closestPoint(event->position());
+        if (active_point_ < 0) {
+            if (points_.size() >= 16) return;
+            const auto curve_point = fromWidget(event->position());
+            const auto insertion = std::lower_bound(points_.begin(), points_.end(), curve_point.input,
+                [](const auto& point, int input) { return point.input < input; });
+            if (insertion != points_.end() && insertion->input == curve_point.input) return;
+            active_point_ = static_cast<int>(insertion - points_.begin());
+            points_.insert(insertion, curve_point);
+            if (started_) started_();
+            drag_started_ = true;
+            if (changed_) changed_(points_);
+            update();
+            event->accept();
+            return;
+        }
+        if (started_) started_();
+        drag_started_ = true;
+        movePoint(event->position());
+        event->accept();
+    }
+
+    void mouseMoveEvent(QMouseEvent* event) override {
+        if (drag_started_ && active_point_ >= 0) movePoint(event->position());
+    }
+
+    void mouseReleaseEvent(QMouseEvent* event) override {
+        if (!drag_started_ || event->button() != Qt::LeftButton) return;
+        movePoint(event->position());
+        drag_started_ = false;
+        active_point_ = -1;
+        update();
+        if (finished_) finished_();
+        event->accept();
+    }
+
+private:
+    [[nodiscard]] bool isTargeted() const noexcept {
+        return kind_ >= color::CurveKind::HueVsHue;
+    }
+    [[nodiscard]] QRectF plotRect() const noexcept {
+        return QRectF(14.0, 10.0, std::max(1, width() - 28), std::max(1, height() - 36));
+    }
+    [[nodiscard]] QPointF toWidget(const creative_suite::effects::CurvesPoint& point) const {
+        const auto plot = plotRect();
+        return {plot.left() + point.input * plot.width() / 255.0,
+            plot.bottom() - point.output * plot.height() / 255.0};
+    }
+    [[nodiscard]] creative_suite::effects::CurvesPoint fromWidget(QPointF point) const {
+        const auto plot = plotRect();
+        const int x = std::clamp(static_cast<int>(std::lround(
+            (point.x() - plot.left()) * 255.0 / plot.width())), 0, 255);
+        const int y = std::clamp(static_cast<int>(std::lround(
+            (plot.bottom() - point.y()) * 255.0 / plot.height())), 0, 255);
+        return {x, y};
+    }
+    [[nodiscard]] int closestPoint(QPointF position) const {
+        int closest = -1;
+        double distance = 11.0;
+        for (std::size_t i = 0; i < points_.size(); ++i) {
+            const auto d = QLineF(position, toWidget(points_[i])).length();
+            if (d <= distance) { closest = static_cast<int>(i); distance = d; }
+        }
+        return closest;
+    }
+    void movePoint(QPointF position) {
+        if (active_point_ < 0 || active_point_ >= static_cast<int>(points_.size())) return;
+        auto next = fromWidget(position);
+        if (active_point_ == 0) next.input = 0;
+        else if (active_point_ + 1 == static_cast<int>(points_.size())) next.input = 255;
+        else next.input = std::clamp(next.input, points_[active_point_ - 1].input + 1,
+                                     points_[active_point_ + 1].input - 1);
+        if (points_[active_point_] == next) return;
+        points_[active_point_] = next;
+        std::sort(points_.begin(), points_.end(), [](const auto& left, const auto& right) {
+            return left.input < right.input;
+        });
+        active_point_ = static_cast<int>(std::find(points_.begin(), points_.end(), next) - points_.begin());
+        if (changed_) changed_(points_);
+        update();
+    }
+    color::CurveKind kind_ = color::CurveKind::Master;
+    creative_suite::effects::CurvesPointList points_{{0, 0}, {255, 255}};
+    int active_point_ = -1;
+    bool drag_started_ = false;
+    std::function<void()> started_;
+    std::function<void()> finished_;
+    std::function<void(creative_suite::effects::CurvesPointList)> changed_;
+};
+
 }  // namespace
 
 ColorWorkspace::ColorWorkspace(QWidget* parent) : QWidget(parent) {
@@ -895,6 +1092,8 @@ ColorWorkspace::ColorWorkspace(QWidget* parent) : QWidget(parent) {
         active_scope_request_id_ = 0;
         waveform_->setPixmap({});
         waveform_->setText(QCoreApplication::translate("ColorWorkspace", "No frame"));
+        latest_scope_source_ = {};
+        refreshMattePreview();
         if (active_) scheduleWaveform();
     });
     refreshNodes();
@@ -923,11 +1122,17 @@ void ColorWorkspace::setActive(bool active) {
         active_scope_request_id_ = 0;
         waveform_->setPixmap({});
         waveform_->setText(QCoreApplication::translate("ColorWorkspace", "No frame"));
+        latest_scope_source_ = {};
+        refreshMattePreview();
     }
 }
 
 void ColorWorkspace::setClips(std::vector<ClipItem> clips, timeline::ClipId selected,
     color::Graph graph) {
+    if (selected_clip_ != selected) {
+        latest_scope_source_ = {};
+        refreshMattePreview();
+    }
     const auto old_selected = selected_node_;
     const auto old_version_id = selected_clip_ == selected && grade_versions_->currentItem()
         ? grade_versions_->currentItem()->data(Qt::UserRole).toString() : QString{};
@@ -1021,12 +1226,16 @@ void ColorWorkspace::acceptScopeFrame(quint64 request_id, playback::VideoFramePt
         composition_revision != active_scope_identity_.composition_revision ||
         playback_generation != active_scope_identity_.playback_generation) {
         waveform_pending_ = false;
+        latest_scope_source_ = {};
+        refreshMattePreview();
         return;
     }
     if (!frame) {
         waveform_pending_ = false;
         waveform_->setPixmap({});
         waveform_->setText(QCoreApplication::translate("ColorWorkspace", "No frame"));
+        latest_scope_source_ = {};
+        refreshMattePreview();
         return;
     }
     renderScopeFrame(active_scope_identity_, std::move(frame), request_id);
@@ -1196,6 +1405,7 @@ void ColorWorkspace::refreshNodes(std::optional<color::NodeId> selected) {
 }
 
 void ColorWorkspace::refreshControls() {
+    matte_preview_ = nullptr;
     while (auto* item = controls_layout_->takeAt(0)) {
         if (auto* widget = item->widget()) {
             widget->hide();
@@ -1205,6 +1415,7 @@ void ColorWorkspace::refreshControls() {
     }
     const auto* node = selected_node_ ? color::findNode(graph_, *selected_node_) : nullptr;
     const bool effect_selected = node && node->type == color::NodeType::Effect && node->effect;
+    const bool curves_selected = node && node->type == color::NodeType::Curves && node->curves;
     auto* toggle = findChild<QPushButton*>(QStringLiteral("colorToggleNodeButton"));
     auto* remove = findChild<QPushButton*>(QStringLiteral("colorRemoveNodeButton"));
     auto* add = findChild<QPushButton*>(QStringLiteral("colorAddNodeButton"));
@@ -1329,6 +1540,137 @@ void ColorWorkspace::refreshControls() {
                     submit(std::move(graph), node_id);
                 });
         }
+    } else if (curves_selected) {
+        using creative_suite::effects::TonalQualifier;
+        using creative_suite::effects::VideoCurvesParameters;
+        const auto node_id = node->id;
+        auto* curve_kind = new QComboBox(controls_);
+        curve_kind->setObjectName(QStringLiteral("colorCurveKind"));
+        const std::array<std::pair<QString, color::CurveKind>, 9> kinds{{
+            {QCoreApplication::translate("ColorWorkspace", "Master"), color::CurveKind::Master},
+            {QCoreApplication::translate("ColorWorkspace", "Red"), color::CurveKind::Red},
+            {QCoreApplication::translate("ColorWorkspace", "Green"), color::CurveKind::Green},
+            {QCoreApplication::translate("ColorWorkspace", "Blue"), color::CurveKind::Blue},
+            {QCoreApplication::translate("ColorWorkspace", "Hue vs Hue"), color::CurveKind::HueVsHue},
+            {QCoreApplication::translate("ColorWorkspace", "Hue vs Saturation"), color::CurveKind::HueVsSaturation},
+            {QCoreApplication::translate("ColorWorkspace", "Hue vs Luminance"), color::CurveKind::HueVsLuminance},
+            {QCoreApplication::translate("ColorWorkspace", "Luminance vs Saturation"), color::CurveKind::LuminanceVsSaturation},
+            {QCoreApplication::translate("ColorWorkspace", "Saturation vs Saturation"), color::CurveKind::SaturationVsSaturation}}};
+        for (const auto& [label, kind] : kinds)
+            curve_kind->addItem(label, static_cast<int>(kind));
+        controls_layout_->addRow(QCoreApplication::translate("ColorWorkspace", "Curve"), curve_kind);
+        auto* editor = new CurveEditor(controls_);
+        const auto initial_kind = static_cast<color::CurveKind>(curve_kind->currentData().toInt());
+        editor->setPoints(initial_kind, curvePointsFor(node->curves->parameters, initial_kind));
+        editor->setHandlers(
+            [this] { if (grade_edit_started_handler_) grade_edit_started_handler_(); },
+            [this] { if (grade_edit_finished_handler_) grade_edit_finished_handler_(); },
+            [this, node_id, curve_kind](creative_suite::effects::CurvesPointList points) {
+                auto graph = graph_;
+                const auto kind = static_cast<color::CurveKind>(curve_kind->currentData().toInt());
+                if (color::setCurvePoints(graph, node_id, kind, std::move(points)))
+                    submit(std::move(graph), node_id, false);
+            });
+        controls_layout_->addRow(editor);
+        connect(curve_kind, qOverload<int>(&QComboBox::currentIndexChanged), this,
+            [this, editor, node_id, curve_kind] {
+                const auto* selected = color::findNode(graph_, node_id);
+                if (!selected || !selected->curves) return;
+                const auto kind = static_cast<color::CurveKind>(curve_kind->currentData().toInt());
+                editor->setPoints(kind, curvePointsFor(selected->curves->parameters, kind));
+            });
+
+        auto* enabled = new QCheckBox(
+            QCoreApplication::translate("ColorWorkspace", "Enable tonal qualifier"), controls_);
+        enabled->setObjectName(QStringLiteral("colorCurvesQualifierEnabled"));
+        enabled->setChecked(node->curves->parameters.qualifier.enabled);
+        controls_layout_->addRow(enabled);
+        connect(enabled, &QCheckBox::toggled, this, [this, node_id](bool checked) {
+            auto graph = graph_;
+            auto* selected = color::findNode(graph, node_id);
+            if (!selected || !selected->curves) return;
+            auto qualifier = selected->curves->parameters.qualifier;
+            qualifier.enabled = checked;
+            if (grade_edit_started_handler_) grade_edit_started_handler_();
+            if (color::setCurvesQualifier(graph, node_id, qualifier))
+                submit(std::move(graph), node_id, false);
+            if (grade_edit_finished_handler_) grade_edit_finished_handler_();
+            refreshMattePreview();
+        });
+        struct QualifierControl {
+            const char* id;
+            const char* label;
+            double minimum;
+            double maximum;
+            double step;
+        };
+        const std::array<QualifierControl, 10> qualifier_controls{{
+            {"hue_min", "Hue minimum", 0, 360, 1}, {"hue_max", "Hue maximum", 0, 360, 1},
+            {"saturation_min", "Saturation minimum", 0, 100, 1},
+            {"saturation_max", "Saturation maximum", 0, 100, 1},
+            {"luminance_min", "Luminance minimum", 0, 100, 1},
+            {"luminance_max", "Luminance maximum", 0, 100, 1},
+            {"hue_softness", "Hue softness", 0, 50, 1},
+            {"saturation_softness", "Saturation softness", 0, 50, 1},
+            {"luminance_softness", "Luminance softness", 0, 50, 1},
+            {nullptr, nullptr, 0, 0, 0}}};
+        const auto qualifierValue = [](const TonalQualifier& q, const char* id) {
+            if (std::strcmp(id, "hue_min") == 0) return q.hue_min;
+            if (std::strcmp(id, "hue_max") == 0) return q.hue_max;
+            if (std::strcmp(id, "saturation_min") == 0) return q.saturation_min;
+            if (std::strcmp(id, "saturation_max") == 0) return q.saturation_max;
+            if (std::strcmp(id, "luminance_min") == 0) return q.luminance_min;
+            if (std::strcmp(id, "luminance_max") == 0) return q.luminance_max;
+            if (std::strcmp(id, "hue_softness") == 0) return q.hue_softness;
+            if (std::strcmp(id, "saturation_softness") == 0) return q.saturation_softness;
+            return q.luminance_softness;
+        };
+        for (const auto& control : qualifier_controls) {
+            if (!control.id) continue;
+            auto* spin = new QDoubleSpinBox(controls_);
+            spin->setObjectName(QStringLiteral("colorQualifier_%1").arg(
+                QString::fromLatin1(control.id)));
+            spin->setRange(control.minimum, control.maximum);
+            spin->setSingleStep(control.step);
+            spin->setDecimals(0);
+            spin->setFixedWidth(92);
+            spin->setValue(qualifierValue(node->curves->parameters.qualifier, control.id));
+            controls_layout_->addRow(QCoreApplication::translate("ColorWorkspace", control.label), spin);
+            const auto key = std::string(control.id);
+            connect(spin, &QDoubleSpinBox::editingFinished, this,
+                [this, spin, node_id, key] {
+                    auto graph = graph_;
+                    auto* selected = color::findNode(graph, node_id);
+                    if (!selected || !selected->curves) return;
+                    auto q = selected->curves->parameters.qualifier;
+                    if (key == "hue_min") q.hue_min = spin->value();
+                    else if (key == "hue_max") q.hue_max = spin->value();
+                    else if (key == "saturation_min") q.saturation_min = spin->value();
+                    else if (key == "saturation_max") q.saturation_max = spin->value();
+                    else if (key == "luminance_min") q.luminance_min = spin->value();
+                    else if (key == "luminance_max") q.luminance_max = spin->value();
+                    else if (key == "hue_softness") q.hue_softness = spin->value();
+                    else if (key == "saturation_softness") q.saturation_softness = spin->value();
+                    else q.luminance_softness = spin->value();
+                    if (q.saturation_min > q.saturation_max) q.saturation_max = q.saturation_min;
+                    if (q.luminance_min > q.luminance_max) q.luminance_max = q.luminance_min;
+                    if (grade_edit_started_handler_) grade_edit_started_handler_();
+                    if (color::setCurvesQualifier(graph, node_id, q))
+                        submit(std::move(graph), node_id, false);
+                    if (grade_edit_finished_handler_) grade_edit_finished_handler_();
+                    refreshControls();
+                    refreshMattePreview();
+                });
+        }
+        matte_preview_ = new QLabel(controls_);
+        matte_preview_->setObjectName(QStringLiteral("colorQualifierMattePreview"));
+        matte_preview_->setMinimumSize(160, 88);
+        matte_preview_->setMaximumHeight(110);
+        matte_preview_->setAlignment(Qt::AlignCenter);
+        matte_preview_->setScaledContents(true);
+        matte_preview_->setText(QCoreApplication::translate("ColorWorkspace", "No frame"));
+        controls_layout_->addRow(QCoreApplication::translate("ColorWorkspace", "Matte preview"), matte_preview_);
+        refreshMattePreview();
     } else if (node && node->type == color::NodeType::ParallelMixer) {
         for (const auto& edge : graph_.connections) {
             if (edge.to != node->id) continue;
@@ -1374,6 +1716,8 @@ void ColorWorkspace::scheduleWaveform() {
     if (!payload.valid()) {
         waveform_->setPixmap({});
         waveform_->setText(QCoreApplication::translate("ColorWorkspace", "No frame"));
+        latest_scope_source_ = {};
+        refreshMattePreview();
         return;
     }
     if (next_scope_request_id_ == 0) ++next_scope_request_id_;
@@ -1388,6 +1732,8 @@ void ColorWorkspace::scheduleWaveform() {
             waveform_pending_ = false;
             waveform_->setPixmap({});
             waveform_->setText(QCoreApplication::translate("ColorWorkspace", "No frame"));
+            latest_scope_source_ = {};
+            refreshMattePreview();
             return;
         }
         renderScopeFrame(payload, payload.rgba, request_id);
@@ -1397,6 +1743,8 @@ void ColorWorkspace::scheduleWaveform() {
         waveform_pending_ = false;
         waveform_->setPixmap({});
         waveform_->setText(QCoreApplication::translate("ColorWorkspace", "No frame"));
+        latest_scope_source_ = {};
+        refreshMattePreview();
         return;
     }
     scope_frame_request_handler_(request_id, payload.timeline_frame,
@@ -1420,8 +1768,13 @@ void ColorWorkspace::renderScopeFrame(rendering::PreviewFramePayload identity,
         waveform_pending_ = false;
         waveform_->setPixmap({});
         waveform_->setText(QCoreApplication::translate("ColorWorkspace", "No frame"));
+        latest_scope_source_ = {};
+        refreshMattePreview();
         return;
     }
+    latest_scope_source_ = source.scaled(256, 144, Qt::IgnoreAspectRatio,
+        Qt::FastTransformation).convertToFormat(QImage::Format_RGB32);
+    refreshMattePreview();
     const auto generation = waveform_generation_;
     const auto scope_mode = scope_mode_->currentData().toString();
     const QPointer<ColorWorkspace> target(this);
@@ -1452,6 +1805,35 @@ void ColorWorkspace::renderScopeFrame(rendering::PreviewFramePayload identity,
             (void)frame_owner;
         }, Qt::QueuedConnection);
     });
+}
+
+void ColorWorkspace::refreshMattePreview() {
+    if (!matte_preview_) return;
+    const auto* node = selected_node_ ? color::findNode(graph_, *selected_node_) : nullptr;
+    if (!node || node->type != color::NodeType::Curves || !node->curves ||
+        latest_scope_source_.isNull()) {
+        matte_preview_->setPixmap({});
+        matte_preview_->setText(QCoreApplication::translate("ColorWorkspace", "No frame"));
+        return;
+    }
+    auto qualifier = node->curves->parameters.qualifier;
+    qualifier.enabled = true;
+    QImage matte(latest_scope_source_.size(), QImage::Format_RGB32);
+    for (int y = 0; y < latest_scope_source_.height(); ++y) {
+        const auto* source_row = reinterpret_cast<const QRgb*>(
+            latest_scope_source_.constScanLine(y));
+        auto* matte_row = reinterpret_cast<QRgb*>(matte.scanLine(y));
+        for (int x = 0; x < latest_scope_source_.width(); ++x) {
+            const auto pixel = source_row[x];
+            const double coverage = creative_suite::effects::tonalQualifierMatte(
+                qualifier, {qRed(pixel) / 255.0, qGreen(pixel) / 255.0,
+                    qBlue(pixel) / 255.0});
+            const int value = static_cast<int>(std::lround(coverage * 255.0));
+            matte_row[x] = qRgb(value, value, value);
+        }
+    }
+    matte_preview_->setText({});
+    matte_preview_->setPixmap(QPixmap::fromImage(matte));
 }
 
 }  // namespace ui

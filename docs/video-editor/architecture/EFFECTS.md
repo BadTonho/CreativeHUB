@@ -151,11 +151,15 @@ Serial graphs project to the ordered stack interface used by the existing CPU,
 OpenGL, and Vulkan paths, preserving rounding after each enabled pass. Branched
 graphs evaluate connected nodes on RGBA frames and mix their outputs in the
 Color evaluator. Disabled instances pass their input through; active instances
-retain graph-defined order. Filter parameters, enabled states, connections,
+retain graph-defined order. The Color-only `video.curves` payload uses typed
+master/RGB curves, five hue/luminance/saturation curves, and a tonal qualifier;
+it is evaluated by the same CPU, OpenGL, and Vulkan processing boundary.
+Curves values and qualifier state live in the Color graph instead of the shared
+built-in effect catalog. Filter parameters, enabled states, connections,
 mixer weights and positions are Timeline project data; caches and temporary
 preview state are not added by this library. The Video Editor persists graphs
-and named per-clip snapshots in CSP v37 as described in [PROJECT.md](PROJECT.md).
-Versions 1–36 migrate ordered effect stacks into serial graphs and start with
+and named per-clip snapshots in CSP v38 as described in [PROJECT.md](PROJECT.md).
+Versions 1–37 migrate without Curves nodes, and versions through v36 start with
 no saved grade versions. Copy/apply transfers only the current graph; saved
 versions remain owned by their clip.
 

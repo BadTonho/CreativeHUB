@@ -485,8 +485,10 @@ set_tests_properties(creative-suite-main-editor-vulkan-native-export PROPERTIES 
 add_creative_suite_test(NAME creative-suite-main-editor-vulkan-native-retirement SKIP_RETURN_CODE 77
     COMMAND creative-suite-main-editor-render-export-tests --vulkan --native-retirement-only)
 set_tests_properties(creative-suite-main-editor-vulkan-native-retirement PROPERTIES TIMEOUT 60)
+find_package(Qt6 CONFIG REQUIRED COMPONENTS Test)
 add_executable(creative-suite-main-editor-color-workspace-tests color_workspace_test.cpp)
-target_link_libraries(creative-suite-main-editor-color-workspace-tests PRIVATE creative-suite-main-editor-core)
+target_link_libraries(creative-suite-main-editor-color-workspace-tests PRIVATE
+    creative-suite-main-editor-core Qt6::Test)
 target_compile_features(creative-suite-main-editor-color-workspace-tests PRIVATE cxx_std_20)
 deploy_qt_test_runtime(creative-suite-main-editor-color-workspace-tests)
 add_creative_suite_test(NAME creative-suite-main-editor-color-workspace

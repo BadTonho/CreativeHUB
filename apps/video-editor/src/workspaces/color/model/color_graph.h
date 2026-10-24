@@ -15,8 +15,28 @@ using NodeId = std::uint64_t;
 enum class NodeType {
     Input,
     Effect,
+    Curves,
     ParallelMixer,
     Output,
+};
+
+enum class CurveKind : std::uint8_t {
+    Master,
+    Red,
+    Green,
+    Blue,
+    HueVsHue,
+    HueVsSaturation,
+    HueVsLuminance,
+    LuminanceVsSaturation,
+    SaturationVsSaturation,
+};
+
+struct CurvesNode {
+    bool enabled = true;
+    creative_suite::effects::VideoCurvesParameters parameters;
+
+    friend bool operator==(const CurvesNode&, const CurvesNode&) = default;
 };
 
 struct Node {
@@ -25,6 +45,7 @@ struct Node {
     double x = 0.0;
     double y = 0.0;
     std::optional<creative_suite::effects::EffectInstance> effect;
+    std::optional<CurvesNode> curves;
 
     friend bool operator==(const Node&, const Node&) = default;
 };
@@ -62,6 +83,7 @@ effectInstancesInOrder(const Graph& graph);
 
 [[nodiscard]] bool insertEffectAfter(
     Graph& graph, NodeId anchor, creative_suite::effects::EffectInstance effect);
+[[nodiscard]] bool insertCurvesAfter(Graph& graph, NodeId anchor);
 [[nodiscard]] bool addParallelBranch(
     Graph& graph, NodeId anchor, creative_suite::effects::EffectInstance effect);
 [[nodiscard]] bool connect(
@@ -71,6 +93,11 @@ effectInstancesInOrder(const Graph& graph);
 [[nodiscard]] bool removeParallelMixer(Graph& graph, NodeId id);
 [[nodiscard]] bool moveNode(Graph& graph, NodeId id, double x, double y);
 [[nodiscard]] bool setEffectEnabled(Graph& graph, NodeId id, bool enabled);
+[[nodiscard]] bool setCurvesEnabled(Graph& graph, NodeId id, bool enabled);
+[[nodiscard]] bool setCurvePoints(Graph& graph, NodeId id, CurveKind kind,
+    creative_suite::effects::CurvesPointList points);
+[[nodiscard]] bool setCurvesQualifier(Graph& graph, NodeId id,
+    creative_suite::effects::TonalQualifier qualifier);
 [[nodiscard]] bool setEffectParameter(
     Graph& graph, NodeId id, std::string_view parameter, double value);
 [[nodiscard]] bool setMixerInputWeight(

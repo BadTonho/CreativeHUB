@@ -28,276 +28,372 @@
 <context>
     <name>ColorWorkspace</name>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="33"/>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="51"/>
         <source>Primary Grade</source>
         <translation>Correção primária</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="34"/>
-        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="42"/>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="52"/>
         <source>Brightness</source>
         <translation>Brilho</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="35"/>
-        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="43"/>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="53"/>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="60"/>
         <source>Contrast</source>
         <translation>Contraste</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="36"/>
-        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="44"/>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="54"/>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="61"/>
         <source>Saturation</source>
         <translation>Saturação</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="37"/>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="55"/>
         <source>Grayscale</source>
         <translation>Escala de cinza</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="45"/>
-        <source>Red gain</source>
-        <translation>Ganho de vermelho</translation>
-    </message>
-    <message>
-        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="46"/>
-        <source>Green gain</source>
-        <translation>Ganho de verde</translation>
-    </message>
-    <message>
-        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="47"/>
-        <source>Blue gain</source>
-        <translation>Ganho de azul</translation>
-    </message>
-    <message>
-        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="48"/>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="65"/>
         <source>Amount</source>
         <translation>Intensidade</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="117"/>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="805"/>
         <source>Color nodes</source>
         <translation>Nós de cor</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="460"/>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="1550"/>
+        <source>Master</source>
+        <translation>Mestre</translation>
+    </message>
+    <message>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="1551"/>
+        <source>Red</source>
+        <translation>Vermelho</translation>
+    </message>
+    <message>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="1552"/>
+        <source>Green</source>
+        <translation>Verde</translation>
+    </message>
+    <message>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="1553"/>
+        <source>Blue</source>
+        <translation>Azul</translation>
+    </message>
+    <message>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="1554"/>
+        <source>Hue vs Hue</source>
+        <translation>Matiz vs Matiz</translation>
+    </message>
+    <message>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="1555"/>
+        <source>Hue vs Saturation</source>
+        <translation>Matiz vs Saturação</translation>
+    </message>
+    <message>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="1556"/>
+        <source>Hue vs Luminance</source>
+        <translation>Matiz vs Luminância</translation>
+    </message>
+    <message>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="1557"/>
+        <source>Luminance vs Saturation</source>
+        <translation>Luminância vs Saturação</translation>
+    </message>
+    <message>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="1558"/>
+        <source>Saturation vs Saturation</source>
+        <translation>Saturação vs Saturação</translation>
+    </message>
+    <message>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="1561"/>
+        <source>Curve</source>
+        <translation>Curva</translation>
+    </message>
+    <message>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="1584"/>
+        <source>Enable tonal qualifier</source>
+        <translation>Ativar qualificador tonal</translation>
+    </message>
+    <message>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="1672"/>
+        <source>Matte preview</source>
+        <translation>Prévia da máscara</translation>
+    </message>
+    <message>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="1685"/>
         <source>Branch %1 weight</source>
         <translation>Peso do ramo %1</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="138"/>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="830"/>
         <source>On/Off</source>
         <translation>Ativar/desativar</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="139"/>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="831"/>
         <source>Remove</source>
         <translation>Remover</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="146"/>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="840"/>
         <source>Previous frame</source>
         <translation>Quadro anterior</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="147"/>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="841"/>
         <source>Play / Pause</source>
         <translation>Reproduzir / pausar</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="148"/>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="842"/>
         <source>Next frame</source>
         <translation>Próximo quadro</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="221"/>
-        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="489"/>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="286"/>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="993"/>
         <source>RGB waveform</source>
         <translation>Forma de onda RGB</translation>
     </message>
     <message>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="1503"/>
         <source>Lift</source>
         <translation>Elevação</translation>
     </message>
     <message>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="1505"/>
         <source>Gamma</source>
         <translation>Gama</translation>
     </message>
     <message>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="1507"/>
         <source>Gain</source>
         <translation>Ganho</translation>
     </message>
     <message>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="1500"/>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="1509"/>
         <source>Offset</source>
         <translation>Deslocamento</translation>
     </message>
     <message>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="62"/>
         <source>Pivot</source>
         <translation>Pivô</translation>
     </message>
     <message>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="63"/>
         <source>Temperature</source>
         <translation>Temperatura</translation>
     </message>
     <message>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="64"/>
         <source>Tint</source>
         <translation>Tonalidade</translation>
     </message>
     <message>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="994"/>
         <source>RGB Parade</source>
         <translation>Parada RGB</translation>
     </message>
     <message>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="971"/>
         <source>Wheels</source>
         <translation>Rodas</translation>
     </message>
     <message>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="973"/>
         <source>Bars</source>
         <translation>Barras</translation>
     </message>
     <message>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="975"/>
         <source>Log</source>
         <translation>Log</translation>
     </message>
     <message>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="1488"/>
         <source>Shadows</source>
         <translation>Sombras</translation>
     </message>
     <message>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="1492"/>
         <source>Midtones</source>
         <translation>Tons médios</translation>
     </message>
     <message>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="1496"/>
         <source>Highlights</source>
         <translation>Realces</translation>
     </message>
     <message>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="230"/>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="995"/>
         <source>Vectorscope</source>
         <translation>Vetorscópio</translation>
     </message>
     <message>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="135"/>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="996"/>
         <source>RGB Histogram</source>
         <translation>Histograma RGB</translation>
     </message>
     <message>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="998"/>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="1094"/>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="1124"/>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="1236"/>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="1671"/>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="1718"/>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="1734"/>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="1745"/>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="1761"/>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="1770"/>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="1816"/>
         <source>No frame</source>
         <translation>Sem quadro</translation>
     </message>
     <message>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="406"/>
         <source>Master value</source>
         <translation>Valor mestre</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="182"/>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="600"/>
+        <source>Click the curve to add a point; drag points to edit; right-click a point to remove it.</source>
+        <translation>Clique na curva para adicionar um ponto; arraste os pontos para editá-los; clique com o botão direito em um ponto para removê-lo.</translation>
+    </message>
+    <message>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="876"/>
         <source>Gallery</source>
         <translation>Galeria</translation>
     </message>
     <message>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="905"/>
         <source>Grade Versions</source>
         <translation>Versões de correção</translation>
     </message>
     <message>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="909"/>
         <source>Save Version</source>
         <translation>Salvar versão</translation>
     </message>
     <message>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="920"/>
         <source>Apply Version</source>
         <translation>Aplicar versão</translation>
     </message>
     <message>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="924"/>
         <source>Rename Version</source>
         <translation>Renomear versão</translation>
     </message>
     <message>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="928"/>
         <source>Remove Version</source>
         <translation>Remover versão</translation>
     </message>
     <message>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="1021"/>
         <source>Copy Grade</source>
         <translation>Copiar correção</translation>
     </message>
     <message>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="1023"/>
         <source>Apply Grade</source>
         <translation>Aplicar correção</translation>
     </message>
     <message>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="1309"/>
         <source>Version %1</source>
         <translation>Versão %1</translation>
     </message>
     <message>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="1314"/>
         <source>Save Grade Version</source>
         <translation>Salvar versão da correção</translation>
     </message>
     <message>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="1356"/>
         <source>Rename Grade Version</source>
         <translation>Renomear versão da correção</translation>
     </message>
     <message>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="1320"/>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="1369"/>
         <source>Invalid Grade Version Name</source>
         <translation>Nome de versão inválido</translation>
     </message>
     <message>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="1321"/>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="1370"/>
         <source>Version names must be non-empty and unique for this clip.</source>
         <translation>Os nomes das versões devem ser preenchidos e exclusivos neste clipe.</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="136"/>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="828"/>
         <source>Add Effect</source>
         <translation>Adicionar efeito</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="137"/>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="829"/>
         <source>Add Branch</source>
         <translation>Adicionar ramo</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="184"/>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="878"/>
         <source>Capture still</source>
         <translation>Capturar still</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="186"/>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="880"/>
         <source>Rename</source>
         <translation>Renomear</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="188"/>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="882"/>
         <source>Remove still</source>
         <translation>Remover still</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="849"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="917"/>
         <source>Clip %1</source>
         <translation>Clipe %1</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="356"/>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="1257"/>
         <source>%1 · Frame %2</source>
         <translation>%1 · Quadro %2</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="357"/>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="1258"/>
         <source>Still image unavailable · %1 · Frame %2</source>
         <translation>Imagem do still indisponível · %1 · Quadro %2</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="352"/>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="1253"/>
         <source>%1 (Unavailable)</source>
         <translation>%1 (Indisponível)</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="388"/>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="1289"/>
         <source>Rename still</source>
         <translation>Renomear still</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="389"/>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="1290"/>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="1315"/>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="1357"/>
         <source>Name</source>
         <translation>Nome</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="981"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="1049"/>
         <source>Still %1</source>
         <translation>Still %1</translation>
     </message>
@@ -822,130 +918,142 @@
         <translation>Ganho de azul</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/ui/effects/effects_catalog.cpp" line="28"/>
+        <location filename="../../apps/video-editor/src/ui/effects/effects_catalog.cpp" line="40"/>
         <source>Amount</source>
         <translation>Intensidade</translation>
     </message>
     <message>
+        <location filename="../../apps/video-editor/src/ui/effects/effects_catalog.cpp" line="28"/>
         <source>Lift red</source>
         <translation>Elevação vermelha</translation>
     </message>
     <message>
+        <location filename="../../apps/video-editor/src/ui/effects/effects_catalog.cpp" line="29"/>
         <source>Lift green</source>
         <translation>Elevação verde</translation>
     </message>
     <message>
+        <location filename="../../apps/video-editor/src/ui/effects/effects_catalog.cpp" line="30"/>
         <source>Lift blue</source>
         <translation>Elevação azul</translation>
     </message>
     <message>
+        <location filename="../../apps/video-editor/src/ui/effects/effects_catalog.cpp" line="31"/>
         <source>Gamma red</source>
         <translation>Gama vermelha</translation>
     </message>
     <message>
+        <location filename="../../apps/video-editor/src/ui/effects/effects_catalog.cpp" line="32"/>
         <source>Gamma green</source>
         <translation>Gama verde</translation>
     </message>
     <message>
+        <location filename="../../apps/video-editor/src/ui/effects/effects_catalog.cpp" line="33"/>
         <source>Gamma blue</source>
         <translation>Gama azul</translation>
     </message>
     <message>
+        <location filename="../../apps/video-editor/src/ui/effects/effects_catalog.cpp" line="34"/>
         <source>Offset red</source>
         <translation>Deslocamento vermelho</translation>
     </message>
     <message>
+        <location filename="../../apps/video-editor/src/ui/effects/effects_catalog.cpp" line="35"/>
         <source>Offset green</source>
         <translation>Deslocamento verde</translation>
     </message>
     <message>
+        <location filename="../../apps/video-editor/src/ui/effects/effects_catalog.cpp" line="36"/>
         <source>Offset blue</source>
         <translation>Deslocamento azul</translation>
     </message>
     <message>
+        <location filename="../../apps/video-editor/src/ui/effects/effects_catalog.cpp" line="37"/>
         <source>Pivot</source>
         <translation>Pivô</translation>
     </message>
     <message>
+        <location filename="../../apps/video-editor/src/ui/effects/effects_catalog.cpp" line="38"/>
         <source>Temperature</source>
         <translation>Temperatura</translation>
     </message>
     <message>
+        <location filename="../../apps/video-editor/src/ui/effects/effects_catalog.cpp" line="39"/>
         <source>Tint</source>
         <translation>Tonalidade</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/ui/effects/effects_catalog.cpp" line="29"/>
+        <location filename="../../apps/video-editor/src/ui/effects/effects_catalog.cpp" line="41"/>
         <source>Gaussian Blur</source>
         <translation>Desfoque gaussiano</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/ui/effects/effects_catalog.cpp" line="30"/>
+        <location filename="../../apps/video-editor/src/ui/effects/effects_catalog.cpp" line="42"/>
         <source>Background</source>
         <translation>Fundo</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/ui/effects/effects_catalog.cpp" line="31"/>
+        <location filename="../../apps/video-editor/src/ui/effects/effects_catalog.cpp" line="43"/>
         <source>Fusion Composition</source>
         <translation>Composição Fusion</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/ui/effects/effects_catalog.cpp" line="32"/>
+        <location filename="../../apps/video-editor/src/ui/effects/effects_catalog.cpp" line="44"/>
         <source>Adjustment Clip</source>
         <translation>Clipe de ajuste</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/ui/effects/effects_catalog.cpp" line="33"/>
+        <location filename="../../apps/video-editor/src/ui/effects/effects_catalog.cpp" line="45"/>
         <source>Gain</source>
         <translation>Ganho</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/ui/effects/effects_catalog.cpp" line="34"/>
+        <location filename="../../apps/video-editor/src/ui/effects/effects_catalog.cpp" line="46"/>
         <source>Cross Dissolve</source>
         <translation>Dissolução cruzada</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/ui/effects/effects_catalog.cpp" line="35"/>
+        <location filename="../../apps/video-editor/src/ui/effects/effects_catalog.cpp" line="47"/>
         <source>Fade to Black</source>
         <translation>Esmaecer para preto</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/ui/effects/effects_catalog.cpp" line="36"/>
+        <location filename="../../apps/video-editor/src/ui/effects/effects_catalog.cpp" line="48"/>
         <source>Input</source>
         <translation>Entrada</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/ui/effects/effects_catalog.cpp" line="37"/>
+        <location filename="../../apps/video-editor/src/ui/effects/effects_catalog.cpp" line="49"/>
         <source>Transform</source>
         <translation>Transformação</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/ui/effects/effects_catalog.cpp" line="38"/>
+        <location filename="../../apps/video-editor/src/ui/effects/effects_catalog.cpp" line="50"/>
         <source>Color</source>
         <translation>Cor</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/ui/effects/effects_catalog.cpp" line="39"/>
+        <location filename="../../apps/video-editor/src/ui/effects/effects_catalog.cpp" line="51"/>
         <source>Merge</source>
         <translation>Mesclagem</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/ui/effects/effects_catalog.cpp" line="40"/>
+        <location filename="../../apps/video-editor/src/ui/effects/effects_catalog.cpp" line="52"/>
         <source>Rectangle Mask</source>
         <translation>Máscara retangular</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/ui/effects/effects_catalog.cpp" line="41"/>
+        <location filename="../../apps/video-editor/src/ui/effects/effects_catalog.cpp" line="53"/>
         <source>Ellipse Mask</source>
         <translation>Máscara elíptica</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/ui/effects/effects_catalog.cpp" line="42"/>
+        <location filename="../../apps/video-editor/src/ui/effects/effects_catalog.cpp" line="54"/>
         <source>Effect</source>
         <translation>Efeito</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/ui/effects/effects_catalog.cpp" line="43"/>
+        <location filename="../../apps/video-editor/src/ui/effects/effects_catalog.cpp" line="55"/>
         <source>Node</source>
         <translation>Nó</translation>
     </message>
@@ -1257,15 +1365,17 @@
 <context>
     <name>MainWindow</name>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="974"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="1042"/>
         <source>Could not save the Color Gallery still.</source>
         <translation>Não foi possível salvar o still da Galeria de cor.</translation>
     </message>
     <message>
+        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="773"/>
         <source>Could not apply the copied color grade.</source>
         <translation>Não foi possível aplicar a correção de cor copiada.</translation>
     </message>
     <message>
+        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="790"/>
         <source>Could not update grade versions.</source>
         <translation>Não foi possível atualizar as versões da correção.</translation>
     </message>
@@ -1683,7 +1793,7 @@
         <location filename="../../apps/video-editor/src/main_window/main_window_project.cpp" line="109"/>
         <location filename="../../apps/video-editor/src/main_window/main_window_project.cpp" line="203"/>
         <location filename="../../apps/video-editor/src/main_window/main_window_project.cpp" line="510"/>
-        <location filename="../../apps/video-editor/src/main_window/main_window_project.cpp" line="708"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_project.cpp" line="712"/>
         <location filename="../../apps/video-editor/src/main_window/main_window_media.cpp" line="1841"/>
         <source>Cancel</source>
         <translation>Cancelar</translation>
@@ -1739,97 +1849,97 @@
         <translation>Mídia importada com quadro de pré-visualização.</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_playback.cpp" line="1087"/>
-        <location filename="../../apps/video-editor/src/main_window/main_window_playback.cpp" line="1177"/>
-        <location filename="../../apps/video-editor/src/main_window/main_window_playback.cpp" line="1280"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_playback.cpp" line="1088"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_playback.cpp" line="1178"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_playback.cpp" line="1286"/>
         <source>Loading timeline clip...</source>
         <translation>Carregando clipe da linha do tempo...</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_playback.cpp" line="1089"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_playback.cpp" line="1090"/>
         <source>Could not activate the timeline clip.</source>
         <translation>Não foi possível ativar o clipe da linha do tempo.</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_playback.cpp" line="1091"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_playback.cpp" line="1092"/>
         <source>Playback is unavailable.</source>
         <translation>A reprodução está indisponível.</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_playback.cpp" line="1141"/>
-        <location filename="../../apps/video-editor/src/main_window/main_window_playback.cpp" line="1354"/>
-        <location filename="../../apps/video-editor/src/main_window/main_window_playback.cpp" line="1357"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_playback.cpp" line="1142"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_playback.cpp" line="1360"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_playback.cpp" line="1363"/>
         <source>Gap in timeline.</source>
         <translation>Intervalo vazio na linha do tempo.</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_playback.cpp" line="1144"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_playback.cpp" line="1145"/>
         <source>No timeline clip at the playhead.</source>
         <translation>Não há clipe no indicador de reprodução.</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_playback.cpp" line="1147"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_playback.cpp" line="1148"/>
         <source>Already at the beginning of the timeline.</source>
         <translation>O indicador já está no início da linha do tempo.</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_playback.cpp" line="1150"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_playback.cpp" line="1151"/>
         <source>Already at the end of the timeline.</source>
         <translation>O indicador já está no fim da linha do tempo.</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_playback.cpp" line="1153"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_playback.cpp" line="1154"/>
         <source>The selected timeline media is unavailable.</source>
         <translation>A mídia selecionada na linha do tempo está indisponível.</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_playback.cpp" line="1193"/>
-        <location filename="../../apps/video-editor/src/main_window/main_window_playback.cpp" line="1224"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_playback.cpp" line="1194"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_playback.cpp" line="1225"/>
         <source>%1 - Frame %2 / %3</source>
         <translation>%1 - Quadro %2 / %3</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_playback.cpp" line="1199"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_playback.cpp" line="1200"/>
         <source>No media selected.</source>
         <translation>Nenhuma mídia selecionada.</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_playback.cpp" line="1204"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_playback.cpp" line="1205"/>
         <source>Select the timeline media to play.</source>
         <translation>Selecione a mídia na linha do tempo para reproduzi-la.</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_playback.cpp" line="1252"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_playback.cpp" line="1253"/>
         <source>Audio unavailable; continuing with video playback.</source>
         <translation>Áudio indisponível; continuando a reprodução do vídeo.</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_playback.cpp" line="1255"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_playback.cpp" line="1256"/>
         <source>Audio unavailable; video fallback is active.</source>
         <translation>Áudio indisponível; a reprodução de vídeo está em modo alternativo.</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_playback.cpp" line="1362"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_playback.cpp" line="1368"/>
         <source>End of timeline.</source>
         <translation>Fim da linha do tempo.</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_playback.cpp" line="1362"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_playback.cpp" line="1368"/>
         <source>End of media.</source>
         <translation>Fim da mídia.</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_playback.cpp" line="1400"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_playback.cpp" line="1406"/>
         <source>Could not activate the next timeline clip.</source>
         <translation>Não foi possível ativar o próximo clipe da linha do tempo.</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_playback.cpp" line="1408"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_playback.cpp" line="1414"/>
         <source>Playback error.</source>
         <translation>Erro de reprodução.</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_playback.cpp" line="1413"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_playback.cpp" line="1419"/>
         <source>Playback error</source>
         <translation>Erro de reprodução</translation>
     </message>
@@ -1938,7 +2048,7 @@
     </message>
     <message>
         <location filename="../../apps/video-editor/src/main_window/main_window_project.cpp" line="489"/>
-        <location filename="../../apps/video-editor/src/main_window/main_window_project.cpp" line="643"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_project.cpp" line="647"/>
         <source>Creative Suite Project (*.csp);;All Files (*)</source>
         <translation>Projeto Creative Suite (*.csp);;Todos os arquivos (*)</translation>
     </message>
@@ -1968,104 +2078,104 @@
         <translation>Descartar</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_project.cpp" line="592"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_project.cpp" line="596"/>
         <source>New project created.</source>
         <translation>Novo projeto criado.</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_project.cpp" line="602"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_project.cpp" line="606"/>
         <source>Could not create project</source>
         <translation>Não foi possível criar o projeto</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_project.cpp" line="602"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_project.cpp" line="606"/>
         <source>The new project could not be created.</source>
         <translation>Não foi possível criar o novo projeto.</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_project.cpp" line="603"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_project.cpp" line="607"/>
         <source>Could not create project.</source>
         <translation>Não foi possível criar o projeto.</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_project.cpp" line="623"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_project.cpp" line="627"/>
         <source>Project settings could not be applied to the current Timeline.</source>
         <translation>Não foi possível aplicar as configurações do projeto à linha do tempo atual.</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_project.cpp" line="625"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_project.cpp" line="629"/>
         <source>Could not apply Project Settings</source>
         <translation>Não foi possível aplicar as configurações do projeto</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_project.cpp" line="626"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_project.cpp" line="630"/>
         <source>The selected frame rate would make a clip or transition invalid.</source>
         <translation>A taxa de quadros selecionada tornaria inválido um clipe ou uma transição.</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_project.cpp" line="635"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_project.cpp" line="639"/>
         <source>Project settings updated.</source>
         <translation>Configurações do projeto atualizadas.</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_project.cpp" line="641"/>
-        <location filename="../../apps/video-editor/src/main_window/main_window_project.cpp" line="709"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_project.cpp" line="645"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_project.cpp" line="713"/>
         <source>Open Project</source>
         <translation>Abrir projeto</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_project.cpp" line="708"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_project.cpp" line="712"/>
         <source>Preparing project…</source>
         <translation>Preparando projeto…</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_project.cpp" line="717"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_project.cpp" line="721"/>
         <source>Cancelling project preparation…</source>
         <translation>Cancelando a preparação do projeto…</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_project.cpp" line="751"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_project.cpp" line="755"/>
         <source>Preparing %1 of %2: %3</source>
         <translation>Preparando %1 de %2: %3</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_project.cpp" line="768"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_project.cpp" line="772"/>
         <source>Preparing project in the background...</source>
         <translation>Preparando projeto em segundo plano...</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_project.cpp" line="830"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_project.cpp" line="834"/>
         <source>Project opening result was superseded.</source>
         <translation>O resultado da abertura do projeto foi substituído por uma operação mais recente.</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_project.cpp" line="850"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_project.cpp" line="854"/>
         <source>Project opening cancelled. The current project is unchanged.</source>
         <translation>A abertura do projeto foi cancelada. O projeto atual não foi alterado.</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_project.cpp" line="882"/>
-        <location filename="../../apps/video-editor/src/main_window/main_window_project.cpp" line="900"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_project.cpp" line="886"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_project.cpp" line="904"/>
         <source>Could not open project</source>
         <translation>Não foi possível abrir o projeto</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_project.cpp" line="883"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_project.cpp" line="887"/>
         <source>Could not open project. The current project is unchanged.</source>
         <translation>Não foi possível abrir o projeto. O projeto atual não foi alterado.</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_project.cpp" line="890"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_project.cpp" line="894"/>
         <source>Project opened.</source>
         <translation>Projeto aberto.</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_project.cpp" line="900"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_project.cpp" line="904"/>
         <source>The prepared project could not be applied.</source>
         <translation>Não foi possível aplicar o projeto preparado.</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_project.cpp" line="901"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_project.cpp" line="905"/>
         <source>Could not open project.</source>
         <translation>Não foi possível abrir o projeto.</translation>
     </message>
@@ -2133,92 +2243,92 @@
         <translation>Pré-visualização pela GPU indisponível; usando a CPU.</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="741"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="808"/>
         <source>Could not update the color grade.</source>
         <translation>Não foi possível atualizar a correção de cor.</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="808"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="874"/>
         <source>Generated clip</source>
         <translation>Clipe gerado</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="1177"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="1245"/>
         <source>Import Composition Interchange...</source>
         <translation>Importar intercâmbio de composição...</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="1180"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="1248"/>
         <source>Export Composition Interchange...</source>
         <translation>Exportar intercâmbio de composição...</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="1188"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="1256"/>
         <source>&amp;New Project</source>
         <translation>&amp;Novo projeto</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="1198"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="1266"/>
         <source>Project Settings...</source>
         <translation>Configurações do &amp;projeto...</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="1204"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="1272"/>
         <source>Open &amp;Media...</source>
         <translation>Abrir &amp;mídia...</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="1208"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="1276"/>
         <source>&amp;Open Project...</source>
         <translation>&amp;Abrir projeto...</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="1218"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="1286"/>
         <source>&amp;Save Project</source>
         <translation>&amp;Salvar projeto</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="1228"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="1296"/>
         <source>Save Project &amp;As...</source>
         <translation>Salvar projeto &amp;como...</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="1240"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="1308"/>
         <source>E&amp;xit</source>
         <translation>&amp;Sair</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="1246"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="1314"/>
         <source>&amp;Undo</source>
         <translation>&amp;Desfazer</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="1259"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="1327"/>
         <source>&amp;Redo</source>
         <translation>&amp;Refazer</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="1316"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="1384"/>
         <source>Grayscale Preview</source>
         <translation>Pré-visualização em escala de cinza</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="1369"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="1437"/>
         <source>Restore &amp;Default Layout</source>
         <translation>Restaurar layout &amp;padrão</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="1364"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="1432"/>
         <source>Layouts...</source>
         <translation>Layouts...</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="1415"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="1483"/>
         <source>Layouts</source>
         <translation>Layouts</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="1418"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="1486"/>
         <source>Open panel layouts</source>
         <translation>Abrir layouts dos painéis</translation>
     </message>
@@ -2305,47 +2415,47 @@
         <translation>Excluir este layout salvo?</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="1400"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="1468"/>
         <source>Media Pool</source>
         <translation>Media Pool</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="1404"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="1472"/>
         <source>Show the Media Pool docks</source>
         <translation>Exibir os painéis do Media Pool</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="1405"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="1473"/>
         <source>Effects</source>
         <translation>Efeitos</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="1409"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="1477"/>
         <source>Show the Effects docks</source>
         <translation>Exibir os painéis de efeitos</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="1455"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="1523"/>
         <source>&amp;Settings</source>
         <translation>&amp;Configurações</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="1458"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="1526"/>
         <source>Open editor settings</source>
         <translation>Abrir as configurações do editor</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="1464"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="1532"/>
         <source>&amp;System</source>
         <translation>&amp;Sistema</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="1471"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="1539"/>
         <source>System</source>
         <translation>Sistema</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="1472"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="1540"/>
         <source>Video Editor
 
 Version: %1
@@ -2356,42 +2466,42 @@ Versão: %1
 Executável: %2</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="1473"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="1541"/>
         <source>Beta 0.1.0</source>
         <translation>Beta 0.1.0</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="1475"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="1543"/>
         <source>N/A</source>
         <translation>N/D</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="1478"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="1546"/>
         <source>Open &amp;Log Folder</source>
         <translation>Abrir pasta de &amp;logs</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="1493"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="1561"/>
         <source>Could not open the log folder.</source>
         <translation>Não foi possível abrir a pasta de logs.</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="1503"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="1571"/>
         <source>Log folder opened.</source>
         <translation>Pasta de logs aberta.</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="1506"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="1574"/>
         <source>&amp;About Video Editor</source>
         <translation>&amp;Sobre o Video Editor</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="1511"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="1579"/>
         <source>About Video Editor</source>
         <translation>Sobre o Video Editor</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="1512"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="1580"/>
         <source>Video Editor application shell
 
 </source>
@@ -2400,32 +2510,32 @@ Executável: %2</translation>
 </translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="1513"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="1581"/>
         <source>This is an early open-source creative suite workspace.</source>
         <translation>Este é um espaço de trabalho inicial de uma suíte criativa de código aberto.</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="1586"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="1654"/>
         <source>%1 (%2)</source>
         <translation>%1 (%2)</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="2456"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="2524"/>
         <source>Restore Inspector layout</source>
         <translation>Restaurar layout do Inspetor</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="2457"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="2525"/>
         <source>Expand Inspector to full window height</source>
         <translation>Expandir o Inspetor até a altura total da janela</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="2471"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="2539"/>
         <source>Restore Media Pool layout</source>
         <translation>Restaurar layout do Media Pool</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="2472"/>
+        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="2540"/>
         <source>Expand Media Pool to full window height</source>
         <translation>Expandir o Media Pool até a altura total da janela</translation>
     </message>
@@ -2515,62 +2625,68 @@ Importe uma mídia para exibir o primeiro quadro.</translation>
 <context>
     <name>QObject</name>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_node_canvas.cpp" line="25"/>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_node_canvas.cpp" line="27"/>
         <source>Input</source>
         <translation>Entrada</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_node_canvas.cpp" line="26"/>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_node_canvas.cpp" line="28"/>
+        <source>Curves</source>
+        <translation>Curvas</translation>
+    </message>
+    <message>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_node_canvas.cpp" line="29"/>
         <source>Parallel Mixer</source>
         <translation>Mixer paralelo</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_node_canvas.cpp" line="27"/>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_node_canvas.cpp" line="30"/>
         <source>Output</source>
         <translation>Saída</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_node_canvas.cpp" line="29"/>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_node_canvas.cpp" line="32"/>
         <source>Effect</source>
         <translation>Efeito</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_node_canvas.cpp" line="30"/>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_node_canvas.cpp" line="33"/>
         <source>Primary Grade</source>
         <translation>Correção primária</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_node_canvas.cpp" line="31"/>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_node_canvas.cpp" line="34"/>
         <source>Brightness</source>
         <translation>Brilho</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_node_canvas.cpp" line="32"/>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_node_canvas.cpp" line="35"/>
         <source>Contrast</source>
         <translation>Contraste</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_node_canvas.cpp" line="33"/>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_node_canvas.cpp" line="36"/>
         <source>Saturation</source>
         <translation>Saturação</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_node_canvas.cpp" line="34"/>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_node_canvas.cpp" line="37"/>
         <source>Grayscale</source>
         <translation>Escala de cinza</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_node_canvas.cpp" line="37"/>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_node_canvas.cpp" line="40"/>
         <source>Node</source>
         <translation>Nó</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_node_canvas.cpp" line="77"/>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_node_canvas.cpp" line="81"/>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_node_canvas.cpp" line="86"/>
         <source>Off</source>
         <translation>Desativado</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_node_canvas.cpp" line="81"/>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_node_canvas.cpp" line="90"/>
         <source>Weighted mix</source>
         <translation>Mistura ponderada</translation>
     </message>
@@ -3715,6 +3831,29 @@ Erro: </translation>
         <location filename="../../apps/video-editor/src/ui/workspace/workspace_transition_controller.cpp" line="328"/>
         <source>Timeline</source>
         <translation>Linha do tempo</translation>
+    </message>
+</context>
+<context>
+    <name>ui::ColorNodeCanvas</name>
+    <message>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_node_canvas.cpp" line="369"/>
+        <source>Add Curves</source>
+        <translation>Adicionar curvas</translation>
+    </message>
+    <message>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_node_canvas.cpp" line="374"/>
+        <source>Disable Curves</source>
+        <translation>Desativar curvas</translation>
+    </message>
+    <message>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_node_canvas.cpp" line="375"/>
+        <source>Enable Curves</source>
+        <translation>Ativar curvas</translation>
+    </message>
+    <message>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_node_canvas.cpp" line="376"/>
+        <source>Remove Curves</source>
+        <translation>Remover curvas</translation>
     </message>
 </context>
 </TS>

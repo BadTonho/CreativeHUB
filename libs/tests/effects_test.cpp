@@ -197,7 +197,75 @@ void verifyGlow()
     require(!validGlow(invalid_mode), "Glow rejects unknown modes");
 }
 
+void verifyVideoCurves()
+{
+    using namespace creative_suite::effects;
+    VideoCurvesParameters neutral_curves;
+    require(validVideoCurves(neutral_curves) && identityVideoCurves(neutral_curves),
+        "Neutral video curves must be valid and identity.");
+    auto curves_effect = makeDefaultInstance("video.curves");
+    curves_effect.video_curves = neutral_curves;
+    const auto original = colorFrame();
+    auto unchanged = original;
+    require(applyStack(unchanged, std::span<const EffectInstance>(&curves_effect, 1)) &&
+            unchanged.rgba_pixels == original.rgba_pixels,
+        "Neutral video curves must preserve RGB, alpha and row padding.");
+
+    for (int kind = 0; kind < 9; ++kind) {
+        auto parameters = neutral_curves;
+        const CurvesPointList points = kind <= 3
+            ? CurvesPointList{{0, 0}, {64, 110}, {255, 255}}
+            : CurvesPointList{{0, 176}, {255, 128}};
+        auto lut_frame = frame();
+        lut_frame.rgba_pixels = {220, 52, 36, 91, 7, 8, 9, 10};
+        switch (kind) {
+        case 0: parameters.rgb.points = points; break;
+        case 1: parameters.rgb.channels[0] = points; break;
+        case 2: parameters.rgb.channels[1] = points; break;
+        case 3: parameters.rgb.channels[2] = points; break;
+        case 4: parameters.targeted[0] = points; break;
+        case 5: parameters.targeted[1] = points; break;
+        case 6: parameters.targeted[2] = points; break;
+        case 7: parameters.targeted[3] = points; break;
+        case 8: parameters.targeted[4] = points; break;
+        }
+        curves_effect.video_curves = parameters;
+        const auto before = lut_frame.rgba_pixels;
+        require(applyStack(lut_frame, std::span<const EffectInstance>(&curves_effect, 1)),
+            "An individual video curve family must evaluate.");
+        require(lut_frame.rgba_pixels[0] != before[0] ||
+                lut_frame.rgba_pixels[1] != before[1] ||
+                lut_frame.rgba_pixels[2] != before[2],
+            "Each of the nine curves must affect its designated input range.");
+        require(lut_frame.rgba_pixels[3] == before[3] &&
+                lut_frame.rgba_pixels[7] == before[7],
+            "Video Curves must preserve alpha and row padding.");
+    }
+
+    TonalQualifier wrapped;
+    wrapped.enabled = true;
+    wrapped.hue_min = 350.0;
+    wrapped.hue_max = 12.0;
+    require(tonalQualifierMatte(wrapped, {1.0, 0.0, 0.0}) > 0.99 &&
+            tonalQualifierMatte(wrapped, {0.0, 0.0, 1.0}) < 0.01,
+        "Hue qualifiers must correctly wrap across 0 degrees.");
+    wrapped.saturation_min = 80.0;
+    wrapped.saturation_max = 100.0;
+    wrapped.saturation_softness = 10.0;
+    const auto partial_matte = tonalQualifierMatte(wrapped, {1.0, 0.25, 0.25});
+    require(partial_matte > 0.0 && partial_matte < 1.0,
+        "Qualifier softness must produce a partial matte at its range edge.");
+    auto invalid = neutral_curves;
+    invalid.targeted[0].push_back({128, 200});
+    require(!validVideoCurves(invalid),
+        "Video Curves must enforce the shared maximum point count.");
+}
+
 int main(int argc, char** argv) {
+    if (argc > 1 && std::string_view(argv[1]) == "--video-curves-only") {
+        verifyVideoCurves();
+        return 0;
+    }
     if (argc > 1 && std::string_view(argv[1]) == "--primary-grade-only") {
         using namespace creative_suite::effects;
         auto grade = makeDefaultInstance("video.primary_grade");

@@ -424,7 +424,7 @@ int main(int argc, char** argv) {
             graded_clip.effects = color::effectInstancesInOrder(branch_graph);
             graded_clip.color_grade_versions.push_back({
                 "grade-version-1", "Version 1", branch_graph});
-            const auto grade_path = directory / "primary-grade-v37.csp";
+            const auto grade_path = directory / "primary-grade-v38.csp";
             project::save(grade_path, graded);
             const auto restored = project::load(grade_path);
             require(restored.timeline_tracks.front().clips.front().color_graph == branch_graph &&
@@ -434,11 +434,53 @@ int main(int argc, char** argv) {
                         std::any_of(restored.timeline_tracks.front().clips.front().effects.begin(),
                             restored.timeline_tracks.front().clips.front().effects.end(),
                             [&](const auto& effect) { return effect == grade; }),
-                    "CSP v37 must preserve the correction graph, named snapshots and effect values.");
+                    "CSP v38 must preserve the correction graph, named snapshots and effect values.");
             std::ifstream grade_file(grade_path, std::ios::binary);
             const std::string grade_text{
                 std::istreambuf_iterator<char>(grade_file),
                 std::istreambuf_iterator<char>()};
+            auto version37 = QJsonDocument::fromJson(
+                QByteArray(grade_text.data(), static_cast<qsizetype>(grade_text.size()))).object();
+            version37.insert("version", 37);
+            const auto version37_path = directory / "grade-version-v37.csp";
+            writeText(version37_path, QJsonDocument(version37).toJson().toStdString());
+            const auto migrated_v37 = project::load(version37_path);
+            require(migrated_v37.timeline_tracks.front().clips.front().color_graph == branch_graph &&
+                        migrated_v37.timeline_tracks.front().clips.front().color_grade_versions ==
+                            graded_clip.color_grade_versions,
+                    "CSP v37 projects without Curves nodes must retain their graph and grade snapshots.");
+
+            auto curves_graph = branch_graph;
+            const auto curves_anchor = color::effectNodesInOrder(curves_graph).back();
+            require(color::insertCurvesAfter(curves_graph, curves_anchor),
+                    "Could not add a Color Curves node to the v38 persistence fixture.");
+            const auto curves_node = std::find_if(curves_graph.nodes.begin(), curves_graph.nodes.end(),
+                [](const color::Node& node) { return node.type == color::NodeType::Curves; });
+            require(curves_node != curves_graph.nodes.end(), "The Curves persistence node is missing.");
+            const auto curves_id = curves_node->id;
+            const creative_suite::effects::CurvesPointList curve_points{
+                {0, 0}, {96, 145}, {255, 255}};
+            auto wrapped_qualifier = creative_suite::effects::TonalQualifier{};
+            wrapped_qualifier.enabled = true;
+            wrapped_qualifier.hue_min = 340;
+            wrapped_qualifier.hue_max = 20;
+            require(color::setCurvePoints(curves_graph, curves_id,
+                        color::CurveKind::HueVsSaturation, curve_points) &&
+                    color::setCurvesQualifier(curves_graph, curves_id, wrapped_qualifier),
+                    "Could not prepare curve and qualifier values for persistence.");
+            auto curves_project = graded;
+            curves_project.timeline_tracks.front().clips.front().color_graph = curves_graph;
+            curves_project.timeline_tracks.front().clips.front().effects =
+                color::effectInstancesInOrder(curves_graph);
+            curves_project.timeline_tracks.front().clips.front().color_grade_versions = {
+                {"curves-version-1", "Curves Version", curves_graph}};
+            const auto curves_path = directory / "color-curves-v38.csp";
+            project::save(curves_path, curves_project);
+            const auto restored_curves = project::load(curves_path);
+            require(restored_curves.timeline_tracks.front().clips.front().color_graph == curves_graph &&
+                    restored_curves.timeline_tracks.front().clips.front().color_grade_versions ==
+                        curves_project.timeline_tracks.front().clips.front().color_grade_versions,
+                    "CSP v38 must round-trip curve families, qualifier ranges and grade snapshots.");
             auto pre_log_grade = QJsonDocument::fromJson(
                 QByteArray(grade_text.data(), static_cast<qsizetype>(grade_text.size()))).object();
             pre_log_grade.insert("version", 35);
@@ -612,7 +654,7 @@ int main(int argc, char** argv) {
         require(saved_json.find("\"track_id\": 1") != std::string::npos &&
                     saved_json.find("\"clip_id\": 1") != std::string::npos,
                 "Stable track and clip identifiers were not written to the project.");
-        require(saved_json.find("\"version\": 37") != std::string::npos &&
+        require(saved_json.find("\"version\": 38") != std::string::npos &&
                     saved_json.find("\"render_start_time_us\": 1234567") != std::string::npos &&
                     saved_json.find("\"frame_rate\"") != std::string::npos &&
                     saved_json.find("\"numerator\": 30000") != std::string::npos &&
@@ -637,7 +679,7 @@ int main(int argc, char** argv) {
                     saved_json.find("image_editor_variant") != std::string::npos &&
                     saved_json.find("motion_link") != std::string::npos &&
                     saved_json.find("render-é final.mp4") != std::string::npos,
-                "Timeline timing, Fusion animation, and linked publication time were not written to the version 37 project.");
+                    "Timeline timing, Fusion animation, and linked publication time were not written to the current project format.");
 
         auto legacy_v24_json = QJsonDocument::fromJson(QByteArray::fromStdString(saved_json)).object();
         legacy_v24_json.insert("version", 24);
@@ -1457,10 +1499,10 @@ int main(int argc, char** argv) {
 
         writeText(
             project_path,
-            R"({"format":"creative-suite.main-editor","version":38,"media":[],"timeline":{"clips":[]}})");
+            R"({"format":"creative-suite.main-editor","version":39,"media":[],"timeline":{"clips":[]}})");
         try {
             static_cast<void>(project::load(project_path));
-            throw std::runtime_error("CSP v37 was accepted by the v36 reader.");
+            throw std::runtime_error("CSP v39 was accepted by the v38 reader.");
         } catch (const project::ProjectError& error) {
             require(error.code() == project::ProjectErrorCode::UnsupportedVersion,
                     "Unsupported version returned the wrong error category.");

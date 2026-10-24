@@ -82,6 +82,23 @@ std::uint8_t toByteFromUnit(double value) noexcept {
 }
 
 bool validColorAdjustment(const ColorAdjustmentParameters& parameters) noexcept {
+    if (parameters.video_curves) {
+        return validVideoCurves(*parameters.video_curves) &&
+            parameters.brightness == 0.0 && parameters.contrast_percent == 100.0 &&
+            parameters.saturation_percent == 100.0 &&
+            parameters.red_gain_percent == 100.0 && parameters.green_gain_percent == 100.0 &&
+            parameters.blue_gain_percent == 100.0 && parameters.lift_red == 0.0 &&
+            parameters.lift_green == 0.0 && parameters.lift_blue == 0.0 &&
+            parameters.gamma_red == 100.0 && parameters.gamma_green == 100.0 &&
+            parameters.gamma_blue == 100.0 && parameters.offset_red == 0.0 &&
+            parameters.offset_green == 0.0 && parameters.offset_blue == 0.0 &&
+            parameters.pivot_percent == 50.0 && parameters.temperature == 0.0 &&
+            parameters.tint == 0.0 && parameters.log_shadows_red == 0.0 &&
+            parameters.log_shadows_green == 0.0 && parameters.log_shadows_blue == 0.0 &&
+            parameters.log_midtones_red == 0.0 && parameters.log_midtones_green == 0.0 &&
+            parameters.log_midtones_blue == 0.0 && parameters.log_highlights_red == 0.0 &&
+            parameters.log_highlights_green == 0.0 && parameters.log_highlights_blue == 0.0;
+    }
     return std::isfinite(parameters.brightness) &&
         parameters.brightness >= -100.0 && parameters.brightness <= 100.0 &&
         std::isfinite(parameters.contrast_percent) &&
@@ -163,6 +180,12 @@ const Definition* findDefinition(std::string_view id) noexcept {
 }
 
 EffectInstance makeDefaultInstance(std::string_view id) {
+    if (id == "video.curves") {
+        EffectInstance result;
+        result.id = "video.curves";
+        result.video_curves.emplace();
+        return result;
+    }
     const auto* definition = findDefinition(id);
     if (definition == nullptr) return {};
     EffectInstance result;
@@ -175,6 +198,10 @@ EffectInstance makeDefaultInstance(std::string_view id) {
 }
 
 bool isValid(const EffectInstance& effect) noexcept {
+    if (effect.id == "video.curves")
+        return effect.parameters.empty() && effect.video_curves &&
+            validVideoCurves(*effect.video_curves);
+    if (effect.video_curves) return false;
     const auto* definition = findDefinition(effect.id);
     if (definition == nullptr || effect.parameters.size() != definition->parameters.size()) {
         return false;
@@ -226,6 +253,12 @@ std::optional<std::vector<ColorAdjustmentParameters>> colorAdjustmentPasses(
     for (const auto& effect : effects) {
         if (!effect.enabled) continue;
         ColorAdjustmentParameters pass;
+        if (effect.id == "video.curves") {
+            if (identityVideoCurves(*effect.video_curves)) continue;
+            pass.video_curves = effect.video_curves;
+            result.push_back(std::move(pass));
+            continue;
+        }
         const auto amount = parameterValue(effect, "amount");
         if (effect.id == "video.brightness") pass.brightness = amount;
         else if (effect.id == "video.contrast") pass.contrast_percent = amount;
@@ -248,6 +281,20 @@ bool applyStack(
         if (!effect.enabled) continue;
         const auto amount = parameterValue(effect, "amount");
         const auto id = std::string_view(effect.id);
+        if (id == "video.curves") {
+            if (identityVideoCurves(*effect.video_curves)) continue;
+            const auto tables = videoCurvesLuts(*effect.video_curves);
+            for (int y = 0; y < frame.height; ++y) {
+                auto* pixel = frame.rgba_pixels.data() +
+                    static_cast<std::size_t>(y) * static_cast<std::size_t>(frame.stride);
+                for (int x = 0; x < frame.width; ++x, pixel += 4) {
+                    const auto result = evaluateVideoCurves(*effect.video_curves, tables,
+                        {pixel[0] / 255.0, pixel[1] / 255.0, pixel[2] / 255.0});
+                    pixel[0] = result[0]; pixel[1] = result[1]; pixel[2] = result[2];
+                }
+            }
+            continue;
+        }
         const auto primary_grade = id == "video.primary_grade"
             ? primaryGradeParameters(effect) : ColorAdjustmentParameters{};
         for (int y = 0; y < frame.height; ++y) {
@@ -296,6 +343,22 @@ ProcessingResult applyColorAdjustment(
     const std::function<bool()>& should_cancel) {
     if (!validFrame(frame) || !validColorAdjustment(parameters))
         return ProcessingResult::InvalidInput;
+    if (parameters.video_curves) {
+        if (identityVideoCurves(*parameters.video_curves)) return ProcessingResult::Completed;
+        const auto tables = videoCurvesLuts(*parameters.video_curves);
+        for (int y = 0; y < frame.height; ++y) {
+            if (should_cancel && should_cancel()) return ProcessingResult::Cancelled;
+            auto* row = frame.rgba_pixels.data() +
+                static_cast<std::size_t>(y) * static_cast<std::size_t>(frame.stride);
+            for (int x = 0; x < frame.width; ++x) {
+                auto* pixel = row + static_cast<std::size_t>(x) * 4U;
+                const auto result = evaluateVideoCurves(*parameters.video_curves, tables,
+                    {pixel[0] / 255.0, pixel[1] / 255.0, pixel[2] / 255.0});
+                pixel[0] = result[0]; pixel[1] = result[1]; pixel[2] = result[2];
+            }
+        }
+        return ProcessingResult::Completed;
+    }
     if (parameters.brightness == 0.0 && parameters.contrast_percent == 100.0 &&
         parameters.saturation_percent == 100.0 &&
         parameters.red_gain_percent == 100.0 &&

@@ -71,6 +71,14 @@ int main(int argc, char* argv[]) {
     }
     if (QCoreApplication::translate("ColorWorkspace", "RGB Parade") !=
             QStringLiteral("Parada RGB") ||
+        QCoreApplication::translate("QObject", "Curves") !=
+            QStringLiteral("Curvas") ||
+        QCoreApplication::translate("ColorWorkspace", "Hue vs Saturation") !=
+            QStringLiteral("Matiz vs Saturação") ||
+        QCoreApplication::translate("ColorWorkspace", "Enable tonal qualifier") !=
+            QStringLiteral("Ativar qualificador tonal") ||
+        QCoreApplication::translate("ColorWorkspace", "Matte preview") !=
+            QStringLiteral("Prévia da máscara") ||
         QCoreApplication::translate("ColorWorkspace", "Grade Versions") !=
             QStringLiteral("Versões de correção") ||
         QCoreApplication::translate("ColorWorkspace", "Copy Grade") !=

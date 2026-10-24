@@ -1247,6 +1247,7 @@ OpenGlTextureCompositionResult VulkanFrameCompositor::processImage(const OpenGlI
         params.rotation={std::cos(angle),std::sin(angle),t.scale,t.opacity};
         std::vector<std::array<float,4>> adjustment_values;
         const auto append_color = [&adjustment_values](const effects::ColorAdjustmentParameters& color) {
+            const auto first = adjustment_values.size();
             const auto affine = effects::colorAdjustmentAffine(color);
             adjustment_values.push_back({float(affine[0]), float(affine[1]), float(affine[2]), float(affine[3])});
             adjustment_values.push_back({float(color.lift_red / 100.0), float(color.lift_green / 100.0),
@@ -1264,9 +1265,28 @@ OpenGlTextureCompositionResult VulkanFrameCompositor::processImage(const OpenGlI
             adjustment_values.push_back({float(color.log_highlights_red / 100.0),
                 float(color.log_highlights_green / 100.0),
                 float(color.log_highlights_blue / 100.0), 0.0F});
+            if (color.video_curves) {
+                const auto tables = effects::videoCurvesLuts(*color.video_curves);
+                for (const auto& table : tables) {
+                    for (int x = 0; x < 256; x += 4) {
+                        adjustment_values.push_back({table[x] / 255.0F,
+                            table[x + 1] / 255.0F, table[x + 2] / 255.0F,
+                            table[x + 3] / 255.0F});
+                    }
+                }
+                const auto& q = color.video_curves->qualifier;
+                adjustment_values.push_back({float(q.hue_min), float(q.hue_max),
+                    float(q.saturation_min), float(q.saturation_max)});
+                adjustment_values.push_back({float(q.luminance_min), float(q.luminance_max),
+                    float(q.hue_softness * 3.6), float(q.saturation_softness)});
+                adjustment_values.push_back({float(q.luminance_softness), q.enabled ? 1.0F : 0.0F,
+                    1.0F, 0.0F});
+            } else {
+                adjustment_values.resize(first + 586);
+            }
         };
         if(operation.kind==OpenGlImageOperationKind::Adjustment){
-            adjustment_values.reserve(7 * operation.colors.size());
+            adjustment_values.reserve(586 * operation.colors.size());
             for(const auto& color:operation.colors){
                 append_color(color);
             }

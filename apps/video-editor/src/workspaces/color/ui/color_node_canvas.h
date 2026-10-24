@@ -10,6 +10,7 @@
 
 class QGraphicsPathItem;
 class QGraphicsScene;
+class QContextMenuEvent;
 
 namespace ui {
 
@@ -27,6 +28,7 @@ protected:
     void mouseMoveEvent(QMouseEvent* event) override;
     void mouseReleaseEvent(QMouseEvent* event) override;
     void wheelEvent(QWheelEvent* event) override;
+    void contextMenuEvent(QContextMenuEvent* event) override;
 
 private:
     struct PortHit {

@@ -187,6 +187,40 @@ int main() {
                     color::findNode(graph, branch)->x == 555.0,
                 "Node layout movement must update the persisted graph model.");
 
+        auto curves_graph = color::makePassthroughGraph();
+        require(color::insertCurvesAfter(curves_graph, 1) && color::validate(curves_graph),
+                "A Curves node must be insertable into a serial correction path.");
+        const auto curves_node = std::find_if(curves_graph.nodes.begin(), curves_graph.nodes.end(),
+            [](const auto& node) { return node.type == color::NodeType::Curves; });
+        require(curves_node != curves_graph.nodes.end() &&
+                    color::linearEffectStack(curves_graph)->size() == 1 &&
+                    color::linearEffectStack(curves_graph)->front().id == "video.curves",
+                "Curves must project to the shared serial effect pipeline.");
+        const auto curves_id = curves_node->id;
+        auto points = creative_suite::effects::CurvesPointList{{0, 0}, {128, 200}, {255, 255}};
+        require(color::setCurvePoints(curves_graph, curves_id, color::CurveKind::Master, points),
+                "Curves control points must update through the Color graph model.");
+        auto qualifier = curves_graph.nodes.back().curves->parameters.qualifier;
+        qualifier.enabled = true;
+        qualifier.hue_min = 350;
+        qualifier.hue_max = 12;
+        qualifier.saturation_min = 20;
+        require(color::setCurvesQualifier(curves_graph, curves_id, qualifier) &&
+                    color::validate(curves_graph),
+                "The Curves node must retain a wrapped hue and tonal qualifier.");
+        const auto curves_frame = color::evaluate(curves_graph, sampleFrame());
+        require(curves_frame && curves_frame->rgba_pixels.size() == 4 &&
+                    curves_frame->rgba_pixels[3] == 255,
+                "Color graph Curves evaluation must preserve alpha.");
+        auto disabled_curves = curves_graph;
+        require(color::setCurvesEnabled(disabled_curves, curves_id, false) &&
+                    color::evaluate(disabled_curves, sampleFrame())->rgba_pixels ==
+                        sampleFrame().rgba_pixels,
+                "A disabled Curves node must pass through its input.");
+        require(color::removeEffect(curves_graph, curves_id) && color::validate(curves_graph) &&
+                    color::linearEffectStack(curves_graph)->empty(),
+                "Removing a Curves node must reconnect the serial graph.");
+
         const media::VideoFrame no_frame{};
         require(!color::evaluate(graph, no_frame),
                 "The evaluator must reject a missing source frame.");

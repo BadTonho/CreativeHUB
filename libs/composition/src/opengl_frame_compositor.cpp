@@ -95,6 +95,7 @@ void main() {
 constexpr char fragment_shader[] = R"GLSL(
 uniform sampler2D source_image;
 uniform sampler2D backdrop_image;
+uniform sampler2D curve_lookup;
 uniform int blend_mode;
 uniform bool source_bottom_left;
 uniform float canvas_height;
@@ -112,10 +113,77 @@ layout(std140) uniform SourceLookupX { ivec4 lookup_x[1024]; };
 layout(std140) uniform SourceLookupY { ivec4 lookup_y[1024]; };
 layout(std140) uniform ColorAdjustments { vec4 color_adjustments[1024]; };
 layout(std140) uniform LogAdjustments { vec4 log_adjustments[768]; };
+layout(std140) uniform CurveQualifiers { vec4 curve_qualifiers[768]; };
 out vec4 color;
+float curveValue(int index, int curve, float input_value) {
+    int x = int(floor(clamp(input_value, 0.0, 1.0) * 255.0 + 0.50001));
+    return floor(texelFetch(curve_lookup, ivec2(x, index * 9 + curve), 0).r * 255.0 + 0.5) / 255.0;
+}
+float curveOffset(int index, int curve, float input_value) {
+    return (curveValue(index, curve, input_value) * 255.0 - 128.0) / 127.0;
+}
+float rangeWeight(float value, float minimum, float maximum, float softness) {
+    float lo = softness <= 0.0 ? float(value >= minimum) : smoothstep(minimum - softness, minimum + softness, value);
+    float hi = softness <= 0.0 ? float(value <= maximum) : 1.0 - smoothstep(maximum - softness, maximum + softness, value);
+    return min(lo, hi);
+}
+void toHsv(vec3 rgb, out float h, out float s, out float v) {
+    PRECISE float mx = max(max(rgb.r, rgb.g), rgb.b), mn = min(min(rgb.r, rgb.g), rgb.b), d = mx - mn;
+    PRECISE float hue_value = 0.0, saturation_value = mx <= 0.0 ? 0.0 : d / mx;
+    if (d > 0.0) {
+        if (mx == rgb.r) hue_value = 60.0 * mod((rgb.g - rgb.b) / d, 6.0);
+        else if (mx == rgb.g) hue_value = 60.0 * ((rgb.b - rgb.r) / d + 2.0);
+        else hue_value = 60.0 * ((rgb.r - rgb.g) / d + 4.0);
+        if (hue_value < 0.0) hue_value += 360.0;
+    }
+    h = hue_value; s = saturation_value; v = mx;
+}
+vec3 fromHsv(float h, float s, float v) {
+    PRECISE float hue = mod(h, 360.0); if (hue < 0.0) hue += 360.0;
+    PRECISE float saturation = clamp(s, 0.0, 1.0), value = clamp(v, 0.0, 1.0);
+    PRECISE float c = value * saturation, x = c * (1.0 - abs(mod(hue / 60.0, 2.0) - 1.0)), m = value - c;
+    PRECISE vec3 result;
+    if (hue < 60.0) result = vec3(c + m, x + m, m);
+    else if (hue < 120.0) result = vec3(x + m, c + m, m);
+    else if (hue < 180.0) result = vec3(m, c + m, x + m);
+    else if (hue < 240.0) result = vec3(m, x + m, c + m);
+    else if (hue < 300.0) result = vec3(x + m, m, c + m);
+    else result = vec3(c + m, m, x + m);
+    return result;
+}
+float curveMatte(vec3 rgb, int index) {
+    vec4 r = curve_qualifiers[index * 3], sft = curve_qualifiers[index * 3 + 1], f = curve_qualifiers[index * 3 + 2];
+    if (f.y < 0.5) return 1.0;
+    PRECISE float h, s, v; toHsv(rgb, h, s, v);
+    float end = r.y, sample_h = h; bool all_h = r.x == 0.0 && r.y == 360.0;
+    if (!all_h && end < r.x) { end += 360.0; if (sample_h < r.x) sample_h += 360.0; }
+    float wh = all_h ? 1.0 : rangeWeight(sample_h, r.x, end, sft.z);
+    float ws = rangeWeight(s * 100.0, r.z, r.w, sft.w);
+    float y = clamp(rgb.r * 0.2126 + rgb.g * 0.7152 + rgb.b * 0.0722, 0.0, 1.0) * 100.0;
+    return wh * ws * rangeWeight(y, sft.x, sft.y, f.x);
+}
+vec3 applyVideoCurves(vec3 src, int index) {
+    PRECISE float y = clamp(src.r * 0.2126 + src.g * 0.7152 + src.b * 0.0722, 0.0, 1.0);
+    float mapped = curveValue(index, 0, y);
+    vec3 rgb = y > 1e-12 ? clamp(src * mapped / y, 0.0, 1.0) : vec3(mapped);
+    rgb = vec3(curveValue(index, 1, rgb.r), curveValue(index, 2, rgb.g), curveValue(index, 3, rgb.b));
+    PRECISE float old_y = clamp(rgb.r * 0.2126 + rgb.g * 0.7152 + rgb.b * 0.0722, 0.0, 1.0);
+    PRECISE float h, s, v; toHsv(rgb, h, s, v);
+    PRECISE float hue_offset = curveOffset(index, 4, h / 360.0);
+    h += hue_offset * (360.0 / 255.0);
+    s += curveOffset(index, 5, h / 360.0); PRECISE float dy = curveOffset(index, 6, h / 360.0);
+    s += curveOffset(index, 7, old_y); s += curveOffset(index, 8, s);
+    PRECISE vec3 adj = fromHsv(h, s, v); PRECISE float target_y = clamp(old_y + dy, 0.0, 1.0);
+    if (dy != 0.0) {
+        PRECISE float adj_y = adj.r * 0.2126 + adj.g * 0.7152 + adj.b * 0.0722;
+        if (adj_y > 1e-12) adj = clamp(adj * target_y / adj_y, 0.0, 1.0);
+    }
+    return floor(clamp(mix(src, adj, curveMatte(src, index)), 0.0, 1.0) * 255.0 + 0.5) / 255.0;
+}
 int mappedX(int i) { return lookup_x[i / 4][i % 4]; }
 int mappedY(int i) { return lookup_y[i / 4][i % 4]; }
 vec3 adjustColor(vec3 rgb, int index) {
+    if (curve_qualifiers[index * 3 + 2].z > 0.5) return applyVideoCurves(rgb, index);
     int base = index * 4;
     vec4 affine = color_adjustments[base];
     vec4 lift_saturation = color_adjustments[base + 1];
@@ -165,8 +233,10 @@ void main() {
     }
     if (source_bottom_left) pixel.y = size.y - 1 - pixel.y;
     vec4 source = texelFetch(source_image, pixel, 0);
-    for (int i = 0; i < color_adjustment_count; ++i)
+    for (int i = 0; i < color_adjustment_count; ++i) {
         source.rgb = adjustColor(source.rgb, i);
+        source.rgb = floor(clamp(source.rgb, 0.0, 1.0) * 255.0 + 0.5) / 255.0;
+    }
     color = vec4(source.rgb, source.a * opacity);
     if(blend_mode!=0) {
         vec4 b=texelFetch(backdrop_image,ivec2(gl_FragCoord.xy),0);
@@ -182,10 +252,11 @@ void main() {
     }
 }
 )GLSL";
-constexpr char image_fragment_shader[] = R"GLSL(
+constexpr char image_fragment_shader_prefix[] = R"GLSL(
 uniform sampler2D background_image;
 uniform sampler2D foreground_image;
 uniform sampler2D mask_image;
+uniform sampler2D curve_lookup;
 uniform bool mask_bottom_left;
 uniform bool has_track_matte;
 uniform int track_matte_mode;
@@ -215,8 +286,84 @@ uniform int glow_mode;
 uniform int color_count;
 layout(std140) uniform ColorAdjustments { vec4 color_adjustments[1024]; };
 layout(std140) uniform LogAdjustments { vec4 log_adjustments[768]; };
+layout(std140) uniform CurveQualifiers { vec4 curve_qualifiers[768]; };
 out vec4 color;
+float curveValue(int index, int curve, float input_value) {
+    int x = int(floor(clamp(input_value, 0.0, 1.0) * 255.0 + 0.50001));
+    return floor(texelFetch(curve_lookup, ivec2(x, index * 9 + curve), 0).r * 255.0 + 0.5) / 255.0;
+}
+float curveOffset(int index, int curve, float input_value) {
+    return (curveValue(index, curve, input_value) * 255.0 - 128.0) / 127.0;
+}
+float rangeWeight(float value, float minimum, float maximum, float softness) {
+    float lower = softness <= 0.0 ? float(value >= minimum) : smoothstep(minimum - softness, minimum + softness, value);
+    float upper = softness <= 0.0 ? float(value <= maximum) : 1.0 - smoothstep(maximum - softness, maximum + softness, value);
+    return min(lower, upper);
+}
+vec3 toHsv(vec3 rgb, out float hue, out float saturation, out float value) {
+    float maximum = max(max(rgb.r, rgb.g), rgb.b);
+    float minimum = min(min(rgb.r, rgb.g), rgb.b);
+    float delta = maximum - minimum;
+    hue = 0.0; saturation = maximum <= 0.0 ? 0.0 : delta / maximum; value = maximum;
+    if (delta > 0.0) {
+        if (maximum == rgb.r) hue = 60.0 * mod((rgb.g - rgb.b) / delta, 6.0);
+        else if (maximum == rgb.g) hue = 60.0 * ((rgb.b - rgb.r) / delta + 2.0);
+        else hue = 60.0 * ((rgb.r - rgb.g) / delta + 4.0);
+        if (hue < 0.0) hue += 360.0;
+    }
+    return vec3(hue, saturation, value);
+}
+vec3 fromHsv(float hue, float saturation, float value) {
+    hue = mod(hue, 360.0); if (hue < 0.0) hue += 360.0;
+    saturation = clamp(saturation, 0.0, 1.0); value = clamp(value, 0.0, 1.0);
+    float chroma = value * saturation;
+    float x = chroma * (1.0 - abs(mod(hue / 60.0, 2.0) - 1.0));
+    float m = value - chroma;
+    if (hue < 60.0) return vec3(chroma + m, x + m, m);
+    if (hue < 120.0) return vec3(x + m, chroma + m, m);
+    if (hue < 180.0) return vec3(m, chroma + m, x + m);
+    if (hue < 240.0) return vec3(m, x + m, chroma + m);
+    if (hue < 300.0) return vec3(x + m, m, chroma + m);
+    return vec3(chroma + m, m, x + m);
+}
+float curveMatte(vec3 rgb, int index) {
+    vec4 ranges = curve_qualifiers[index * 3];
+    vec4 softness = curve_qualifiers[index * 3 + 1];
+    vec4 flags = curve_qualifiers[index * 3 + 2];
+    if (flags.y < 0.5) return 1.0;
+    float hue, saturation, value;
+    toHsv(rgb, hue, saturation, value);
+    float end = ranges.y, sample_hue = hue;
+    bool all_hues = ranges.x == 0.0 && ranges.y == 360.0;
+    if (!all_hues && end < ranges.x) { end += 360.0; if (sample_hue < ranges.x) sample_hue += 360.0; }
+    float wh = all_hues ? 1.0 : rangeWeight(sample_hue, ranges.x, end, softness.z);
+    float ws = rangeWeight(saturation * 100.0, ranges.z, ranges.w, softness.w);
+    float y = clamp(rgb.r * 0.2126 + rgb.g * 0.7152 + rgb.b * 0.0722, 0.0, 1.0) * 100.0;
+    return wh * ws * rangeWeight(y, softness.x, softness.y, flags.x);
+}
+vec3 applyVideoCurves(vec3 source_rgb, int index) {
+    float y = clamp(source_rgb.r * 0.2126 + source_rgb.g * 0.7152 + source_rgb.b * 0.0722, 0.0, 1.0);
+    float mapped = curveValue(index, 0, y);
+    vec3 rgb = y > 1e-12 ? clamp(source_rgb * (mapped / y), 0.0, 1.0) : vec3(mapped);
+    rgb = vec3(curveValue(index, 1, rgb.r), curveValue(index, 2, rgb.g), curveValue(index, 3, rgb.b));
+    float old_y = clamp(rgb.r * 0.2126 + rgb.g * 0.7152 + rgb.b * 0.0722, 0.0, 1.0);
+    float hue, saturation, value; toHsv(rgb, hue, saturation, value);
+    float hue_offset = curveOffset(index, 4, hue / 360.0);
+    hue += hue_offset * (360.0 / 255.0);
+    saturation += curveOffset(index, 5, hue / 360.0);
+    float luminance_delta = curveOffset(index, 6, hue / 360.0);
+    saturation += curveOffset(index, 7, old_y);
+    saturation += curveOffset(index, 8, saturation);
+    vec3 adjusted = fromHsv(hue, saturation, value);
+    float target_y = clamp(old_y + luminance_delta, 0.0, 1.0);
+    if (luminance_delta != 0.0) {
+        float adjusted_y = adjusted.r * 0.2126 + adjusted.g * 0.7152 + adjusted.b * 0.0722;
+        if (adjusted_y > 1e-12) adjusted = clamp(adjusted * (target_y / adjusted_y), 0.0, 1.0);
+    }
+    return floor(clamp(mix(source_rgb, adjusted, curveMatte(source_rgb, index)), 0.0, 1.0) * 255.0 + 0.5) / 255.0;
+}
 vec3 adjustColor(vec3 rgb, int index) {
+    if (curve_qualifiers[index * 3 + 2].z > 0.5) return applyVideoCurves(rgb, index);
     int base = index * 4;
     vec4 affine = color_adjustments[base];
     vec4 lift_saturation = color_adjustments[base + 1];
@@ -243,6 +390,8 @@ vec3 adjustColor(vec3 rgb, int index) {
         log_adjustments[log_base + 2].rgb * highlights;
     return floor(clamp(rgb, 0.0, 1.0) * 255.0 + 0.5) / 255.0;
 }
+)GLSL";
+constexpr char image_fragment_shader[] = R"GLSL(
 vec4 background(ivec2 pixel) {
     if (background_bottom_left) pixel.y = textureSize(background_image, 0).y - 1 - pixel.y;
     return texelFetch(background_image, pixel, 0);
@@ -286,8 +435,10 @@ void main() {
             all(lessThan(source_pixel, textureSize(foreground_image, 0)))) {
             adjusted = ivec4(floor(foreground(source_pixel) * 255.0 + 0.5));
             vec3 rgb = vec3(adjusted.rgb) / 255.0;
-            for (int i = 0; i < color_count; ++i)
+            for (int i = 0; i < color_count; ++i) {
                 rgb = adjustColor(rgb, i);
+                rgb = floor(clamp(rgb, 0.0, 1.0) * 255.0 + 0.5) / 255.0;
+            }
             adjusted.rgb = ivec3(floor(rgb * 255.0 + 0.5));
         }
         ivec4 original = ivec4(floor(background(pixel) * 255.0 + 0.5));
@@ -356,8 +507,10 @@ void main() {
     }
     color = background(pixel);
     if (operation == 2) {
-        for (int i = 0; i < color_count; ++i)
+        for (int i = 0; i < color_count; ++i) {
             color.rgb = adjustColor(color.rgb, i);
+            color.rgb = floor(clamp(color.rgb, 0.0, 1.0) * 255.0 + 0.5) / 255.0;
+        }
         return;
     }
     if (operation == 7) {
@@ -603,7 +756,9 @@ struct OpenGlFrameCompositor::Impl {
     GLuint texture = 0;
     GLuint effect_source_fbo = 0;
     GLuint vao = 0;
-    GLuint lookup_buffers[4]{};
+    GLuint curve_lut_texture = 0;
+    std::uint64_t curve_lut_bytes = 0;
+    GLuint lookup_buffers[5]{};
     std::uint64_t peak_known_bytes = 0;
     std::vector<GLint> source_lookup;
     int source_width = 0;
@@ -674,10 +829,12 @@ struct OpenGlFrameCompositor::Impl {
             effect_program.reset();
             image_program.reset();
             gl->glDeleteTextures(3, image_textures);
+            if (curve_lut_texture) gl->glDeleteTextures(1, &curve_lut_texture);
+            curve_lut_bytes = 0;
             if (effect_source_fbo) gl->glDeleteFramebuffers(1, &effect_source_fbo);
             if (texture) gl->glDeleteTextures(1, &texture);
             if (vao) gl->glDeleteVertexArrays(1, &vao);
-            gl->glDeleteBuffers(4, lookup_buffers);
+            gl->glDeleteBuffers(5, lookup_buffers);
             for (auto& slot : readback_slots) {
                 if (slot.fence) gl->glDeleteSync(slot.fence);
                 if (slot.buffer) gl->glDeleteBuffers(1, &slot.buffer);
@@ -720,9 +877,9 @@ struct OpenGlFrameCompositor::Impl {
         if (!gl || !gl->initializeOpenGLFunctions())
             return result(OpenGlCompositionStatus::Failed, "load-functions",
                 "Cannot initialize OpenGL 3.2 Core functions.");
+        const bool precise_shader_math = context->hasExtension("GL_ARB_gpu_shader5");
         precise_geometry = precision == OpenGlPrecisionPolicy::Automatic &&
-            context->hasExtension("GL_ARB_gpu_shader_fp64") &&
-            context->hasExtension("GL_ARB_gpu_shader5");
+            context->hasExtension("GL_ARB_gpu_shader_fp64") && precise_shader_math;
         if (precise_geometry) {
             uniform2dv = reinterpret_cast<Uniform2dv>(context->getProcAddress("glUniform2dv"));
             if (!uniform2dv) return result(OpenGlCompositionStatus::Failed, "load-functions",
@@ -732,7 +889,10 @@ struct OpenGlFrameCompositor::Impl {
             (precise_geometry ?
                 "#extension GL_ARB_gpu_shader_fp64 : require\n#extension GL_ARB_gpu_shader5 : require\n"
                 "#define GEOMETRY_VEC2 dvec2\n#define PRECISE precise\n" :
-                "#define GEOMETRY_VEC2 vec2\n#define PRECISE\n") + fragment_shader;
+                (precise_shader_math ?
+                    "#extension GL_ARB_gpu_shader5 : require\n"
+                    "#define GEOMETRY_VEC2 vec2\n#define PRECISE precise\n" :
+                    "#define GEOMETRY_VEC2 vec2\n#define PRECISE\n")) + fragment_shader;
         program = std::make_unique<QOpenGLShaderProgram>();
         if (!program->addShaderFromSourceCode(QOpenGLShader::Vertex, vertex_shader) ||
             !program->addShaderFromSourceCode(QOpenGLShader::Fragment, fragment) ||
@@ -746,7 +906,8 @@ struct OpenGlFrameCompositor::Impl {
             return result(OpenGlCompositionStatus::Failed, "compile-effect-shaders",
                 effect_program->log().toStdString());
         image_program = std::make_unique<QOpenGLShaderProgram>();
-        const auto image_fragment = fragment.left(fragment.indexOf("uniform sampler2D")) + image_fragment_shader;
+        const auto image_fragment = fragment.left(fragment.indexOf("uniform sampler2D")) +
+            image_fragment_shader_prefix + image_fragment_shader;
         if (!image_program->addShaderFromSourceCode(QOpenGLShader::Vertex, vertex_shader) ||
             !image_program->addShaderFromSourceCode(QOpenGLShader::Fragment, image_fragment) || !image_program->link())
             return result(OpenGlCompositionStatus::Failed, "compile-image-shaders", image_program->log().toStdString());
@@ -758,10 +919,10 @@ struct OpenGlFrameCompositor::Impl {
         GLint block_size = 0, fragment_blocks = 0;
         gl->glGetIntegerv(GL_MAX_UNIFORM_BLOCK_SIZE, &block_size);
         gl->glGetIntegerv(GL_MAX_FRAGMENT_UNIFORM_BLOCKS, &fragment_blocks);
-        if (block_size < 16384 || fragment_blocks < 4)
+        if (block_size < 16384 || fragment_blocks < 5)
             return result(OpenGlCompositionStatus::Failed, "check-uniform-limits",
-                "Two geometry blocks and color plus Log adjustment blocks are required.");
-        gl->glGenBuffers(4, lookup_buffers);
+                "Geometry, color, Log, and Curve qualifier shader blocks are required.");
+        gl->glGenBuffers(5, lookup_buffers);
         for (unsigned axis = 0; axis < 2; ++axis) {
             gl->glBindBuffer(GL_UNIFORM_BUFFER, lookup_buffers[axis]);
             gl->glBufferData(GL_UNIFORM_BUFFER, 16384, nullptr, GL_DYNAMIC_DRAW);
@@ -786,6 +947,33 @@ struct OpenGlFrameCompositor::Impl {
         gl->glBindBuffer(GL_UNIFORM_BUFFER, lookup_buffers[3]);
         gl->glBufferData(GL_UNIFORM_BUFFER, 768 * 4 * sizeof(float), nullptr,
             GL_DYNAMIC_DRAW);
+        gl->glBindBuffer(GL_UNIFORM_BUFFER, lookup_buffers[4]);
+        gl->glBufferData(GL_UNIFORM_BUFFER, 768 * 4 * sizeof(float), nullptr,
+            GL_DYNAMIC_DRAW);
+        const auto qualifiers_block = gl->glGetUniformBlockIndex(
+            program->programId(), "CurveQualifiers");
+        if (qualifiers_block == GL_INVALID_INDEX)
+            return result(OpenGlCompositionStatus::Failed, "compile-shaders",
+                "The Color Curves qualifier shader block is unavailable.");
+        gl->glUniformBlockBinding(program->programId(), qualifiers_block, 4);
+        gl->glBindBufferBase(GL_UNIFORM_BUFFER, 4, lookup_buffers[4]);
+        gl->glGenTextures(1, &curve_lut_texture);
+        gl->glBindTexture(GL_TEXTURE_2D, curve_lut_texture);
+        gl->glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        gl->glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+        gl->glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        gl->glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        const std::array<std::uint8_t, 256 * 9> identity_lut{};
+        gl->glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, 256, 9, 0, GL_RED,
+            GL_UNSIGNED_BYTE, identity_lut.data());
+        curve_lut_bytes = identity_lut.size();
+        gl->glBindTexture(GL_TEXTURE_2D, 0);
+        const auto image_qualifiers_block = gl->glGetUniformBlockIndex(
+            image_program->programId(), "CurveQualifiers");
+        if (image_qualifiers_block == GL_INVALID_INDEX)
+            return result(OpenGlCompositionStatus::Failed, "compile-image-shaders",
+                "The Color Curves qualifier shader block is unavailable.");
+        gl->glUniformBlockBinding(image_program->programId(), image_qualifiers_block, 4);
         rememberResourcePeak();
         return result(OpenGlCompositionStatus::Complete);
     }
@@ -1335,6 +1523,7 @@ void main() {
         image_program->setUniformValue("background_image", 0);
         image_program->setUniformValue("foreground_image", 1);
         image_program->setUniformValue("mask_image", 2);
+        image_program->setUniformValue("curve_lookup", 3);
         image_program->setUniformValue("mask_bottom_left", bool(operation.mask.texture));
         image_program->setUniformValue("has_track_matte",bool(operation.mask.rgba || operation.mask.texture || operation.mask.native));
         image_program->setUniformValue("track_matte_mode",static_cast<int>(operation.track_matte_mode));
@@ -1390,6 +1579,8 @@ void main() {
         }
         std::array<std::array<float, 4>, 1024> colors{};
         std::array<std::array<float, 4>, 768> log_colors{};
+        std::array<std::array<float, 4>, 768> curve_qualifiers{};
+        std::vector<std::uint8_t> curve_luts(256 * 9 * operation.colors.size(), 0);
         for (std::size_t i = 0; i < operation.colors.size(); ++i) {
             const auto& value = operation.colors[i];
             if (!effects::isValidColorAdjustment(value))
@@ -1411,6 +1602,21 @@ void main() {
             log_colors[3 * i + 2] = {float(value.log_highlights_red / 100.0),
                 float(value.log_highlights_green / 100.0),
                 float(value.log_highlights_blue / 100.0), 0.0F};
+            if (value.video_curves) {
+                const auto tables = effects::videoCurvesLuts(*value.video_curves);
+                for (std::size_t curve = 0; curve < tables.size(); ++curve)
+                    std::copy(tables[curve].begin(), tables[curve].end(),
+                        curve_luts.begin() + static_cast<std::ptrdiff_t>(
+                            (i * 9 + curve) * 256));
+                const auto& q = value.video_curves->qualifier;
+                curve_qualifiers[3 * i] = {float(q.hue_min), float(q.hue_max),
+                    float(q.saturation_min), float(q.saturation_max)};
+                curve_qualifiers[3 * i + 1] = {float(q.luminance_min),
+                    float(q.luminance_max), float(q.hue_softness * 3.6),
+                    float(q.saturation_softness)};
+                curve_qualifiers[3 * i + 2] = {float(q.luminance_softness),
+                    q.enabled ? 1.0F : 0.0F, 1.0F, 0.0F};
+            }
         }
         gl->glBindBuffer(GL_UNIFORM_BUFFER, lookup_buffers[2]);
         gl->glBufferSubData(GL_UNIFORM_BUFFER, 0, 4 * operation.colors.size() * sizeof(colors[0]), colors.data());
@@ -1422,6 +1628,21 @@ void main() {
         gl->glBindBufferBase(GL_UNIFORM_BUFFER, 3, lookup_buffers[3]);
         gl->glUniformBlockBinding(image_program->programId(),
             gl->glGetUniformBlockIndex(image_program->programId(), "LogAdjustments"), 3);
+        gl->glBindBuffer(GL_UNIFORM_BUFFER, lookup_buffers[4]);
+        gl->glBufferSubData(GL_UNIFORM_BUFFER, 0,
+            3 * operation.colors.size() * sizeof(curve_qualifiers[0]),
+            curve_qualifiers.data());
+        gl->glBindBufferBase(GL_UNIFORM_BUFFER, 4, lookup_buffers[4]);
+        gl->glUniformBlockBinding(image_program->programId(),
+            gl->glGetUniformBlockIndex(image_program->programId(), "CurveQualifiers"), 4);
+        gl->glActiveTexture(GL_TEXTURE3);
+        gl->glBindTexture(GL_TEXTURE_2D, curve_lut_texture);
+        gl->glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+        gl->glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, 256,
+            static_cast<GLsizei>(9 * operation.colors.size()), 0, GL_RED,
+            GL_UNSIGNED_BYTE, curve_luts.data());
+        curve_lut_bytes = curve_luts.size();
+        gl->glActiveTexture(GL_TEXTURE0);
         measured.color_adjustment_count += operation.colors.size();
         gl->glDrawArrays(GL_TRIANGLES, 0, 3);
         measured.draw_submission_nanoseconds += elapsed(started);
@@ -1498,7 +1719,8 @@ void main() {
         bytes += raster_reserved;
         const std::uint64_t geometry = (lookup_buffers[0] ? 16384ULL : 0) +
             (lookup_buffers[1] ? 16384ULL : 0) + (lookup_buffers[2] ? 16384ULL : 0) +
-            (lookup_buffers[3] ? 12288ULL : 0);
+            (lookup_buffers[3] ? 12288ULL : 0) + (lookup_buffers[4] ? 12288ULL : 0) +
+            curve_lut_bytes;
         return {bytes, geometry, std::max(peak_known_bytes, bytes + geometry)};
     }
     void rememberResourcePeak() noexcept { peak_known_bytes = resources().peak_known_bytes; }
@@ -2371,8 +2593,10 @@ OpenGlCompositionResult OpenGlFrameCompositor::render(int width, int height,
         gl->glBindBufferBase(GL_UNIFORM_BUFFER, 1, p.lookup_buffers[1]);
         gl->glBindBufferBase(GL_UNIFORM_BUFFER, 2, p.lookup_buffers[2]);
         gl->glBindBufferBase(GL_UNIFORM_BUFFER, 3, p.lookup_buffers[3]);
+        gl->glBindBufferBase(GL_UNIFORM_BUFFER, 4, p.lookup_buffers[4]);
         p.program->setUniformValue("source_image", 0);
         p.program->setUniformValue("backdrop_image",1);
+        p.program->setUniformValue("curve_lookup", 2);
         p.program->setUniformValue("canvas_height", static_cast<float>(height));
         measured.draw_submission_nanoseconds += elapsed(setup_started);
         for (const auto& layer : layers) {
@@ -2416,6 +2640,9 @@ OpenGlCompositionResult OpenGlFrameCompositor::render(int width, int height,
             if (!layer.gpu_color_adjustments.empty()) {
                 std::array<std::array<float, 4>, 1024> packed_adjustments{};
                 std::array<std::array<float, 4>, 768> packed_log_adjustments{};
+                std::array<std::array<float, 4>, 768> packed_curve_qualifiers{};
+                std::vector<std::uint8_t> packed_curve_luts(
+                    256 * 9 * layer.gpu_color_adjustments.size(), 0);
                 for (std::size_t i = 0; i < layer.gpu_color_adjustments.size(); ++i) {
                     const auto& adjustment = layer.gpu_color_adjustments[i];
                     const auto affine = effects::colorAdjustmentAffine(adjustment);
@@ -2441,6 +2668,21 @@ OpenGlCompositionResult OpenGlFrameCompositor::render(int width, int height,
                         float(adjustment.log_highlights_red / 100.0),
                         float(adjustment.log_highlights_green / 100.0),
                         float(adjustment.log_highlights_blue / 100.0), 0.0F};
+                    if (adjustment.video_curves) {
+                        const auto tables = effects::videoCurvesLuts(*adjustment.video_curves);
+                        for (std::size_t curve = 0; curve < tables.size(); ++curve)
+                            std::copy(tables[curve].begin(), tables[curve].end(),
+                                packed_curve_luts.begin() + static_cast<std::ptrdiff_t>(
+                                    (i * 9 + curve) * 256));
+                        const auto& q = adjustment.video_curves->qualifier;
+                        packed_curve_qualifiers[3 * i] = {float(q.hue_min), float(q.hue_max),
+                            float(q.saturation_min), float(q.saturation_max)};
+                        packed_curve_qualifiers[3 * i + 1] = {float(q.luminance_min),
+                            float(q.luminance_max), float(q.hue_softness * 3.6),
+                            float(q.saturation_softness)};
+                        packed_curve_qualifiers[3 * i + 2] = {
+                            float(q.luminance_softness), q.enabled ? 1.0F : 0.0F, 1.0F, 0.0F};
+                    }
                 }
                 const auto byte_count = static_cast<GLsizeiptr>(
                     4 * layer.gpu_color_adjustments.size() * sizeof(packed_adjustments[0]));
@@ -2452,6 +2694,19 @@ OpenGlCompositionResult OpenGlFrameCompositor::render(int width, int height,
                     3 * layer.gpu_color_adjustments.size() * sizeof(packed_log_adjustments[0]));
                 gl->glBufferSubData(GL_UNIFORM_BUFFER, 0, log_byte_count,
                     packed_log_adjustments.data());
+                gl->glBindBuffer(GL_UNIFORM_BUFFER, p.lookup_buffers[4]);
+                gl->glBufferSubData(GL_UNIFORM_BUFFER, 0,
+                    static_cast<GLsizeiptr>(3 * layer.gpu_color_adjustments.size() * sizeof(packed_curve_qualifiers[0])),
+                    packed_curve_qualifiers.data());
+                gl->glBindBufferBase(GL_UNIFORM_BUFFER, 4, p.lookup_buffers[4]);
+                gl->glActiveTexture(GL_TEXTURE2);
+                gl->glBindTexture(GL_TEXTURE_2D, p.curve_lut_texture);
+                gl->glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+                gl->glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, 256,
+                    static_cast<GLsizei>(9 * layer.gpu_color_adjustments.size()), 0,
+                    GL_RED, GL_UNSIGNED_BYTE, packed_curve_luts.data());
+                p.curve_lut_bytes = packed_curve_luts.size();
+                gl->glActiveTexture(GL_TEXTURE0);
                 measured.uploaded_bytes += static_cast<std::uint64_t>(byte_count);
                 measured.color_adjustment_count += layer.gpu_color_adjustments.size();
             }

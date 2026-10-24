@@ -321,7 +321,16 @@ void trackMatteParity(OpenGlFrameCompositor& gpu) {
         const auto cpu_alpha=FrameCompositor::compose(16,12,{{&matte},reference},nullptr,CompositionOutputAlpha::Preserve);
         const auto gpu_alpha=gpu.compose(16,12,{{&matte},layer}, {}, nullptr,CompositionOutputAlpha::Preserve);
         require(cpu_alpha&&gpu_alpha.frame,"Transparent matted composition delivery");
-        for(std::size_t x=0;x<cpu_alpha->rgba_pixels.size();++x)require(std::abs(int(cpu_alpha->rgba_pixels[x])-int(gpu_alpha.frame->rgba_pixels[x]))<=(x%4==3?0:2),"Transparent matted CPU/OpenGL alpha parity");
+        for (std::size_t x = 0; x < cpu_alpha->rgba_pixels.size(); ++x) {
+            const int cpu_value = cpu_alpha->rgba_pixels[x];
+            const int gpu_value = gpu_alpha.frame->rgba_pixels[x];
+            if (std::abs(cpu_value - gpu_value) > (x % 4 == 3 ? 0 : 2))
+                throw std::runtime_error("Transparent matted CPU/OpenGL alpha parity at " +
+                    std::to_string(x / 4) + " channel " + std::to_string(x % 4) +
+                    " CPU=" + std::to_string(cpu_value) + " GPU=" +
+                    std::to_string(gpu_value) + " mode=" + std::to_string(mode) +
+                    " empty=" + std::to_string(empty));
+        }
         {
             auto direct=gpu.composeTexture(16,12,{{&matte},layer});
             require(direct.frame!=nullptr,"Matted texture delivery");
@@ -406,8 +415,29 @@ void colorAdjustmentParity(OpenGlFrameCompositor& gpu) {
     expanded.blue_gain_percent = 137.0;
     expanded.log_shadows_red = 38.0; expanded.log_shadows_green = -12.0;
     expanded.log_midtones_blue = 24.0; expanded.log_highlights_red = -31.0;
+    effects::VideoCurvesParameters curves;
+    curves.rgb.points = {{0, 0}, {92, 124}, {255, 255}};
+    curves.rgb.channels[0] = {{0, 0}, {166, 233}, {255, 255}};
+    curves.targeted[0] = {{0, 129}, {255, 127}};
+    curves.targeted[1] = {{0, 128}, {255, 129}};
+    curves.targeted[2] = {{0, 128}, {255, 127}};
+    curves.targeted[3] = {{0, 129}, {255, 128}};
+    curves.targeted[4] = {{0, 128}, {255, 129}};
+    curves.qualifier.enabled = true;
+    curves.qualifier.hue_min = 338.0;
+    curves.qualifier.hue_max = 24.0;
+    curves.qualifier.hue_softness = 8.0;
+    curves.qualifier.saturation_min = 12.0;
+    curves.qualifier.saturation_max = 95.0;
+    curves.qualifier.saturation_softness = 5.0;
+    curves.qualifier.luminance_min = 8.0;
+    curves.qualifier.luminance_max = 94.0;
+    curves.qualifier.luminance_softness = 4.0;
     auto all_controls = adjustments;
     all_controls.push_back(expanded);
+    effects::ColorAdjustmentParameters curve_adjustment;
+    curve_adjustment.video_curves = curves;
+    all_controls.push_back(curve_adjustment);
     for (const auto& parameters : all_controls) {
         require(effects::applyColorAdjustment(adjusted, parameters) ==
                     effects::ProcessingResult::Completed,
@@ -420,11 +450,45 @@ void colorAdjustmentParity(OpenGlFrameCompositor& gpu) {
     const auto output = gpu.compose(source.width, source.height, {layer}, {}, &timings);
     require(cpu && output.status == OpenGlCompositionStatus::Complete && output.frame,
         "GPU color adjustment composition failed: " + output.operation + ": " + output.cause);
+    for (std::size_t prefix = 0; prefix < all_controls.size(); ++prefix) {
+        auto expected_prefix = source;
+        std::vector<effects::ColorAdjustmentParameters> controls(
+            all_controls.begin(), all_controls.begin() + static_cast<std::ptrdiff_t>(prefix + 1));
+        for (const auto& parameters : controls)
+            require(effects::applyColorAdjustment(expected_prefix, parameters) ==
+                        effects::ProcessingResult::Completed,
+                    "CPU color adjustment prefix failed");
+        const auto composed_prefix = FrameCompositor::compose(
+            source.width, source.height, {{&expected_prefix}});
+        CompositionLayer prefix_layer{&source};
+        prefix_layer.gpu_color_adjustments = controls;
+        const auto actual_prefix = gpu.compose(source.width, source.height, {prefix_layer});
+        require(composed_prefix && bool(actual_prefix.frame),
+            "GPU color adjustment prefix failed: " + actual_prefix.cause);
+        for (std::size_t i = 0; i < composed_prefix->rgba_pixels.size(); ++i) {
+            const int delta = std::abs(int(composed_prefix->rgba_pixels[i]) -
+                int(actual_prefix.frame->rgba_pixels[i]));
+            if (delta > (i % 4 == 3 ? 0 : 1))
+                throw std::runtime_error("GPU color adjustment prefix " +
+                    std::to_string(prefix) + " mismatch at pixel " +
+                    std::to_string((i / 4) % static_cast<std::size_t>(source.width)) + "," +
+                    std::to_string((i / 4) / static_cast<std::size_t>(source.width)) +
+                    " channel " + std::to_string(i % 4) + " CPU=" +
+                    std::to_string(composed_prefix->rgba_pixels[i]) + " GPU=" +
+                    std::to_string(actual_prefix.frame->rgba_pixels[i]));
+        }
+    }
     for (std::size_t i = 0; i < cpu->rgba_pixels.size(); ++i) {
         const auto delta = std::abs(static_cast<int>(cpu->rgba_pixels[i]) -
                                     static_cast<int>(output.frame->rgba_pixels[i]));
-        require(delta <= (i % 4 == 3 ? 0 : 1),
-            "GPU color adjustment exceeded the one-channel RGB tolerance or changed alpha");
+        if (delta > (i % 4 == 3 ? 0 : 1)) {
+            throw std::runtime_error("GPU color adjustment mismatch at pixel " +
+                std::to_string((i / 4) % static_cast<std::size_t>(source.width)) + "," +
+                std::to_string((i / 4) / static_cast<std::size_t>(source.width)) +
+                " channel " + std::to_string(i % 4) + " CPU=" +
+                std::to_string(cpu->rgba_pixels[i]) + " GPU=" +
+                std::to_string(output.frame->rgba_pixels[i]));
+        }
     }
     require(timings.color_adjustment_count == all_controls.size() &&
                 timings.color_adjustment_submission_nanoseconds > 0,
@@ -438,10 +502,101 @@ void colorAdjustmentParity(OpenGlFrameCompositor& gpu) {
 }
 
 void primaryGradeStackParity(OpenGlFrameCompositor& gpu) {
-    auto source = fixture(93, 57, true);
+    auto source = fixture(93, 57, false);
     auto brightness = effects::makeDefaultInstance("video.brightness");
     auto contrast = effects::makeDefaultInstance("video.contrast");
     auto grade = effects::makeDefaultInstance("video.primary_grade");
+    auto curve_node = effects::makeDefaultInstance("video.curves");
+    curve_node.video_curves->rgb.points = {{0, 0}, {92, 124}, {255, 255}};
+    curve_node.video_curves->targeted[0] = {{0, 129}, {255, 127}};
+    curve_node.video_curves->targeted[1] = {{0, 128}, {255, 129}};
+    curve_node.video_curves->targeted[2] = {{0, 128}, {255, 127}};
+    curve_node.video_curves->targeted[3] = {{0, 129}, {255, 128}};
+    curve_node.video_curves->targeted[4] = {{0, 128}, {255, 129}};
+    curve_node.video_curves->qualifier.enabled = true;
+    curve_node.video_curves->qualifier.hue_min = 338.0;
+    curve_node.video_curves->qualifier.hue_max = 24.0;
+    curve_node.video_curves->qualifier.hue_softness = 8.0;
+    curve_node.video_curves->qualifier.saturation_min = 12.0;
+    curve_node.video_curves->qualifier.saturation_max = 95.0;
+    curve_node.video_curves->qualifier.saturation_softness = 5.0;
+    curve_node.video_curves->qualifier.luminance_min = 8.0;
+    curve_node.video_curves->qualifier.luminance_max = 94.0;
+    curve_node.video_curves->qualifier.luminance_softness = 4.0;
+    const auto neutral_targeted = effects::VideoCurvesParameters{}.targeted;
+    const std::array<effects::CurvesPointList, 5> targeted_stress{{
+        {{0, 143}, {255, 114}}, {{0, 128}, {255, 203}},
+        {{0, 128}, {255, 76}}, {{0, 151}, {255, 128}},
+        {{0, 128}, {255, 171}}}};
+    for (std::size_t targeted_index = 0; targeted_index < curve_node.video_curves->targeted.size();
+         ++targeted_index) {
+        auto isolated_curves_node = curve_node;
+        isolated_curves_node.video_curves->rgb = effects::CurvesParameters{};
+        isolated_curves_node.video_curves->targeted = neutral_targeted;
+        isolated_curves_node.video_curves->targeted[targeted_index] =
+            targeted_stress[targeted_index];
+        isolated_curves_node.video_curves->qualifier.enabled = false;
+        const std::array<effects::EffectInstance, 1> isolated_stack{isolated_curves_node};
+        CompositionLayer isolated_layer{&source};
+        isolated_layer.effect_stack = isolated_stack;
+        const auto isolated_expected = FrameCompositor::compose(93, 57, {isolated_layer});
+        const auto isolated_actual = gpu.compose(93, 57, {isolated_layer});
+        require(isolated_expected && isolated_actual.frame,
+            "An isolated targeted Curves GPU pass failed.");
+        for (std::size_t i = 0; i < isolated_expected->rgba_pixels.size(); ++i) {
+            const int cpu_value = isolated_expected->rgba_pixels[i];
+            const int gpu_value = isolated_actual.frame->rgba_pixels[i];
+            if (std::abs(cpu_value - gpu_value) > (i % 4 == 3 ? 0 : 1))
+            {
+                const auto pixel = i / 4;
+                const auto* original = source.rgba_pixels.data() +
+                    (pixel / static_cast<std::size_t>(source.width)) * source.stride +
+                    (pixel % static_cast<std::size_t>(source.width)) * 4;
+                throw std::runtime_error("Targeted Curves family " +
+                    std::to_string(targeted_index) + " mismatch at pixel " +
+                    std::to_string((i / 4) % static_cast<std::size_t>(source.width)) + "," +
+                    std::to_string((i / 4) / static_cast<std::size_t>(source.width)) +
+                    " channel " + std::to_string(i % 4) + " CPU=" +
+                    std::to_string(cpu_value) + " GPU=" + std::to_string(gpu_value) +
+                    " source=" + std::to_string(original[0]) + "," +
+                    std::to_string(original[1]) + "," + std::to_string(original[2]));
+            }
+        }
+    }
+    curve_node.video_curves->qualifier.enabled = true;
+    const std::array<effects::EffectInstance, 1> curves_only_stack{curve_node};
+    const auto curves_only_passes = effects::colorAdjustmentPasses(curves_only_stack);
+    require(curves_only_passes && curves_only_passes->size() == 1 &&
+                curves_only_passes->front().video_curves,
+            "The Curves graph node must create one typed GPU color pass.");
+    CompositionLayer direct_curves_only{&source};
+    direct_curves_only.gpu_color_adjustments = *curves_only_passes;
+    CompositionLayer curves_only{&source};
+    curves_only.effect_stack = curves_only_stack;
+    const auto curves_only_expected = FrameCompositor::compose(93, 57, {curves_only});
+    const auto direct_curves_result = gpu.compose(93, 57, {direct_curves_only});
+    require(curves_only_expected && direct_curves_result.frame,
+            "Direct Curves-only GPU pass failed.");
+    for (std::size_t i = 0; i < curves_only_expected->rgba_pixels.size(); ++i) {
+        const int cpu_value = curves_only_expected->rgba_pixels[i];
+        const int gpu_value = direct_curves_result.frame->rgba_pixels[i];
+        const int delta = std::abs(cpu_value - gpu_value);
+        if (delta > (i % 4 == 3 ? 0 : 1)) {
+            const auto pixel = i / 4;
+            const auto* source_pixel = source.rgba_pixels.data() +
+                (pixel / static_cast<std::size_t>(source.width)) * source.stride +
+                (pixel % static_cast<std::size_t>(source.width)) * 4;
+            throw std::runtime_error("Direct Curves-only mismatch at pixel " +
+                std::to_string(pixel % source.width) + "," +
+                std::to_string(pixel / source.width) + " channel " +
+                std::to_string(i % 4) + " CPU=" + std::to_string(cpu_value) +
+                " GPU=" + std::to_string(gpu_value) + " source=" +
+                std::to_string(source_pixel[0]) + "," +
+                std::to_string(source_pixel[1]) + "," +
+                std::to_string(source_pixel[2]));
+        }
+    }
+    compare(gpu, 93, 57, {curves_only}, "Curves-only clip node parity");
     require(effects::setParameterValue(brightness, "amount", 19) &&
         effects::setParameterValue(contrast, "amount", 132) &&
         effects::setParameterValue(grade, "red_gain", 145) &&
@@ -450,7 +605,7 @@ void primaryGradeStackParity(OpenGlFrameCompositor& gpu) {
         effects::setParameterValue(grade, "log_shadows_red", 26) &&
         effects::setParameterValue(grade, "log_midtones_green", -17) &&
         effects::setParameterValue(grade, "log_highlights_blue", 31), "grade stack parameters");
-    std::vector<effects::EffectInstance> stack{brightness, grade, contrast};
+    std::vector<effects::EffectInstance> stack{brightness, grade, curve_node, contrast};
     CompositionLayer clip{&source}; clip.effect_stack = stack;
     compare(gpu, 93, 57, {clip}, "ordered Primary Grade clip effects and alpha");
     auto reference = source;
@@ -467,6 +622,21 @@ void primaryGradeStackParity(OpenGlFrameCompositor& gpu) {
     next_adjustment.log_shadows_blue = -34;
     next_adjustment.log_midtones_red = 19;
     next_adjustment.log_highlights_green = 28;
+    effects::VideoCurvesParameters curves;
+    curves.rgb.points = {{0, 0}, {104, 137}, {255, 255}};
+    curves.targeted[0] = {{0, 137}, {255, 119}};
+    curves.targeted[1] = {{0, 128}, {255, 211}};
+    curves.targeted[2] = {{0, 128}, {255, 82}};
+    curves.targeted[3] = {{0, 145}, {255, 128}};
+    curves.targeted[4] = {{0, 128}, {255, 165}};
+    curves.qualifier.enabled = true;
+    curves.qualifier.hue_min = 340.0;
+    curves.qualifier.hue_max = 20.0;
+    curves.qualifier.hue_softness = 6.0;
+    curves.qualifier.saturation_min = 8.0;
+    curves.qualifier.saturation_max = 98.0;
+    curves.qualifier.luminance_min = 5.0;
+    curves.qualifier.luminance_max = 97.0;
     auto opaque = fixture(93, 57, false);
     auto adjusted = opaque;
     require(effects::applyColorAdjustment(adjusted, adjustment) ==
@@ -477,7 +647,11 @@ void primaryGradeStackParity(OpenGlFrameCompositor& gpu) {
     operation.kind = OpenGlImageOperationKind::Adjustment;
     operation.background.rgba = &opaque;
     operation.foreground.rgba = &opaque;
-    operation.colors = {adjustment, next_adjustment};
+    effects::ColorAdjustmentParameters curve_adjustment;
+    curve_adjustment.video_curves = curves;
+    require(effects::applyColorAdjustment(adjusted, curve_adjustment) ==
+        effects::ProcessingResult::Completed, "CPU Curves adjustment reference failed");
+    operation.colors = {adjustment, next_adjustment, curve_adjustment};
     const auto gpu_adjustment = gpu.processImage(operation);
     require(gpu_adjustment.frame && gpu_adjustment.status == OpenGlCompositionStatus::Complete,
         "OpenGL Primary Grade adjustment operation failed: " + gpu_adjustment.cause);
@@ -907,8 +1081,8 @@ int main(int argc, char** argv) {
                         return;
                     }
                     parity(gpu);
-                    colorAdjustmentParity(gpu);
                     primaryGradeStackParity(gpu);
+                    colorAdjustmentParity(gpu);
                     trackMatteParity(gpu);
                     glowParity(gpu);
                     {

@@ -1,15 +1,14 @@
 # Hub Regression Testing
 
-## Video Editor CSP v37 Color grades, versions and Gallery backup
+## Video Editor CSP v38 Curves, grades, versions and Gallery backup
 
-`hub-backup-format-test` saves a real CSP v37 document with a branched Color
-graph, expanded Primary Grade and Log values, a named graph version, and a Gallery PNG sidecar, then uses the Video Editor reader to compare
+`hub-backup-format-test` saves a real CSP v38 document with a branched Color
+graph, Curves points and qualifier, expanded Primary Grade and Log values, a named graph version, and a Gallery PNG sidecar, then uses the Video Editor reader to compare
 the vault snapshot and relocated restore with the producer document. Its version
-loop covers the older supported CSP schemas. `hub-backup-manager-test` rejects
-future v38. The Windows Release `hub-backup-format-test` passed on 2026-10-23.
-`hub-backup-manager-test` did not complete because the environment denied
-writing its backup settings fixture under %LOCALAPPDATA%/qttest; native Hub
-restore/reopen acceptance remains pending.
+loop covers the older supported CSP schemas. The Windows Release
+`hub-backup-format-test`, `hub-backup-manager-test`, and `hub-backups-page-test`
+passed on 2026-10-24; the manager rejects future CSP v39. Native Hub
+restore/reopen UI acceptance remains pending.
 
 Current backup gates save Motion v18 and reject v19. Version-specific sections
 below retain the records and evidence from earlier deliveries.
@@ -19,16 +18,15 @@ below retain the records and evidence from earlier deliveries.
 `hub-backup-format-test` passed on Windows Release with v26 documents containing
 the RGB master and independent channel curves; the actual Image Editor reader
 reopened both the vault snapshot and relocated restore. In
-`hub-backup-manager-test`, the v27 rejection checks completed before a later
-settings fixture failed to write under `QStandardPaths::AppLocalDataLocation`,
-which resolves outside the workspace sandbox. Record the Hub manager gate as
-pending a run with writable application data; the format/restore gate passed.
+`hub-backup-manager-test`, v27 rejection and settings persistence coverage now
+passes with isolated test configuration on Windows Release (2026-10-24). Native
+Hub UI restoration acceptance remains pending.
 
 Gaussian Blur backup coverage uses a real CSP v31 producer/reader with
 fractional radius, disabled state, shared mask and external Input paths in
-`hub-backup-format-test`. `hub-backup-manager-test` rejects CSP34/Motion19.
+`hub-backup-format-test`. `hub-backup-manager-test` rejects CSP v39/Motion v19.
 
-Composition interchange persistence is covered at the backup boundary by `hub-backup-format-test` (CSP v31/Motion v18 Glow, Drop Shadow, Trim Paths and Bezier paths/keys, matte bindings, blend mode, Scale Y/link/affine binding, Anchor, hierarchy and presentation records, shared masks/stage associations and path rebasing) and `hub-backup-manager-test` (future v38/v19 rejection). See [interchange](../../COMPOSITION_INTERCHANGE.md) for producer/consumer and pending manual checks.
+Composition interchange persistence is covered at the backup boundary by `hub-backup-format-test` (CSP v31/Motion v18 Glow, Drop Shadow, Trim Paths and Bezier paths/keys, matte bindings, blend mode, Scale Y/link/affine binding, Anchor, hierarchy and presentation records, shared masks/stage associations and path rebasing) and `hub-backup-manager-test` (future CSP v39/Motion v19 rejection). See [interchange](../../COMPOSITION_INTERCHANGE.md) for producer/consumer and pending manual checks.
 
 ## Motion v13 blend-mode backup coverage
 

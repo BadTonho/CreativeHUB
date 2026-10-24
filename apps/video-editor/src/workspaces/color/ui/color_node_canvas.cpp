@@ -2,7 +2,9 @@
 
 #include <QGraphicsPathItem>
 #include <QGraphicsScene>
+#include <QContextMenuEvent>
 #include <QLineF>
+#include <QMenu>
 #include <QMouseEvent>
 #include <QPainter>
 #include <QScrollBar>
@@ -23,6 +25,7 @@ constexpr qreal port_radius = 5.0;
 QString nodeTitle(const color::Node& node) {
     switch (node.type) {
     case color::NodeType::Input: return QObject::tr("Input");
+    case color::NodeType::Curves: return QObject::tr("Curves");
     case color::NodeType::ParallelMixer: return QObject::tr("Parallel Mixer");
     case color::NodeType::Output: return QObject::tr("Output");
     case color::NodeType::Effect:
@@ -60,6 +63,7 @@ public:
         if (node_.type == color::NodeType::Input) fill = QColor(37, 68, 80);
         else if (node_.type == color::NodeType::Output) fill = QColor(51, 67, 48);
         else if (node_.type == color::NodeType::ParallelMixer) fill = QColor(69, 55, 82);
+        else if (node_.type == color::NodeType::Curves) fill = QColor(68, 65, 43);
         painter->setBrush(fill);
         painter->setPen(QPen(selected_ ? QColor(245, 130, 50) : QColor(100, 116, 139),
                              selected_ ? 2.0 : 1.0));
@@ -72,6 +76,11 @@ public:
                           Qt::AlignLeft | Qt::AlignVCenter, nodeTitle(node_));
         painter->setFont(QFont{});
         if (node_.type == color::NodeType::Effect && node_.effect && !node_.effect->enabled) {
+            painter->setPen(QColor(170, 180, 194));
+            painter->drawText(QRectF(13.0, 39.0, node_width - 26.0, 18.0),
+                              Qt::AlignLeft | Qt::AlignVCenter, QObject::tr("Off"));
+        } else if (node_.type == color::NodeType::Curves && node_.curves &&
+                   !node_.curves->enabled) {
             painter->setPen(QColor(170, 180, 194));
             painter->drawText(QRectF(13.0, 39.0, node_width - 26.0, 18.0),
                               Qt::AlignLeft | Qt::AlignVCenter, QObject::tr("Off"));
@@ -338,6 +347,69 @@ void ColorNodeCanvas::wheelEvent(QWheelEvent* event) {
     const auto current = transform().m11();
     if ((factor > 1.0 && current < 2.5) || (factor < 1.0 && current > 0.45))
         scale(factor, factor);
+    event->accept();
+}
+
+void ColorNodeCanvas::contextMenuEvent(QContextMenuEvent* event) {
+    const auto scene_position = mapToScene(event->pos());
+    GraphNodeItem* hit = nullptr;
+    for (auto* item : scene_->items(scene_position)) {
+        hit = dynamic_cast<GraphNodeItem*>(item);
+        if (hit) break;
+    }
+    if (hit) {
+        selected_node_ = hit->node().id;
+        refreshScene();
+        if (selection_changed_handler_) selection_changed_handler_(*selected_node_);
+    }
+    const auto* selected = selected_node_ ? color::findNode(graph_, *selected_node_) : nullptr;
+    if (!selected) return;
+
+    QMenu menu(this);
+    menu.setObjectName(QStringLiteral("colorNodeCanvasContextMenu"));
+    auto* add_curves = menu.addAction(tr("Add Curves"));
+    add_curves->setEnabled(selected->type != color::NodeType::Output);
+    QAction* toggle = nullptr;
+    QAction* remove = nullptr;
+    if (selected->type == color::NodeType::Curves && selected->curves) {
+        toggle = menu.addAction(selected->curves->enabled ? tr("Disable Curves")
+                                                         : tr("Enable Curves"));
+        remove = menu.addAction(tr("Remove Curves"));
+    }
+    const auto* chosen = menu.exec(event->globalPos());
+    if (chosen == add_curves) {
+        auto graph = graph_;
+        const auto anchor = selected->id;
+        if (color::insertCurvesAfter(graph, anchor)) {
+            const auto inserted = graph.nodes.back().id;
+            graph_ = std::move(graph);
+            selected_node_ = inserted;
+            refreshScene();
+            commitGraph();
+            if (selection_changed_handler_) selection_changed_handler_(inserted);
+        }
+    } else if (chosen == toggle) {
+        auto graph = graph_;
+        if (color::setCurvesEnabled(graph, selected->id, !selected->curves->enabled)) {
+            graph_ = std::move(graph);
+            refreshScene();
+            commitGraph();
+        }
+    } else if (chosen == remove) {
+        auto graph = graph_;
+        const auto removed_id = selected->id;
+        if (color::removeEffect(graph, removed_id)) {
+            selected_node_.reset();
+            const auto input = std::find_if(graph.nodes.begin(), graph.nodes.end(),
+                [](const color::Node& node) { return node.type == color::NodeType::Input; });
+            if (input != graph.nodes.end()) selected_node_ = input->id;
+            graph_ = std::move(graph);
+            refreshScene();
+            commitGraph();
+            if (selected_node_ && selection_changed_handler_)
+                selection_changed_handler_(*selected_node_);
+        }
+    }
     event->accept();
 }
 

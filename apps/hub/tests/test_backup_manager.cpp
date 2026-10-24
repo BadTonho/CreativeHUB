@@ -249,7 +249,7 @@ void testRejectedBackups(const QString& root) {
     QObject::connect(&manager, &BackupManager::backupCreated, [&notifications](const BackupRecord&) { ++notifications; });
     const std::vector<std::pair<QString, QByteArray>> invalid{
         {"corrupt.cimg", "not JSON"},
-        {"future.csp", R"({"format":"creative-suite.main-editor","version":38})"},
+        {"future.csp", R"({"format":"creative-suite.main-editor","version":39})"},
         {"future.motion", R"({"format":"creative-suite.motion-studio","version":19})"},
         {"future.csie", R"({"format":"creative-suite-image-document","version":29})"},
         {"fractional.cimg", R"({"format":"creative-suite-image-document","version":1.5})"},
@@ -305,20 +305,25 @@ void testRejectedBackups(const QString& root) {
 }
 
 void testBackupSettingsPersistence(const QString& root) {
-    const auto data_directory = QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation);
-    CS_TEST_CHECK(QDir().mkpath(data_directory));
-    const auto settings_path = QDir(data_directory).filePath(QStringLiteral("backup_settings.json"));
+    const auto settings_path = QDir(root).filePath(
+        QStringLiteral("settings/backup_settings.json"));
+    CS_TEST_CHECK(QDir().mkpath(QFileInfo(settings_path).absolutePath()));
     {
         QFile corrupt(settings_path);
-        CS_TEST_CHECK(corrupt.open(QIODevice::WriteOnly | QIODevice::Truncate));
+        if (!corrupt.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+            std::cerr << "Could not create isolated backup settings fixture at "
+                      << settings_path.toStdString() << ": "
+                      << corrupt.errorString().toStdString() << '\n';
+            CS_TEST_CHECK(false);
+        }
         CS_TEST_CHECK(corrupt.write("{") == 1);
     }
 
-    BackupManager manager;
+    BackupManager manager(QString{}, settings_path);
     CS_TEST_CHECK(manager.backupDirectory() == BackupManager::defaultBackupDirectory());
     const auto selected = QDir(root).filePath(QStringLiteral("settings-backup-folder"));
     manager.setBackupDirectory(selected);
-    BackupManager reloaded;
+    BackupManager reloaded(QString{}, settings_path);
     CS_TEST_CHECK(reloaded.backupDirectory() == selected);
     CS_TEST_CHECK(QFile::remove(settings_path));
 }

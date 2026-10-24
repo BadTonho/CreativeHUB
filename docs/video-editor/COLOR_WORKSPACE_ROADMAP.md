@@ -1,6 +1,6 @@
 # Color Workspace Roadmap
 
-Status: **The project-owned Color graph, Gallery capture and organization, Wheels/Bars/Log Primary Grade, four scopes, shared Edit controls, reusable grades, and per-clip grade versions are implemented. CSP v37 persists named graph snapshots. Graph action controls remain hidden. Native visual interaction and platform acceptance remain pending.**
+Status: **The project-owned Color graph, Curves and tonal qualifier, Gallery capture and organization, Wheels/Bars/Log Primary Grade, four scopes, shared Edit controls, reusable grades, and per-clip grade versions are implemented. CSP v38 persists curves, qualifiers, and named graph snapshots. General graph action controls remain hidden; Curves is created and managed from the canvas context menu. Native visual interaction and platform acceptance remain pending.**
 
 This document records the current implementation, the functional areas expected
 from a complete color workspace, and a staged order for developing them. The
@@ -10,23 +10,23 @@ implemented.
 ## Current implementation
 
 The Color workspace owns a directed acyclic graph for each supported visual
-clip. Its nodes are Input, effect, Parallel Mixer, and Output. Connections
+clip. Its nodes are Input, effect, Curves, Parallel Mixer, and Output. Connections
 determine processing; saved positions only arrange the canvas. Effects use the
 existing creative_suite::effects implementations. Parallel Mixer combines
 its inputs by normalized weighted RGBA average, with equal weights by default.
 
 The canvas currently supports node selection, movement, and connecting or
 reconnecting ports. The Add Effect, Add Branch, On/Off, Remove, and effect-type
-controls remain connected to their actions but are hidden from the interface;
-graph creation and removal therefore need visible controls before they are
-available as a normal Color workflow. The Edit Inspector can select the same
+controls remain connected to their actions but are hidden from the interface.
+The canvas context menu adds Curves after the selected node and provides its
+enable/disable and removal actions. The Edit Inspector can select the same
 effect nodes and change parameters or enabled state. Graph structure, layout,
 and parameter edits use the shared Timeline history. Fusion retains its
 existing implementation and behavior; its evaluated output feeds the Color
 graph.
 
 Preview and export follow the graph. A serial graph uses the existing GPU
-effect path when available. Graphs with branches use the CPU RGBA evaluator,
+effect path when available, including Curves LUTs and qualifier matte. Graphs with branches use the CPU RGBA evaluator,
 which calculates each required upstream node once and mixes the branch
 outputs. The evaluator also handles adjustment clips after lower-track
 composition.
@@ -59,6 +59,15 @@ channel. CPU frames are sampled directly; GPU frames use one bounded,
 asynchronous worker readback. Scope data comes from the composed frame rather
 than the Preview widget, so UI borders and letterboxing are excluded. The
 existing keyframe panel remains the only animation editor.
+
+The Curves node provides master and individual RGB curves plus Hue vs Hue, Hue
+vs Saturation, Hue vs Luminance, Luminance vs Saturation, and Saturation vs
+Saturation. Each curve supports 2–16 ordered points. Curves use normalized
+encoded RGB, Rec. 709 luminance, and HSV hue/saturation; hue changes wrap at
+360 degrees. An optional per-node qualifier combines hue, saturation, and
+luminance ranges with adjustable softness, including wrapped hue ranges. Its
+matte preview displays the latest composed frame. Power Windows and advanced
+matte refinement are later work.
 
 ## Functional capability inventory
 
@@ -180,7 +189,9 @@ The v35 Primary Grade schema stores per-channel Lift, Gamma, Gain and Offset,
 plus contrast, pivot, saturation, temperature and tint. v36 adds nine
 per-channel Log values, neutral in projects through v35. v37 stores each clip's
 named Color graph snapshots, including nodes, effects, state, connections,
-mixer weights and positions. Projects through v36 open with no grade versions.
+mixer weights and positions. CSP v38 adds Curves nodes with nine point lists
+and a tonal qualifier. Projects through v37 open without Curves nodes; prior
+graph and version data remains intact.
 A legacy six-parameter Primary Grade maps its brightness value to equal RGB
 Offsets and preserves its other values. Save As, autosave, recovery and Hub
 backup preserve versions in the project JSON; the Gallery sidecar is unchanged.
@@ -226,8 +237,9 @@ Regression code covers graph validation and cycles, connection changes,
 normalized mixing, CPU/OpenGL/Vulkan evaluation, Color canvas, Wheels/Bars
 synchronization, Log tonal response, Edit parameter and enabled-state editing,
 copy/apply between clips, saved-version actions and shared Undo/Redo, split and
-duplicate propagation, Preview and offline export, CSP v37 persistence and
-v1-v36 migration, autosave and recovery, all four scopes and GPU readback, and
+duplicate propagation, Curves editing and qualifier wrap/matte, Preview and
+offline export, CSP v38 persistence and v1-v37 migration, autosave and recovery,
+all four scopes and GPU readback, and
 Hub backup/restoration with Gallery PNG sidecars. Native visual and platform
 acceptance remain pending.
 

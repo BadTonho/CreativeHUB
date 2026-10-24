@@ -2,8 +2,10 @@
 
 Color correction runs after Fusion output and before Timeline composition.
 Each effect node uses the existing `creative_suite::effects` implementation.
-Serial graphs use the CPU/OpenGL/Vulkan ordered-effect path and preserve the
-existing Primary Grade alpha and rounding behavior. Branched graphs evaluate
+Curves nodes carry typed master/RGB and five targeted LUTs plus their qualifier;
+CPU, OpenGL, and Vulkan evaluate the same normalized RGB operation and preserve
+source alpha. Serial graphs use the CPU/OpenGL/Vulkan ordered-effect path and
+preserve the existing Primary Grade alpha and rounding behavior. Branched graphs evaluate
 their connected nodes once on RGBA frames and combine mixer inputs with a
 normalized weighted average; this currently uses the CPU evaluator. Color
 scopes offer RGB Waveform, RGB Parade, Vectorscope, and RGB Histogram. They

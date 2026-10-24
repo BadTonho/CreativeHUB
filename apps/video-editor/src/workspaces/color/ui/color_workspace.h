@@ -18,6 +18,7 @@ class QListWidget;
 class QComboBox;
 class QPushButton;
 class QTimer;
+class QCheckBox;
 
 namespace ui {
 
@@ -74,6 +75,7 @@ private:
     void scheduleWaveform();
     void renderScopeFrame(rendering::PreviewFramePayload identity,
         playback::VideoFramePtr frame, quint64 request_id);
+    void refreshMattePreview();
     void renameSelectedStill();
     void saveGradeVersion();
     void applySelectedGradeVersion();
@@ -98,8 +100,10 @@ private:
     QFormLayout* controls_layout_ = nullptr;
     QComboBox* primary_grade_mode_ = nullptr;
     QLabel* waveform_ = nullptr;
+    QLabel* matte_preview_ = nullptr;
     QComboBox* scope_mode_ = nullptr;
     QTimer* waveform_timer_ = nullptr;
+    QImage latest_scope_source_;
     timeline::ClipId selected_clip_ = 0;
     color::Graph graph_ = color::makePassthroughGraph();
     std::vector<timeline::ColorGradeVersion> selected_grade_versions_;

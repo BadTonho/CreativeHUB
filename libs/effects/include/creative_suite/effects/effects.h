@@ -1,6 +1,7 @@
 #pragma once
 
 #include <creative_suite/media/video_frame.h>
+#include <creative_suite/effects/color_curves.h>
 
 #include <functional>
 #include <array>
@@ -25,6 +26,7 @@ struct EffectInstance {
     std::string id;
     std::vector<ParameterValue> parameters;
     bool enabled = true;
+    std::optional<VideoCurvesParameters> video_curves;
 
     friend bool operator==(const EffectInstance&, const EffectInstance&) = default;
 };
@@ -76,6 +78,7 @@ struct ColorAdjustmentParameters {
     double log_highlights_red = 0.0;
     double log_highlights_green = 0.0;
     double log_highlights_blue = 0.0;
+    std::optional<VideoCurvesParameters> video_curves;
 };
 
 [[nodiscard]] bool isValidColorAdjustment(

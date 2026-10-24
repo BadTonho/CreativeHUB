@@ -153,9 +153,21 @@ BackupManager::BackupManager(const QString& customBackupDir, QObject* parent)
 {
 }
 
+BackupManager::BackupManager(const QString& customBackupDir,
+                             const QString& customSettingsFile,
+                             QObject* parent)
+    : QObject(parent)
+    , m_backupDirectory(customBackupDir.isEmpty() ? defaultBackupDirectory() : customBackupDir)
+    , m_settingsFilePath(customSettingsFile)
+{
+    loadSettings();
+}
+
 void BackupManager::loadSettings() {
     const QString dataDir = QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation);
-    const QString settingsFile = QDir(dataDir).filePath(QStringLiteral("backup_settings.json"));
+    const QString settingsFile = m_settingsFilePath.isEmpty()
+        ? QDir(dataDir).filePath(QStringLiteral("backup_settings.json"))
+        : m_settingsFilePath;
     if (!QFile::exists(settingsFile)) {
         return;
     }
@@ -185,8 +197,10 @@ void BackupManager::loadSettings() {
 
 void BackupManager::saveSettings() const {
     const QString dataDir = QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation);
-    QDir().mkpath(dataDir);
-    const QString settingsFile = QDir(dataDir).filePath(QStringLiteral("backup_settings.json"));
+    const QString settingsFile = m_settingsFilePath.isEmpty()
+        ? QDir(dataDir).filePath(QStringLiteral("backup_settings.json"))
+        : m_settingsFilePath;
+    QDir().mkpath(QFileInfo(settingsFile).absolutePath());
 
     QSaveFile file(settingsFile);
     QJsonObject obj;

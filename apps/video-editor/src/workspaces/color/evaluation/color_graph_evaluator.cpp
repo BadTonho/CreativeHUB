@@ -101,14 +101,20 @@ std::optional<media::VideoFrame> evaluate(
         if (!node) return std::nullopt;
         if (node->type == NodeType::Input) {
             values.emplace(id, input);
-        } else if (node->type == NodeType::Effect) {
+        } else if (node->type == NodeType::Effect || node->type == NodeType::Curves) {
             const auto* edge = incoming(graph, id, 0);
             const auto source = edge ? values.find(edge->from) : values.end();
-            if (source == values.end() || !node->effect) return std::nullopt;
+            if (source == values.end()) return std::nullopt;
             auto frame = source->second;
-            if (!creative_suite::effects::applyStack(
+            auto effect = node->effect;
+            if (node->type == NodeType::Curves) {
+                effect = creative_suite::effects::makeDefaultInstance("video.curves");
+                effect->enabled = node->curves->enabled;
+                effect->video_curves = node->curves->parameters;
+            }
+            if (!effect || !creative_suite::effects::applyStack(
                     frame, std::span<const creative_suite::effects::EffectInstance>(
-                        &*node->effect, 1))) return std::nullopt;
+                        &*effect, 1))) return std::nullopt;
             values.emplace(id, std::move(frame));
         } else if (node->type == NodeType::ParallelMixer) {
             std::vector<std::pair<const media::VideoFrame*, double>> branches;

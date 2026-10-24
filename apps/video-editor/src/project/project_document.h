@@ -15,7 +15,8 @@
 
 namespace project {
 
-inline constexpr int current_format_version = 37;
+inline constexpr int current_format_version = 38;
+inline constexpr int color_curves_format_version = 38;
 inline constexpr int color_grade_versions_format_version = 37;
 inline constexpr int color_graph_format_version = 34;
 inline constexpr int color_gallery_format_version = 33;

@@ -143,6 +143,73 @@ creative_suite::effects::EffectInstance migratePrimaryGrade(
     return migrated;
 }
 
+creative_suite::effects::CurvesPointList parseCurvesPointList(
+    const QJsonValue& value, const std::filesystem::path& project_path) {
+    if (!value.isArray())
+        throwJson(ProjectErrorCode::InvalidValue, project_path,
+                  "A Color curve must be stored as an array of points.");
+    creative_suite::effects::CurvesPointList points;
+    for (const auto& item : value.toArray()) {
+        if (!item.isArray() || item.toArray().size() != 2 ||
+            !item.toArray()[0].isDouble() || !item.toArray()[1].isDouble() ||
+            item.toArray()[0].toInteger() < 0 || item.toArray()[0].toInteger() > 255 ||
+            item.toArray()[1].toInteger() < 0 || item.toArray()[1].toInteger() > 255)
+            throwJson(ProjectErrorCode::InvalidValue, project_path,
+                      "A Color curve contains an invalid point.");
+        points.push_back({static_cast<int>(item.toArray()[0].toInteger()),
+                          static_cast<int>(item.toArray()[1].toInteger())});
+    }
+    if (!creative_suite::effects::validCurvePoints(points))
+        throwJson(ProjectErrorCode::InvalidValue, project_path,
+                  "A Color curve has invalid endpoints, ordering, or point count.");
+    return points;
+}
+
+creative_suite::effects::VideoCurvesParameters parseVideoCurves(
+    const QJsonValue& value, const std::filesystem::path& project_path) {
+    using namespace creative_suite::effects;
+    if (!value.isObject())
+        throwJson(ProjectErrorCode::InvalidValue, project_path,
+                  "A Color Curves node is missing its curve data.");
+    const auto object = value.toObject();
+    const auto rgb_value = object.value("rgb");
+    const auto targeted_value = object.value("targeted");
+    const auto qualifier_value = object.value("qualifier");
+    if (!rgb_value.isObject() || !targeted_value.isArray() ||
+        targeted_value.toArray().size() != 5 || !qualifier_value.isObject())
+        throwJson(ProjectErrorCode::InvalidValue, project_path,
+                  "A Color Curves node contains incomplete settings.");
+    const auto rgb = rgb_value.toObject();
+    VideoCurvesParameters result;
+    result.rgb.points = parseCurvesPointList(rgb.value("master"), project_path);
+    result.rgb.channels[0] = parseCurvesPointList(rgb.value("red"), project_path);
+    result.rgb.channels[1] = parseCurvesPointList(rgb.value("green"), project_path);
+    result.rgb.channels[2] = parseCurvesPointList(rgb.value("blue"), project_path);
+    for (std::size_t i = 0; i < result.targeted.size(); ++i)
+        result.targeted[i] = parseCurvesPointList(targeted_value.toArray()[static_cast<qsizetype>(i)], project_path);
+    const auto qualifier = qualifier_value.toObject();
+    const char* scalar_keys[]{"hue_min", "hue_max", "saturation_min", "saturation_max",
+        "luminance_min", "luminance_max", "hue_softness", "saturation_softness",
+        "luminance_softness"};
+    for (const auto* key : scalar_keys)
+        if (!qualifier.value(QLatin1String(key)).isDouble())
+            throwJson(ProjectErrorCode::InvalidValue, project_path,
+                      "A Color Curves qualifier is missing a numeric range value.");
+    if (!qualifier.value("enabled").isBool())
+        throwJson(ProjectErrorCode::InvalidValue, project_path,
+                  "A Color Curves qualifier is missing its enabled state.");
+    result.qualifier = {qualifier.value("enabled").toBool(),
+        qualifier.value("hue_min").toDouble(), qualifier.value("hue_max").toDouble(),
+        qualifier.value("saturation_min").toDouble(), qualifier.value("saturation_max").toDouble(),
+        qualifier.value("luminance_min").toDouble(), qualifier.value("luminance_max").toDouble(),
+        qualifier.value("hue_softness").toDouble(), qualifier.value("saturation_softness").toDouble(),
+        qualifier.value("luminance_softness").toDouble()};
+    if (!validVideoCurves(result))
+        throwJson(ProjectErrorCode::InvalidValue, project_path,
+                  "A Color Curves node contains out-of-range settings.");
+    return result;
+}
+
 color::Graph parseColorGraph(const QJsonValue& value,
                              const std::filesystem::path& project_path,
                              int version) {
@@ -177,6 +244,12 @@ color::Graph parseColorGraph(const QJsonValue& value,
         const auto type_name = type.toString();
         if (type_name == QLatin1String("input")) node.type = color::NodeType::Input;
         else if (type_name == QLatin1String("effect")) node.type = color::NodeType::Effect;
+        else if (type_name == QLatin1String("curves")) {
+            if (version < color_curves_format_version)
+                throwJson(ProjectErrorCode::InvalidValue, project_path,
+                          "Color Curves nodes require CSP version 38 or later.");
+            node.type = color::NodeType::Curves;
+        }
         else if (type_name == QLatin1String("parallel_mixer"))
             node.type = color::NodeType::ParallelMixer;
         else if (type_name == QLatin1String("output")) node.type = color::NodeType::Output;
@@ -215,9 +288,22 @@ color::Graph parseColorGraph(const QJsonValue& value,
                     parameter.value("value").toDouble()});
             }
             node.effect = migratePrimaryGrade(std::move(effect), version, project_path);
+        } else if (node.type == color::NodeType::Curves) {
+            const auto curves_value = node_object.value("curves");
+            if (!curves_value.isObject() ||
+                !curves_value.toObject().value("enabled").isBool() ||
+                !curves_value.toObject().value("parameters").isObject())
+                throwJson(ProjectErrorCode::InvalidValue, project_path,
+                          "A Color Curves node is missing its settings.");
+            const auto curves_object = curves_value.toObject();
+            node.curves = color::CurvesNode{curves_object.value("enabled").toBool(),
+                parseVideoCurves(curves_object.value("parameters"), project_path)};
         } else if (node_object.contains("effect")) {
             throwJson(ProjectErrorCode::InvalidValue, project_path,
                       "Only Color effect nodes may contain effect settings.");
+        } else if (node_object.contains("curves")) {
+            throwJson(ProjectErrorCode::InvalidValue, project_path,
+                      "Only Color Curves nodes may contain curve settings.");
         }
         graph.nodes.push_back(std::move(node));
     }
