@@ -1406,6 +1406,7 @@ void ColorWorkspace::refreshNodes(std::optional<color::NodeId> selected) {
 
 void ColorWorkspace::refreshControls() {
     matte_preview_ = nullptr;
+    matte_preview_mode_ = nullptr;
     while (auto* item = controls_layout_->takeAt(0)) {
         if (auto* widget = item->widget()) {
             widget->hide();
@@ -1604,7 +1605,7 @@ void ColorWorkspace::refreshControls() {
             double maximum;
             double step;
         };
-        const std::array<QualifierControl, 10> qualifier_controls{{
+        const std::array<QualifierControl, 14> qualifier_controls{{
             {"hue_min", "Hue minimum", 0, 360, 1}, {"hue_max", "Hue maximum", 0, 360, 1},
             {"saturation_min", "Saturation minimum", 0, 100, 1},
             {"saturation_max", "Saturation maximum", 0, 100, 1},
@@ -1613,6 +1614,10 @@ void ColorWorkspace::refreshControls() {
             {"hue_softness", "Hue softness", 0, 50, 1},
             {"saturation_softness", "Saturation softness", 0, 50, 1},
             {"luminance_softness", "Luminance softness", 0, 50, 1},
+            {"denoise_percent", "Denoise", 0, 100, 1},
+            {"clean_black_percent", "Clean Black", 0, 99, 1},
+            {"clean_white_percent", "Clean White", 1, 100, 1},
+            {"in_out_percent", "In/Out", -100, 100, 1},
             {nullptr, nullptr, 0, 0, 0}}};
         const auto qualifierValue = [](const TonalQualifier& q, const char* id) {
             if (std::strcmp(id, "hue_min") == 0) return q.hue_min;
@@ -1623,7 +1628,11 @@ void ColorWorkspace::refreshControls() {
             if (std::strcmp(id, "luminance_max") == 0) return q.luminance_max;
             if (std::strcmp(id, "hue_softness") == 0) return q.hue_softness;
             if (std::strcmp(id, "saturation_softness") == 0) return q.saturation_softness;
-            return q.luminance_softness;
+            if (std::strcmp(id, "luminance_softness") == 0) return q.luminance_softness;
+            if (std::strcmp(id, "denoise_percent") == 0) return q.denoise_percent;
+            if (std::strcmp(id, "clean_black_percent") == 0) return q.clean_black_percent;
+            if (std::strcmp(id, "clean_white_percent") == 0) return q.clean_white_percent;
+            return q.in_out_percent;
         };
         for (const auto& control : qualifier_controls) {
             if (!control.id) continue;
@@ -1635,7 +1644,16 @@ void ColorWorkspace::refreshControls() {
             spin->setDecimals(0);
             spin->setFixedWidth(92);
             spin->setValue(qualifierValue(node->curves->parameters.qualifier, control.id));
-            controls_layout_->addRow(QCoreApplication::translate("ColorWorkspace", control.label), spin);
+            QString translated_label = QCoreApplication::translate("ColorWorkspace", control.label);
+            if (std::strcmp(control.id, "denoise_percent") == 0)
+                translated_label = QCoreApplication::translate("ColorWorkspace", "Denoise");
+            else if (std::strcmp(control.id, "clean_black_percent") == 0)
+                translated_label = QCoreApplication::translate("ColorWorkspace", "Clean Black");
+            else if (std::strcmp(control.id, "clean_white_percent") == 0)
+                translated_label = QCoreApplication::translate("ColorWorkspace", "Clean White");
+            else if (std::strcmp(control.id, "in_out_percent") == 0)
+                translated_label = QCoreApplication::translate("ColorWorkspace", "In/Out");
+            controls_layout_->addRow(translated_label, spin);
             const auto key = std::string(control.id);
             connect(spin, &QDoubleSpinBox::editingFinished, this,
                 [this, spin, node_id, key] {
@@ -1651,9 +1669,17 @@ void ColorWorkspace::refreshControls() {
                     else if (key == "luminance_max") q.luminance_max = spin->value();
                     else if (key == "hue_softness") q.hue_softness = spin->value();
                     else if (key == "saturation_softness") q.saturation_softness = spin->value();
-                    else q.luminance_softness = spin->value();
+                    else if (key == "luminance_softness") q.luminance_softness = spin->value();
+                    else if (key == "denoise_percent") q.denoise_percent = spin->value();
+                    else if (key == "clean_black_percent") q.clean_black_percent = spin->value();
+                    else if (key == "clean_white_percent") q.clean_white_percent = spin->value();
+                    else if (key == "in_out_percent") q.in_out_percent = spin->value();
                     if (q.saturation_min > q.saturation_max) q.saturation_max = q.saturation_min;
                     if (q.luminance_min > q.luminance_max) q.luminance_max = q.luminance_min;
+                    if (q.clean_black_percent >= q.clean_white_percent) {
+                        if (key == "clean_black_percent") q.clean_black_percent = q.clean_white_percent - 1.0;
+                        else q.clean_white_percent = q.clean_black_percent + 1.0;
+                    }
                     if (grade_edit_started_handler_) grade_edit_started_handler_();
                     if (color::setCurvesQualifier(graph, node_id, q))
                         submit(std::move(graph), node_id, false);
@@ -1662,6 +1688,33 @@ void ColorWorkspace::refreshControls() {
                     refreshMattePreview();
                 });
         }
+        auto* blur = new QDoubleSpinBox(controls_);
+        blur->setObjectName(QStringLiteral("colorQualifier_blur_radius_pixels"));
+        blur->setRange(0.0, 8.0);
+        blur->setSingleStep(0.25);
+        blur->setDecimals(2);
+        blur->setFixedWidth(92);
+        blur->setValue(node->curves->parameters.qualifier.blur_radius_pixels);
+        controls_layout_->addRow(QCoreApplication::translate("ColorWorkspace", "Blur"), blur);
+        connect(blur, &QDoubleSpinBox::editingFinished, this, [this, blur, node_id] {
+            auto graph = graph_;
+            auto* selected = color::findNode(graph, node_id);
+            if (!selected || !selected->curves) return;
+            auto q = selected->curves->parameters.qualifier;
+            q.blur_radius_pixels = blur->value();
+            if (grade_edit_started_handler_) grade_edit_started_handler_();
+            if (color::setCurvesQualifier(graph, node_id, q))
+                submit(std::move(graph), node_id, false);
+            if (grade_edit_finished_handler_) grade_edit_finished_handler_();
+            refreshMattePreview();
+        });
+        matte_preview_mode_ = new QComboBox(controls_);
+        matte_preview_mode_->setObjectName(QStringLiteral("colorQualifierPreviewMode"));
+        matte_preview_mode_->addItem(QCoreApplication::translate("ColorWorkspace", "Matte"), "matte");
+        matte_preview_mode_->addItem(QCoreApplication::translate("ColorWorkspace", "Highlight"), "highlight");
+        controls_layout_->addRow(QCoreApplication::translate("ColorWorkspace", "Preview"), matte_preview_mode_);
+        connect(matte_preview_mode_, qOverload<int>(&QComboBox::currentIndexChanged), this,
+            [this] { refreshMattePreview(); });
         matte_preview_ = new QLabel(controls_);
         matte_preview_->setObjectName(QStringLiteral("colorQualifierMattePreview"));
         matte_preview_->setMinimumSize(160, 88);
@@ -1818,18 +1871,47 @@ void ColorWorkspace::refreshMattePreview() {
     }
     auto qualifier = node->curves->parameters.qualifier;
     qualifier.enabled = true;
-    QImage matte(latest_scope_source_.size(), QImage::Format_RGB32);
-    for (int y = 0; y < latest_scope_source_.height(); ++y) {
-        const auto* source_row = reinterpret_cast<const QRgb*>(
+    const int width = latest_scope_source_.width();
+    const int height = latest_scope_source_.height();
+    const int stride = width * 4;
+    std::vector<std::uint8_t> rgba(static_cast<std::size_t>(stride) * height);
+    for (int y = 0; y < height; ++y) {
+        const auto* source = reinterpret_cast<const QRgb*>(
             latest_scope_source_.constScanLine(y));
-        auto* matte_row = reinterpret_cast<QRgb*>(matte.scanLine(y));
-        for (int x = 0; x < latest_scope_source_.width(); ++x) {
-            const auto pixel = source_row[x];
-            const double coverage = creative_suite::effects::tonalQualifierMatte(
-                qualifier, {qRed(pixel) / 255.0, qGreen(pixel) / 255.0,
-                    qBlue(pixel) / 255.0});
-            const int value = static_cast<int>(std::lround(coverage * 255.0));
-            matte_row[x] = qRgb(value, value, value);
+        auto* target = rgba.data() + static_cast<std::size_t>(y) * stride;
+        for (int x = 0; x < width; ++x) {
+            target[x * 4] = static_cast<std::uint8_t>(qRed(source[x]));
+            target[x * 4 + 1] = static_cast<std::uint8_t>(qGreen(source[x]));
+            target[x * 4 + 2] = static_cast<std::uint8_t>(qBlue(source[x]));
+            target[x * 4 + 3] = 255;
+        }
+    }
+    auto coverage = creative_suite::effects::refinedTonalQualifierMatte(
+        qualifier, rgba, width, height, stride);
+    if (coverage.size() != static_cast<std::size_t>(width) * height) {
+        matte_preview_->setPixmap({});
+        matte_preview_->setText(QCoreApplication::translate("ColorWorkspace", "No frame"));
+        return;
+    }
+    QImage matte(width, height, QImage::Format_RGB32);
+    const bool highlight = matte_preview_mode_ &&
+        matte_preview_mode_->currentData().toString() == QLatin1String("highlight");
+    for (int y = 0; y < height; ++y) {
+        const auto* source = reinterpret_cast<const QRgb*>(
+            latest_scope_source_.constScanLine(y));
+        auto* target = reinterpret_cast<QRgb*>(matte.scanLine(y));
+        for (int x = 0; x < width; ++x) {
+            const double amount = coverage[static_cast<std::size_t>(y) * width + x] / 255.0;
+            if (!highlight) {
+                const int value = static_cast<int>(std::lround(amount * 255.0));
+                target[x] = qRgb(value, value, value);
+            } else {
+                const auto pixel = source[x];
+                const double shade = 0.18 + amount * 0.82;
+                target[x] = qRgb(static_cast<int>(qRed(pixel) * shade),
+                    static_cast<int>(qGreen(pixel) * shade),
+                    static_cast<int>(qBlue(pixel) * shade));
+            }
         }
     }
     matte_preview_->setText({});

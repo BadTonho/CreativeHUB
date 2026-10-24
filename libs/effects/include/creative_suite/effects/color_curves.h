@@ -3,6 +3,9 @@
 #include "curves.h"
 
 #include <array>
+#include <functional>
+#include <span>
+#include <vector>
 
 namespace creative_suite::effects {
 
@@ -17,6 +20,11 @@ struct TonalQualifier {
     double hue_softness = 0.0;
     double saturation_softness = 0.0;
     double luminance_softness = 0.0;
+    double denoise_percent = 0.0;
+    double clean_black_percent = 0.0;
+    double clean_white_percent = 100.0;
+    double in_out_percent = 0.0;
+    double blur_radius_pixels = 0.0;
 
     friend bool operator==(const TonalQualifier&, const TonalQualifier&) = default;
 };
@@ -44,6 +52,13 @@ using VideoCurvesLuts = std::array<std::array<std::uint8_t, 256>, kVideoCurveCou
 [[nodiscard]] VideoCurvesLuts videoCurvesLuts(const VideoCurvesParameters&) noexcept;
 [[nodiscard]] double tonalQualifierMatte(
     const TonalQualifier&, const std::array<double, 3>& rgb) noexcept;
+[[nodiscard]] bool tonalQualifierRefinementIsNeutral(const TonalQualifier&) noexcept;
+// Returns a width*height R8 matte. Refinement order is denoise, clean levels,
+// coverage shift, then a separable Gaussian blur. Invalid geometry returns empty.
+[[nodiscard]] std::vector<std::uint8_t> refinedTonalQualifierMatte(
+    const TonalQualifier&, std::span<const std::uint8_t> rgba,
+    int width, int height, int stride,
+    const std::function<bool()>& should_cancel = {});
 [[nodiscard]] std::array<std::uint8_t, 3> evaluateVideoCurves(
     const VideoCurvesParameters&, const VideoCurvesLuts&,
     const std::array<double, 3>& rgb, double* matte = nullptr) noexcept;

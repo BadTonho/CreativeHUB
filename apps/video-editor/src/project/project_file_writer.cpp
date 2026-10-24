@@ -93,7 +93,12 @@ QJsonObject videoCurvesJson(const creative_suite::effects::VideoCurvesParameters
         {"saturation_max", q.saturation_max}, {"luminance_min", q.luminance_min},
         {"luminance_max", q.luminance_max}, {"hue_softness", q.hue_softness},
         {"saturation_softness", q.saturation_softness},
-        {"luminance_softness", q.luminance_softness}};
+        {"luminance_softness", q.luminance_softness},
+        {"denoise_percent", q.denoise_percent},
+        {"clean_black_percent", q.clean_black_percent},
+        {"clean_white_percent", q.clean_white_percent},
+        {"in_out_percent", q.in_out_percent},
+        {"blur_radius_pixels", q.blur_radius_pixels}};
     return {{"rgb", rgb}, {"targeted", targeted}, {"qualifier", qualifier}};
 }
 

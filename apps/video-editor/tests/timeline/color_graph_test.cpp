@@ -212,6 +212,15 @@ int main() {
         require(curves_frame && curves_frame->rgba_pixels.size() == 4 &&
                     curves_frame->rgba_pixels[3] == 255,
                 "Color graph Curves evaluation must preserve alpha.");
+        qualifier.denoise_percent = 50.0;
+        require(color::setCurvesQualifier(curves_graph, curves_id, qualifier),
+                "The Curves graph qualifier refinement could not be enabled.");
+        int cancellation_checks = 0;
+        const auto cancelled_curves = color::evaluate(curves_graph, sampleFrame(), [&] {
+            return ++cancellation_checks >= 3;
+        });
+        require(!cancelled_curves && cancellation_checks >= 3,
+                "Color graph evaluation must pass cancellation into matte refinement.");
         auto disabled_curves = curves_graph;
         require(color::setCurvesEnabled(disabled_curves, curves_id, false) &&
                     color::evaluate(disabled_curves, sampleFrame())->rgba_pixels ==

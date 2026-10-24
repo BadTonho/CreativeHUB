@@ -86,6 +86,10 @@ bool bounded(int width, int height, int limit) {
     return width > 0 && height > 0 && width <= limit && height <= limit &&
         static_cast<std::uint64_t>(width) * height * 4 <= maximum_texture_bytes;
 }
+bool requiresCpuMatteRefinement(const effects::ColorAdjustmentParameters& value) {
+    return value.video_curves && !effects::tonalQualifierRefinementIsNeutral(
+        value.video_curves->qualifier);
+}
 constexpr char vertex_shader[] = R"GLSL(#version 150 core
 void main() {
     vec2 p = vec2((gl_VertexID << 1) & 2, gl_VertexID & 2);
@@ -2441,6 +2445,19 @@ OpenGlCompositionResult OpenGlFrameCompositor::render(int width, int height,
             layer.effect_stack = {};
         }
         return render(width, height, prepared_layers, cancel, timings, read_output, output_alpha);
+    }
+    for (std::size_t index = 0; index < layers.size(); ++index) {
+        const auto& layer = layers[index];
+        const bool refined_adjustment = std::any_of(layer.gpu_color_adjustments.begin(),
+            layer.gpu_color_adjustments.end(), requiresCpuMatteRefinement) ||
+            std::any_of(layer.gpu_effects.begin(), layer.gpu_effects.end(), [](const auto& effect) {
+                const auto* adjustment = std::get_if<effects::ColorAdjustmentParameters>(&effect);
+                return adjustment && requiresCpuMatteRefinement(*adjustment);
+            });
+        if (refined_adjustment)
+            return result(OpenGlCompositionStatus::Unsupported, "color-matte-refinement",
+                "Spatial Color qualifier refinement requires the CPU frame fallback.",
+                0, static_cast<int>(index));
     }
     OpenGlCompositionTimings measured;
     struct TimingsGuard {

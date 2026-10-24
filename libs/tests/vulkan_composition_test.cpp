@@ -382,6 +382,17 @@ void primaryGradeOnly(const std::shared_ptr<VulkanDevice>& device) {
     curves.qualifier.luminance_max = 97.0;
     effects::ColorAdjustmentParameters curve_adjustment;
     curve_adjustment.video_curves = curves;
+    auto spatial_refinement = curve_adjustment;
+    spatial_refinement.video_curves->qualifier.blur_radius_pixels = 2.0;
+    OpenGlImageOperation refined_operation;
+    refined_operation.kind = OpenGlImageOperationKind::Color;
+    refined_operation.background.rgba = &source;
+    refined_operation.colors = {spatial_refinement};
+    const auto refined_result = gpu.processImage(refined_operation);
+    require(refined_result.status == OpenGlCompositionStatus::Unsupported &&
+                !refined_result.frame &&
+                refined_result.cause.find("CPU frame fallback") != std::string::npos,
+            "Vulkan must route spatial Curves refinement to the CPU fallback.");
     auto second_expanded = expanded;
     second_expanded.log_shadows_blue = -33;
     second_expanded.log_midtones_red = 18;

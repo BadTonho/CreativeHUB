@@ -128,7 +128,114 @@ bool validTonalQualifier(const TonalQualifier& value) noexcept {
         value.luminance_min <= value.luminance_max &&
         finiteRange(value.hue_softness, 0.0, 50.0) &&
         finiteRange(value.saturation_softness, 0.0, 50.0) &&
-        finiteRange(value.luminance_softness, 0.0, 50.0);
+        finiteRange(value.luminance_softness, 0.0, 50.0) &&
+        finiteRange(value.denoise_percent, 0.0, 100.0) &&
+        finiteRange(value.clean_black_percent, 0.0, 100.0) &&
+        finiteRange(value.clean_white_percent, 0.0, 100.0) &&
+        value.clean_black_percent < value.clean_white_percent &&
+        finiteRange(value.in_out_percent, -100.0, 100.0) &&
+        finiteRange(value.blur_radius_pixels, 0.0, 8.0);
+}
+
+bool tonalQualifierRefinementIsNeutral(const TonalQualifier& q) noexcept {
+    return q.denoise_percent == 0.0 && q.clean_black_percent == 0.0 &&
+        q.clean_white_percent == 100.0 && q.in_out_percent == 0.0 &&
+        q.blur_radius_pixels == 0.0;
+}
+
+std::vector<std::uint8_t> refinedTonalQualifierMatte(
+    const TonalQualifier& qualifier, std::span<const std::uint8_t> rgba,
+    int width, int height, int stride,
+    const std::function<bool()>& should_cancel) {
+    if (!validTonalQualifier(qualifier) || width <= 0 || height <= 0 ||
+        stride < width * 4 || rgba.size() < static_cast<std::size_t>(stride) * height)
+        return {};
+    const auto count = static_cast<std::size_t>(width) * height;
+    std::vector<std::uint8_t> matte(count);
+    const auto rounded = [](double value) {
+        return static_cast<std::uint8_t>(std::clamp(std::lround(value), 0L, 255L));
+    };
+    for (int y = 0; y < height; ++y) {
+        if (should_cancel && should_cancel()) return {};
+        const auto* row = rgba.data() + static_cast<std::size_t>(y) * stride;
+        for (int x = 0; x < width; ++x) {
+            const auto* pixel = row + static_cast<std::size_t>(x) * 4;
+            const auto value = tonalQualifierMatte(qualifier,
+                {pixel[0] / 255.0, pixel[1] / 255.0, pixel[2] / 255.0});
+            matte[static_cast<std::size_t>(y) * width + x] = rounded(value * 255.0);
+        }
+    }
+    if (qualifier.denoise_percent > 0.0) {
+        auto filtered = matte;
+        std::array<std::uint8_t, 9> neighborhood{};
+        const double amount = qualifier.denoise_percent / 100.0;
+        for (int y = 0; y < height; ++y) {
+            if (should_cancel && should_cancel()) return {};
+            for (int x = 0; x < width; ++x) {
+                std::size_t n = 0;
+                for (int dy = -1; dy <= 1; ++dy)
+                    for (int dx = -1; dx <= 1; ++dx) {
+                        const int sx = std::clamp(x + dx, 0, width - 1);
+                        const int sy = std::clamp(y + dy, 0, height - 1);
+                        neighborhood[n++] = matte[static_cast<std::size_t>(sy) * width + sx];
+                    }
+                std::nth_element(neighborhood.begin(), neighborhood.begin() + 4,
+                    neighborhood.end());
+                const auto index = static_cast<std::size_t>(y) * width + x;
+                filtered[index] = rounded(matte[index] * (1.0 - amount) +
+                    neighborhood[4] * amount);
+            }
+        }
+        matte.swap(filtered);
+    }
+    const double black = qualifier.clean_black_percent * 2.55;
+    const double white = qualifier.clean_white_percent * 2.55;
+    const double shift = qualifier.in_out_percent * 2.55;
+    for (auto& value : matte) {
+        const double normalized = (value - black) / (white - black);
+        value = rounded((std::clamp(normalized, 0.0, 1.0) * 255.0 + shift));
+    }
+    const int radius = static_cast<int>(std::lround(qualifier.blur_radius_pixels));
+    if (radius > 0) {
+        const double sigma = std::max(0.5, radius / 2.0);
+        std::vector<double> kernel(static_cast<std::size_t>(radius * 2 + 1));
+        double total = 0.0;
+        for (int offset = -radius; offset <= radius; ++offset) {
+            const double weight = std::exp(-(offset * offset) / (2.0 * sigma * sigma));
+            kernel[static_cast<std::size_t>(offset + radius)] = weight;
+            total += weight;
+        }
+        for (auto& weight : kernel) weight /= total;
+        std::vector<float> horizontal(count);
+        std::vector<std::uint8_t> blurred(count);
+        for (int y = 0; y < height; ++y) {
+            if (should_cancel && should_cancel()) return {};
+            for (int x = 0; x < width; ++x) {
+                double sum = 0.0;
+                for (int offset = -radius; offset <= radius; ++offset) {
+                    const int sx = std::clamp(x + offset, 0, width - 1);
+                    sum += matte[static_cast<std::size_t>(y) * width + sx] *
+                        kernel[static_cast<std::size_t>(offset + radius)];
+                }
+                horizontal[static_cast<std::size_t>(y) * width + x] =
+                    static_cast<float>(sum);
+            }
+        }
+        for (int y = 0; y < height; ++y) {
+            if (should_cancel && should_cancel()) return {};
+            for (int x = 0; x < width; ++x) {
+                double sum = 0.0;
+                for (int offset = -radius; offset <= radius; ++offset) {
+                    const int sy = std::clamp(y + offset, 0, height - 1);
+                    sum += horizontal[static_cast<std::size_t>(sy) * width + x] *
+                        kernel[static_cast<std::size_t>(offset + radius)];
+                }
+                blurred[static_cast<std::size_t>(y) * width + x] = rounded(sum);
+            }
+        }
+        matte.swap(blurred);
+    }
+    return matte;
 }
 
 bool validVideoCurves(const VideoCurvesParameters& value) noexcept {

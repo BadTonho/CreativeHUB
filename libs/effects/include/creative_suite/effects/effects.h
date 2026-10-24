@@ -168,6 +168,10 @@ enum class ProcessingResult {
     InvalidInput,
 };
 
+[[nodiscard]] ProcessingResult applyVideoCurvesFrame(
+    media::RgbaFrame& frame, const VideoCurvesParameters& parameters,
+    const std::function<bool()>& should_cancel = {});
+
 [[nodiscard]] std::span<const Definition> builtInEffects() noexcept;
 [[nodiscard]] const Definition* findDefinition(std::string_view id) noexcept;
 [[nodiscard]] EffectInstance makeDefaultInstance(std::string_view id);

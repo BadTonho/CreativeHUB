@@ -1,6 +1,6 @@
 # Color Workspace Roadmap
 
-Status: **The project-owned Color graph, Curves and tonal qualifier, Gallery capture and organization, Wheels/Bars/Log Primary Grade, four scopes, shared Edit controls, reusable grades, and per-clip grade versions are implemented. CSP v38 persists curves, qualifiers, and named graph snapshots. General graph action controls remain hidden; Curves is created and managed from the canvas context menu. Native visual interaction and platform acceptance remain pending.**
+Status: **The project-owned Color graph, Curves, CPU qualifier matte refinement, Gallery capture and organization, Wheels/Bars/Log Primary Grade, four scopes, shared Edit controls, reusable grades, and per-clip grade versions are implemented. CSP v39 persists curves, qualifier refinements, and named graph snapshots. Two qualifier refinements remain pending: GPU R8 filter passes, and routing the Inspector preview from the selected Curves node's actual input frame. Until then, refined GPU compositions fall back to CPU and the Inspector preview uses the latest composed frame. General graph action controls remain hidden; Curves is created and managed from the canvas context menu. Native visual interaction and platform acceptance remain pending.**
 
 This document records the current implementation, the functional areas expected
 from a complete color workspace, and a staged order for developing them. The
@@ -26,7 +26,8 @@ existing implementation and behavior; its evaluated output feeds the Color
 graph.
 
 Preview and export follow the graph. A serial graph uses the existing GPU
-effect path when available, including Curves LUTs and qualifier matte. Graphs with branches use the CPU RGBA evaluator,
+effect path when available, including Curves LUTs and unrefined qualifier matte.
+Non-neutral spatial matte refinement uses the CPU fallback. Graphs with branches use the CPU RGBA evaluator,
 which calculates each required upstream node once and mixes the branch
 outputs. The evaluator also handles adjustment clips after lower-track
 composition.
@@ -66,8 +67,10 @@ Saturation. Each curve supports 2–16 ordered points. Curves use normalized
 encoded RGB, Rec. 709 luminance, and HSV hue/saturation; hue changes wrap at
 360 degrees. An optional per-node qualifier combines hue, saturation, and
 luminance ranges with adjustable softness, including wrapped hue ranges. Its
-matte preview displays the latest composed frame. Power Windows and advanced
-matte refinement are later work.
+matte preview currently displays the latest composed frame; routing it from the
+selected Curves node's actual input frame remains pending. The first refinement
+controls are implemented on CPU, with GPU R8 filtering still pending. Power
+Windows, tracking, advanced matte refinement, and keyframes remain later work.
 
 ## Functional capability inventory
 
@@ -190,8 +193,13 @@ plus contrast, pivot, saturation, temperature and tint. v36 adds nine
 per-channel Log values, neutral in projects through v35. v37 stores each clip's
 named Color graph snapshots, including nodes, effects, state, connections,
 mixer weights and positions. CSP v38 adds Curves nodes with nine point lists
-and a tonal qualifier. Projects through v37 open without Curves nodes; prior
-graph and version data remains intact.
+and a tonal qualifier. CSP v39 adds Denoise, Clean Black/White, In/Out, and Blur
+for the matte, with defaults that preserve v38 behavior. Projects through v37
+open without Curves nodes; v1–v38 receive neutral refinement values. Preview
+offers grayscale Matte and Highlight modes local to the Inspector; it does not
+replace the Viewer. Spatial matte refinements currently use the CPU frame
+fallback for serial graphs; neutral and unrefined Curves retain GPU processing.
+Prior graph and version data remains intact.
 A legacy six-parameter Primary Grade maps its brightness value to equal RGB
 Offsets and preserves its other values. Save As, autosave, recovery and Hub
 backup preserve versions in the project JSON; the Gallery sidecar is unchanged.
@@ -218,8 +226,11 @@ and restoration. Keep large image assets outside the main CSP document.
    project persistence. Gallery reference display and wipe/split-screen
    comparisons remain future work. Add group corrections only with a clear
    grade ordering model.
-4. **Add secondary grading.** Implement curves and targeted selection, then
-   qualifiers, matte refinement, windows, tracking, and their keyframes.
+4. **Add secondary grading (partially implemented).** Curves, targeted
+   selection, qualifiers, and CPU matte refinement controls are implemented.
+   Next: route the matte preview from the selected Curves node's input and add
+   GPU filtering with bounded R8 intermediates, then add windows, tracking,
+   advanced matte refinement, and their keyframes.
 5. **Establish color management and source support.** Define project and
    output transforms, LUT handling, display profiles, RAW decode controls,
    and wide-gamut/HDR behavior across preview and export.
@@ -238,8 +249,9 @@ normalized mixing, CPU/OpenGL/Vulkan evaluation, Color canvas, Wheels/Bars
 synchronization, Log tonal response, Edit parameter and enabled-state editing,
 copy/apply between clips, saved-version actions and shared Undo/Redo, split and
 duplicate propagation, Curves editing and qualifier wrap/matte, Preview and
-offline export, CSP v38 persistence and v1-v37 migration, autosave and recovery,
-all four scopes and GPU readback, and
-Hub backup/restoration with Gallery PNG sidecars. Native visual and platform
+offline export, CSP v39 persistence and v1-v38 migration, autosave and recovery,
+all four scopes and GPU readback, Hub backup/restoration with Gallery sidecars,
+qualifier matte defaults and bounds, denoise, clean-level remapping, In/Out,
+blur borders, alpha preservation, and CPU cancellation. Native visual and platform
 acceptance remain pending.
 

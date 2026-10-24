@@ -255,6 +255,56 @@ void verifyVideoCurves()
     const auto partial_matte = tonalQualifierMatte(wrapped, {1.0, 0.25, 0.25});
     require(partial_matte > 0.0 && partial_matte < 1.0,
         "Qualifier softness must produce a partial matte at its range edge.");
+    auto nonneutral_refinement = wrapped;
+    nonneutral_refinement.denoise_percent = 1.0;
+    require(tonalQualifierRefinementIsNeutral(TonalQualifier{}) &&
+            !tonalQualifierRefinementIsNeutral(nonneutral_refinement),
+        "Default matte refinement controls must preserve the fast path.");
+    auto invalid_qualifier = wrapped;
+    invalid_qualifier.denoise_percent = 101.0;
+    require(!validTonalQualifier(invalid_qualifier), "Denoise rejects values outside 0-100%.");
+    invalid_qualifier = wrapped;
+    invalid_qualifier.clean_black_percent = 70.0;
+    invalid_qualifier.clean_white_percent = 60.0;
+    require(!validTonalQualifier(invalid_qualifier), "Clean Black must stay below Clean White.");
+    invalid_qualifier = wrapped;
+    invalid_qualifier.in_out_percent = -101.0;
+    require(!validTonalQualifier(invalid_qualifier), "In/Out rejects values outside its range.");
+    invalid_qualifier = wrapped;
+    invalid_qualifier.blur_radius_pixels = 8.1;
+    require(!validTonalQualifier(invalid_qualifier), "Qualifier blur is capped at eight pixels.");
+
+    std::vector<std::uint8_t> qualifier_pixels(3U * 3U * 4U, 255);
+    for (std::size_t i = 0; i < qualifier_pixels.size(); i += 4) {
+        qualifier_pixels[i] = 255; qualifier_pixels[i + 1] = 0; qualifier_pixels[i + 2] = 0;
+    }
+    qualifier_pixels[4U * 4U] = 0; qualifier_pixels[4U * 4U + 1] = 255;
+    qualifier_pixels[4U * 4U + 2] = 0;
+    TonalQualifier refined;
+    refined.enabled = true; refined.hue_min = 350.0; refined.hue_max = 12.0;
+    refined.denoise_percent = 100.0;
+    auto matte = refinedTonalQualifierMatte(refined, qualifier_pixels, 3, 3, 12);
+    require(matte.size() == 9 && matte[4] == 255,
+        "Denoise mixes the tonal matte with a clamped 3x3 median.");
+    refined.denoise_percent = 0.0;
+    refined.in_out_percent = -100.0;
+    matte = refinedTonalQualifierMatte(refined, qualifier_pixels, 3, 3, 12);
+    require(matte[0] == 0 && matte[4] == 0,
+        "Negative In/Out removes matte coverage.");
+    refined.in_out_percent = 100.0;
+    refined.blur_radius_pixels = 2.0;
+    matte = refinedTonalQualifierMatte(refined, qualifier_pixels, 3, 3, 12);
+    require(matte[0] == 255 && matte[4] == 255,
+        "Positive In/Out clamps coverage and blur handles frame edges.");
+    auto curves_frame = frame();
+    curves_frame.rgba_pixels = {255, 0, 0, 79, 0, 255, 0, 31};
+    auto curve_grade = neutral_curves;
+    curve_grade.rgb.points = {{0, 0}, {255, 128}};
+    curve_grade.qualifier = TonalQualifier{};
+    curve_grade.qualifier.denoise_percent = 100.0;
+    require(applyVideoCurvesFrame(curves_frame, curve_grade) == ProcessingResult::Completed &&
+            curves_frame.rgba_pixels[3] == 79 && curves_frame.rgba_pixels[7] == 31,
+        "Matte refinement applies the curve while preserving alpha bytes.");
     auto invalid = neutral_curves;
     invalid.targeted[0].push_back({128, 200});
     require(!validVideoCurves(invalid),

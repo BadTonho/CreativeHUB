@@ -464,6 +464,11 @@ int main(int argc, char** argv) {
             wrapped_qualifier.enabled = true;
             wrapped_qualifier.hue_min = 340;
             wrapped_qualifier.hue_max = 20;
+            wrapped_qualifier.denoise_percent = 35;
+            wrapped_qualifier.clean_black_percent = 8;
+            wrapped_qualifier.clean_white_percent = 92;
+            wrapped_qualifier.in_out_percent = -4;
+            wrapped_qualifier.blur_radius_pixels = 2.5;
             require(color::setCurvePoints(curves_graph, curves_id,
                         color::CurveKind::HueVsSaturation, curve_points) &&
                     color::setCurvesQualifier(curves_graph, curves_id, wrapped_qualifier),
@@ -474,13 +479,31 @@ int main(int argc, char** argv) {
                 color::effectInstancesInOrder(curves_graph);
             curves_project.timeline_tracks.front().clips.front().color_grade_versions = {
                 {"curves-version-1", "Curves Version", curves_graph}};
-            const auto curves_path = directory / "color-curves-v38.csp";
+            const auto curves_path = directory / "color-curves-v39.csp";
             project::save(curves_path, curves_project);
             const auto restored_curves = project::load(curves_path);
             require(restored_curves.timeline_tracks.front().clips.front().color_graph == curves_graph &&
                     restored_curves.timeline_tracks.front().clips.front().color_grade_versions ==
                         curves_project.timeline_tracks.front().clips.front().color_grade_versions,
-                    "CSP v38 must round-trip curve families, qualifier ranges and grade snapshots.");
+                    "CSP v39 must round-trip curve families, qualifier refinements and grade snapshots.");
+            std::ifstream curves_file(curves_path, std::ios::binary);
+            const std::string curves_text{
+                std::istreambuf_iterator<char>(curves_file),
+                std::istreambuf_iterator<char>()};
+            auto legacy_curves = QJsonDocument::fromJson(
+                QByteArray(curves_text.data(), static_cast<qsizetype>(curves_text.size()))).object();
+            legacy_curves.insert("version", 38);
+            const auto legacy_curves_path = directory / "color-curves-v38.csp";
+            writeText(legacy_curves_path, QJsonDocument(legacy_curves).toJson().toStdString());
+            const auto restored_legacy_curves = project::load(legacy_curves_path);
+            const auto migrated_curves = std::find_if(
+                restored_legacy_curves.timeline_tracks.front().clips.front().color_graph->nodes.begin(),
+                restored_legacy_curves.timeline_tracks.front().clips.front().color_graph->nodes.end(),
+                [](const color::Node& item) { return item.type == color::NodeType::Curves; });
+            require(migrated_curves != restored_legacy_curves.timeline_tracks.front().clips.front().color_graph->nodes.end() &&
+                    creative_suite::effects::tonalQualifierRefinementIsNeutral(
+                        migrated_curves->curves->parameters.qualifier),
+                    "CSP v38 must migrate qualifier matte refinements to neutral defaults.");
             auto pre_log_grade = QJsonDocument::fromJson(
                 QByteArray(grade_text.data(), static_cast<qsizetype>(grade_text.size()))).object();
             pre_log_grade.insert("version", 35);
@@ -654,7 +677,7 @@ int main(int argc, char** argv) {
         require(saved_json.find("\"track_id\": 1") != std::string::npos &&
                     saved_json.find("\"clip_id\": 1") != std::string::npos,
                 "Stable track and clip identifiers were not written to the project.");
-        require(saved_json.find("\"version\": 38") != std::string::npos &&
+        require(saved_json.find("\"version\": 39") != std::string::npos &&
                     saved_json.find("\"render_start_time_us\": 1234567") != std::string::npos &&
                     saved_json.find("\"frame_rate\"") != std::string::npos &&
                     saved_json.find("\"numerator\": 30000") != std::string::npos &&
@@ -1499,10 +1522,10 @@ int main(int argc, char** argv) {
 
         writeText(
             project_path,
-            R"({"format":"creative-suite.main-editor","version":39,"media":[],"timeline":{"clips":[]}})");
+            R"({"format":"creative-suite.main-editor","version":40,"media":[],"timeline":{"clips":[]}})");
         try {
             static_cast<void>(project::load(project_path));
-            throw std::runtime_error("CSP v39 was accepted by the v38 reader.");
+            throw std::runtime_error("CSP v40 was accepted by the v39 reader.");
         } catch (const project::ProjectError& error) {
             require(error.code() == project::ProjectErrorCode::UnsupportedVersion,
                     "Unsupported version returned the wrong error category.");

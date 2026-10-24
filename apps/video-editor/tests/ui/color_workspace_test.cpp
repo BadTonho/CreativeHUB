@@ -459,6 +459,41 @@ int main(int argc, char** argv) {
         auto* matte_preview = workspace.findChild<QLabel*>("colorQualifierMattePreview");
         require(matte_preview && !matte_preview->pixmap().isNull(),
                 "The Curves qualifier must provide a preview from the composed scope frame.");
+        const std::array<const char*, 5> matte_controls{
+            "colorQualifier_denoise_percent", "colorQualifier_clean_black_percent",
+            "colorQualifier_clean_white_percent", "colorQualifier_in_out_percent",
+            "colorQualifier_blur_radius_pixels"};
+        for (const auto* name : matte_controls)
+            require(workspace.findChild<QDoubleSpinBox*>(name) != nullptr,
+                "Curves must expose each persisted matte refinement control.");
+        auto* preview_mode = workspace.findChild<QComboBox*>("colorQualifierPreviewMode");
+        require(preview_mode && preview_mode->count() == 2 &&
+                    preview_mode->currentData().toString() == QStringLiteral("matte"),
+                "The Inspector matte preview must default to grayscale Matte mode.");
+        const auto viewer_frame = viewer->currentPayload();
+        const auto preview_edits_before = edits;
+        auto* denoise = workspace.findChild<QDoubleSpinBox*>("colorQualifier_denoise_percent");
+        denoise->setValue(30);
+        require(QMetaObject::invokeMethod(denoise, "editingFinished"),
+                "Denoise edit must commit through the graph history handler.");
+        const auto* refined_node = color::findNode(graph, scope_curves_id);
+        require(refined_node && refined_node->curves->parameters.qualifier.denoise_percent == 30,
+                "Denoise must update the selected Curves node qualifier.");
+        QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+        preview_mode = workspace.findChild<QComboBox*>("colorQualifierPreviewMode");
+        matte_preview = workspace.findChild<QLabel*>("colorQualifierMattePreview");
+        const auto matte_image = matte_preview->pixmap().toImage();
+        preview_mode->setCurrentIndex(preview_mode->findData(QStringLiteral("highlight")));
+        const auto highlight_image = matte_preview->pixmap().toImage();
+        require(preview_mode->currentData().toString() == QStringLiteral("highlight"),
+                "The Inspector preview mode selector must enter Highlight mode.");
+        require(!matte_image.isNull() && !highlight_image.isNull() && matte_image != highlight_image,
+                "Highlight mode must change the Inspector matte preview.");
+        require(edits == preview_edits_before + 1,
+                "Switching Matte/Highlight modes must not create a project history edit.");
+        require(viewer->currentPayload().rgba == viewer_frame.rgba &&
+                    viewer->currentPayload().gpu == viewer_frame.gpu,
+                "The Inspector matte preview must leave Viewer pixels unchanged.");
         auto* scope_mode = workspace.findChild<QComboBox*>("colorScopeMode");
         const std::array<QString, 4> scope_modes{QStringLiteral("waveform"),
             QStringLiteral("parade"), QStringLiteral("vectorscope"),

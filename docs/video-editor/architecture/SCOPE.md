@@ -9,6 +9,12 @@ unchanged workspace. Gallery albums, tags, comparison views, calibrated scopes
 and advanced color management remain outside the current stage. See the
 [Color Workspace Roadmap](../COLOR_WORKSPACE_ROADMAP.md).
 
+Curves qualifier refinement and the Inspector Matte/Highlight preview are
+available. Spatial refinement currently uses CPU processing; non-neutral GPU
+requests fall back to CPU while native GPU matte filters remain pending. The
+Inspector preview uses the latest composed frame; routing it from the selected
+Curves node's actual input remains pending.
+
 [Gaussian Blur](../features/GAUSSIAN_BLUR.md) is a static, maskable Fusion-only
 catalog node and an editable cscomp v3 stage. It shares CPU/GPU processing with
 Motion, persists in CSP v31 and is covered by `creative-suite-blur-interchange`.
@@ -70,7 +76,7 @@ The Video Editor currently includes:
 - clip movement, splitting, trimming, deletion, and bounded Undo/Redo;
 - keyframe-based seeking with bounded cache and temporal fallback;
 - hierarchical Media Browser bins, project labels, and offline state;
-- versioned `.csp` persistence through version 38, with versions 1 through 37
+- versioned `.csp` persistence through version 39, with versions 1 through 37
   readable, a rational Timeline rate and separate source/Timeline
   clip durations, video/image/text/audio/adjustment clip kinds, typed tracks,
   per-project timeline zoom, separate Video/Audio track-row heights, and optional shared/clip-specific
@@ -88,7 +94,7 @@ The Video Editor currently includes:
   Transform/Brightness parameters, and Undo/Redo;
 - per-clip Color correction graphs for supported visual clips, with effect and
   Parallel Mixer nodes, shared Edit parameter/enabled-state controls, Preview
-  and export evaluation, and version 38 persistence;
+  and export evaluation, and version 39 persistence;
 - Primary Grade Wheels and Bars editing of shared RGB Lift, Gamma, Gain, and
   Offset values; independent Log Shadows, Midtones, and Highlights; Contrast,
   Pivot, Saturation, Temperature and Tint; and Waveform, Parade, Vectorscope,
@@ -147,7 +153,7 @@ Text and transitions are drag-only, and Gain remains unavailable. Merge combines
 straight-alpha source-over. The graph output passes through the Color
 correction graph before Timeline transform/keyframes.
 
-Graph animation was introduced in `.csp` version 22 and is retained in version 38.
+Graph animation was introduced in `.csp` version 22 and is retained in version 39.
 Versions 1 through 21 retain their
 existing graph behavior and preserve their prior image result. New keyframes
 are linear, relative to the selected clip's start, and constrained to its

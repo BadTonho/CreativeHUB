@@ -112,9 +112,21 @@ std::optional<media::VideoFrame> evaluate(
                 effect->enabled = node->curves->enabled;
                 effect->video_curves = node->curves->parameters;
             }
-            if (!effect || !creative_suite::effects::applyStack(
-                    frame, std::span<const creative_suite::effects::EffectInstance>(
-                        &*effect, 1))) return std::nullopt;
+            if (!effect) return std::nullopt;
+            if (effect->enabled) {
+                if (node->type == NodeType::Curves) {
+                    creative_suite::effects::ColorAdjustmentParameters adjustment;
+                    adjustment.video_curves = node->curves->parameters;
+                    if (creative_suite::effects::applyColorAdjustment(
+                            frame, adjustment, should_cancel) !=
+                        creative_suite::effects::ProcessingResult::Completed)
+                        return std::nullopt;
+                } else if (!creative_suite::effects::applyStack(
+                        frame, std::span<const creative_suite::effects::EffectInstance>(
+                            &*effect, 1))) {
+                    return std::nullopt;
+                }
+            }
             values.emplace(id, std::move(frame));
         } else if (node->type == NodeType::ParallelMixer) {
             std::vector<std::pair<const media::VideoFrame*, double>> branches;

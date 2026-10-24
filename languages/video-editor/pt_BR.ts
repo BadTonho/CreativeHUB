@@ -65,67 +65,107 @@
         <translation>Nós de cor</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="1550"/>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="1551"/>
         <source>Master</source>
         <translation>Mestre</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="1551"/>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="1552"/>
         <source>Red</source>
         <translation>Vermelho</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="1552"/>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="1553"/>
         <source>Green</source>
         <translation>Verde</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="1553"/>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="1554"/>
         <source>Blue</source>
         <translation>Azul</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="1554"/>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="1555"/>
         <source>Hue vs Hue</source>
         <translation>Matiz vs Matiz</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="1555"/>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="1556"/>
         <source>Hue vs Saturation</source>
         <translation>Matiz vs Saturação</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="1556"/>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="1557"/>
         <source>Hue vs Luminance</source>
         <translation>Matiz vs Luminância</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="1557"/>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="1558"/>
         <source>Luminance vs Saturation</source>
         <translation>Luminância vs Saturação</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="1558"/>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="1559"/>
         <source>Saturation vs Saturation</source>
         <translation>Saturação vs Saturação</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="1561"/>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="1562"/>
         <source>Curve</source>
         <translation>Curva</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="1584"/>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="1585"/>
         <source>Enable tonal qualifier</source>
         <translation>Ativar qualificador tonal</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="1672"/>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="1649"/>
+        <source>Denoise</source>
+        <translation>Redução de ruído</translation>
+    </message>
+    <message>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="1651"/>
+        <source>Clean Black</source>
+        <translation>Limpar pretos</translation>
+    </message>
+    <message>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="1653"/>
+        <source>Clean White</source>
+        <translation>Limpar brancos</translation>
+    </message>
+    <message>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="1655"/>
+        <source>In/Out</source>
+        <translation>Expandir/retrair</translation>
+    </message>
+    <message>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="1725"/>
         <source>Matte preview</source>
         <translation>Prévia da máscara</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="1685"/>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="1698"/>
+        <source>Blur</source>
+        <translation>Desfoque</translation>
+    </message>
+    <message>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="1715"/>
+        <source>Preview</source>
+        <translation>Prévia</translation>
+    </message>
+    <message>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="1713"/>
+        <source>Matte</source>
+        <translation>Máscara</translation>
+    </message>
+    <message>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="1714"/>
+        <source>Highlight</source>
+        <translation>Realce</translation>
+    </message>
+    <message>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="1738"/>
         <source>Branch %1 weight</source>
         <translation>Peso do ramo %1</translation>
     </message>
@@ -161,23 +201,23 @@
         <translation>Forma de onda RGB</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="1503"/>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="1504"/>
         <source>Lift</source>
         <translation>Elevação</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="1505"/>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="1506"/>
         <source>Gamma</source>
         <translation>Gama</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="1507"/>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="1508"/>
         <source>Gain</source>
         <translation>Ganho</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="1500"/>
-        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="1509"/>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="1501"/>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="1510"/>
         <source>Offset</source>
         <translation>Deslocamento</translation>
     </message>
@@ -217,17 +257,17 @@
         <translation>Log</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="1488"/>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="1489"/>
         <source>Shadows</source>
         <translation>Sombras</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="1492"/>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="1493"/>
         <source>Midtones</source>
         <translation>Tons médios</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="1496"/>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="1497"/>
         <source>Highlights</source>
         <translation>Realces</translation>
     </message>
@@ -248,13 +288,14 @@
         <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="1094"/>
         <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="1124"/>
         <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="1236"/>
-        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="1671"/>
-        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="1718"/>
-        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="1734"/>
-        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="1745"/>
-        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="1761"/>
-        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="1770"/>
-        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="1816"/>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="1724"/>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="1771"/>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="1787"/>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="1798"/>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="1814"/>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="1823"/>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="1869"/>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="1893"/>
         <source>No frame</source>
         <translation>Sem quadro</translation>
     </message>
@@ -3836,22 +3877,22 @@ Erro: </translation>
 <context>
     <name>ui::ColorNodeCanvas</name>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_node_canvas.cpp" line="369"/>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_node_canvas.cpp" line="370"/>
         <source>Add Curves</source>
         <translation>Adicionar curvas</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_node_canvas.cpp" line="374"/>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_node_canvas.cpp" line="375"/>
         <source>Disable Curves</source>
         <translation>Desativar curvas</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_node_canvas.cpp" line="375"/>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_node_canvas.cpp" line="376"/>
         <source>Enable Curves</source>
         <translation>Ativar curvas</translation>
     </message>
     <message>
-        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_node_canvas.cpp" line="376"/>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_node_canvas.cpp" line="377"/>
         <source>Remove Curves</source>
         <translation>Remover curvas</translation>
     </message>

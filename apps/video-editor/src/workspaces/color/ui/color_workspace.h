@@ -101,6 +101,7 @@ private:
     QComboBox* primary_grade_mode_ = nullptr;
     QLabel* waveform_ = nullptr;
     QLabel* matte_preview_ = nullptr;
+    QComboBox* matte_preview_mode_ = nullptr;
     QComboBox* scope_mode_ = nullptr;
     QTimer* waveform_timer_ = nullptr;
     QImage latest_scope_source_;

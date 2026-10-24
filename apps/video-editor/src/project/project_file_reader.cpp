@@ -166,7 +166,7 @@ creative_suite::effects::CurvesPointList parseCurvesPointList(
 }
 
 creative_suite::effects::VideoCurvesParameters parseVideoCurves(
-    const QJsonValue& value, const std::filesystem::path& project_path) {
+    const QJsonValue& value, const std::filesystem::path& project_path, int version) {
     using namespace creative_suite::effects;
     if (!value.isObject())
         throwJson(ProjectErrorCode::InvalidValue, project_path,
@@ -195,6 +195,13 @@ creative_suite::effects::VideoCurvesParameters parseVideoCurves(
         if (!qualifier.value(QLatin1String(key)).isDouble())
             throwJson(ProjectErrorCode::InvalidValue, project_path,
                       "A Color Curves qualifier is missing a numeric range value.");
+    const char* refinement_keys[]{"denoise_percent", "clean_black_percent",
+        "clean_white_percent", "in_out_percent", "blur_radius_pixels"};
+    if (version >= color_matte_refinement_format_version)
+        for (const auto* key : refinement_keys)
+            if (!qualifier.value(QLatin1String(key)).isDouble())
+                throwJson(ProjectErrorCode::InvalidValue, project_path,
+                          "A Color Curves qualifier is missing a matte refinement value.");
     if (!qualifier.value("enabled").isBool())
         throwJson(ProjectErrorCode::InvalidValue, project_path,
                   "A Color Curves qualifier is missing its enabled state.");
@@ -204,6 +211,13 @@ creative_suite::effects::VideoCurvesParameters parseVideoCurves(
         qualifier.value("luminance_min").toDouble(), qualifier.value("luminance_max").toDouble(),
         qualifier.value("hue_softness").toDouble(), qualifier.value("saturation_softness").toDouble(),
         qualifier.value("luminance_softness").toDouble()};
+    if (version >= color_matte_refinement_format_version) {
+        result.qualifier.denoise_percent = qualifier.value("denoise_percent").toDouble();
+        result.qualifier.clean_black_percent = qualifier.value("clean_black_percent").toDouble();
+        result.qualifier.clean_white_percent = qualifier.value("clean_white_percent").toDouble();
+        result.qualifier.in_out_percent = qualifier.value("in_out_percent").toDouble();
+        result.qualifier.blur_radius_pixels = qualifier.value("blur_radius_pixels").toDouble();
+    }
     if (!validVideoCurves(result))
         throwJson(ProjectErrorCode::InvalidValue, project_path,
                   "A Color Curves node contains out-of-range settings.");
@@ -297,7 +311,7 @@ color::Graph parseColorGraph(const QJsonValue& value,
                           "A Color Curves node is missing its settings.");
             const auto curves_object = curves_value.toObject();
             node.curves = color::CurvesNode{curves_object.value("enabled").toBool(),
-                parseVideoCurves(curves_object.value("parameters"), project_path)};
+                parseVideoCurves(curves_object.value("parameters"), project_path, version)};
         } else if (node_object.contains("effect")) {
             throwJson(ProjectErrorCode::InvalidValue, project_path,
                       "Only Color effect nodes may contain effect settings.");

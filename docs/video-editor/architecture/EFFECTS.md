@@ -155,11 +155,17 @@ retain graph-defined order. The Color-only `video.curves` payload uses typed
 master/RGB curves, five hue/luminance/saturation curves, and a tonal qualifier;
 it is evaluated by the same CPU, OpenGL, and Vulkan processing boundary.
 Curves values and qualifier state live in the Color graph instead of the shared
-built-in effect catalog. Filter parameters, enabled states, connections,
+built-in effect catalog. Denoise, Clean Black/White, In/Out coverage shift, and
+Gaussian Blur refine its matte after hue/saturation/luminance selection. CPU
+frame evaluation preserves alpha and uses bounded matte buffers. Serial GPU
+composition reports spatial refinement as unsupported so Preview and export
+take the correctness-preserving CPU frame path; neutral and unrefined Curves
+continue through the existing GPU path. Filter parameters, enabled states, connections,
 mixer weights and positions are Timeline project data; caches and temporary
 preview state are not added by this library. The Video Editor persists graphs
-and named per-clip snapshots in CSP v38 as described in [PROJECT.md](PROJECT.md).
-Versions 1–37 migrate without Curves nodes, and versions through v36 start with
+and named per-clip snapshots in CSP v39 as described in [PROJECT.md](PROJECT.md).
+Versions 1–37 migrate without Curves nodes, versions through v38 receive neutral
+matte refinement values, and versions through v36 start with
 no saved grade versions. Copy/apply transfers only the current graph; saved
 versions remain owned by their clip.
 

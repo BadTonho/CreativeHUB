@@ -7,8 +7,16 @@ CPU, OpenGL, and Vulkan evaluate the same normalized RGB operation and preserve
 source alpha. Serial graphs use the CPU/OpenGL/Vulkan ordered-effect path and
 preserve the existing Primary Grade alpha and rounding behavior. Branched graphs evaluate
 their connected nodes once on RGBA frames and combine mixer inputs with a
-normalized weighted average; this currently uses the CPU evaluator. Color
-scopes offer RGB Waveform, RGB Parade, Vectorscope, and RGB Histogram. They
+normalized weighted average; this currently uses the CPU evaluator. The qualifier
+matte refines the input at the Curves stage using Denoise, Clean Black/White,
+In/Out, and Gaussian Blur in that order. CPU filtering uses bounded matte buffers,
+keeps alpha unchanged, and checks cancellation between rows. OpenGL and Vulkan
+return an explicit unsupported result for non-neutral spatial refinement so
+Preview and export use the CPU frame fallback; unrefined Curves retain the GPU
+path. R8 matte filter passes are not yet implemented on GPU. Inspector Matte
+and Highlight previews currently use the latest composed frame; they do not yet
+receive the selected Curves node's actual input frame. Color scopes offer RGB
+Waveform, RGB Parade, Vectorscope, and RGB Histogram. They
 sample the composed frame after correction and do not enter exported pixels.
 The Vectorscope plots Rec. 709-derived Cb/Cr with a neutral center and hue
 references. The Histogram overlays 256 bins per RGB channel, normalized by the

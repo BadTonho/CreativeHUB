@@ -432,6 +432,11 @@ void testVideoDocuments(const QString& root) {
     qualifier.enabled = true;
     qualifier.hue_min = 345;
     qualifier.hue_max = 15;
+    qualifier.denoise_percent = 25;
+    qualifier.clean_black_percent = 5;
+    qualifier.clean_white_percent = 95;
+    qualifier.in_out_percent = 3;
+    qualifier.blur_radius_pixels = 1.5;
     CS_TEST_CHECK(color::setCurvesQualifier(color_graph, curves_id, qualifier));
     color_document.timeline_tracks.front().clips.front().color_graph = color_graph;
     color_document.timeline_tracks.front().clips.front().effects =
@@ -443,9 +448,9 @@ void testVideoDocuments(const QString& root) {
         "hub-still.png",
         std::make_shared<const std::vector<std::uint8_t>>(
             std::vector<std::uint8_t>{137, 80, 78, 71, 13, 10, 26, 10}), false});
-    const auto color_path = QDir(QFileInfo(assets).absolutePath()).filePath("color-v38.csp");
+    const auto color_path = QDir(QFileInfo(assets).absolutePath()).filePath("color-v39.csp");
     project::save(fsPath(color_path), color_document);
-    const auto color_snapshot = backup(QDir(root).filePath("video-color-v38"), color_path);
+    const auto color_snapshot = backup(QDir(root).filePath("video-color-v39"), color_path);
     CS_TEST_CHECK(project::load(fsPath(color_snapshot.vault)) == color_document);
     CS_TEST_CHECK(project::load(fsPath(color_snapshot.restored)) == color_document);
     CS_TEST_CHECK(QFileInfo::exists(color_snapshot.vault + QStringLiteral(".gallery/hub-still.png")));
@@ -453,7 +458,7 @@ void testVideoDocuments(const QString& root) {
     auto future_video = QJsonDocument::fromJson(readBytes(color_path)).object();
     future_video.insert("version", project::current_format_version + 1);
     const auto future_video_path = QDir(QFileInfo(assets).absolutePath())
-        .filePath("video-future-v39.csp");
+        .filePath("video-future-v40.csp");
     writeBytes(future_video_path, QJsonDocument(future_video).toJson());
     creative_suite::hub::BackupManager future_video_manager(
         QDir(root).filePath("video-future-vault"));

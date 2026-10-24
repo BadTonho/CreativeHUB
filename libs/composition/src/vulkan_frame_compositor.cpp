@@ -67,6 +67,10 @@ struct Failure : std::runtime_error {
 void cancelled(const GpuFrameCompositor::CancellationPredicate& cancel) {
     if(cancel && cancel())throw Failure("",0,Status::Cancelled);
 }
+bool requiresCpuMatteRefinement(const effects::ColorAdjustmentParameters& value) {
+    return value.video_curves && !effects::tonalQualifierRefinementIsNeutral(
+        value.video_curves->qualifier);
+}
 #ifdef CS_HAS_VULKAN
 void check(VkResult result,const char* operation) {
     if(result!=VK_SUCCESS)throw Failure(operation,result);
@@ -1209,6 +1213,10 @@ OpenGlTextureCompositionResult VulkanFrameCompositor::processImage(const OpenGlI
     const CancellationPredicate& cancel,OpenGlCompositionTimings* timings) {
     try {
         cancelled(cancel);
+        if(operation.kind==OpenGlImageOperationKind::Color &&
+            std::any_of(operation.colors.begin(),operation.colors.end(),requiresCpuMatteRefinement))
+            throw Failure("Spatial Color qualifier refinement requires the CPU frame fallback.",
+                0,Status::Unsupported);
         if(operation.kind==OpenGlImageOperationKind::DropShadow)throw Failure("Drop Shadow is not implemented by Vulkan.",0,Status::Unsupported);
         if(operation.kind==OpenGlImageOperationKind::Glow)throw Failure("Glow is not implemented by Vulkan.",0,Status::Unsupported);
         if(operation.kind==OpenGlImageOperationKind::ApplyTrackMatte)
@@ -1331,6 +1339,17 @@ OpenGlTextureCompositionResult VulkanFrameCompositor::composeTexture(int width,i
         cancelled(cancel);
         if(std::any_of(layers.begin(),layers.end(),[](const auto& layer){return !validBlendMode(layer.blend_mode)||layer.blend_mode!=BlendMode::Normal;}))
             throw Failure("Non-Normal blend modes are not implemented by Vulkan.",0,Status::Unsupported);
+        for (const auto& layer : layers) {
+            const bool refined_adjustment = std::any_of(layer.gpu_color_adjustments.begin(),
+                layer.gpu_color_adjustments.end(), requiresCpuMatteRefinement) ||
+                std::any_of(layer.gpu_effects.begin(), layer.gpu_effects.end(), [](const auto& effect) {
+                    const auto* adjustment = std::get_if<effects::ColorAdjustmentParameters>(&effect);
+                    return adjustment && requiresCpuMatteRefinement(*adjustment);
+                });
+            if (refined_adjustment)
+                throw Failure("Spatial Color qualifier refinement requires the CPU frame fallback.",
+                    0,Status::Unsupported);
+        }
 #ifdef CS_HAS_VULKAN
         if(!device_ || !device_->valid())throw Failure("The Vulkan device is unavailable.");
         checkCapacity(width,height);

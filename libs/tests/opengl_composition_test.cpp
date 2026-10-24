@@ -494,6 +494,15 @@ void colorAdjustmentParity(OpenGlFrameCompositor& gpu) {
                 timings.color_adjustment_submission_nanoseconds > 0,
             "GPU color adjustment work is measured");
 
+    auto spatial_refinement = curve_adjustment;
+    spatial_refinement.video_curves->qualifier.denoise_percent = 1.0;
+    CompositionLayer refined_layer{&source};
+    refined_layer.gpu_color_adjustments = {spatial_refinement};
+    const auto refined_output = gpu.compose(source.width, source.height, {refined_layer});
+    require(refined_output.status == OpenGlCompositionStatus::Unsupported &&
+                refined_output.operation == "color-matte-refinement" && !refined_output.frame,
+            "OpenGL must route spatial Curves refinement to the CPU fallback.");
+
     int cancellation_checks = 0;
     const auto cancelled = gpu.compose(source.width, source.height, {layer},
         [&] { return ++cancellation_checks >= 5; });

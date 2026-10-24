@@ -283,16 +283,10 @@ bool applyStack(
         const auto id = std::string_view(effect.id);
         if (id == "video.curves") {
             if (identityVideoCurves(*effect.video_curves)) continue;
-            const auto tables = videoCurvesLuts(*effect.video_curves);
-            for (int y = 0; y < frame.height; ++y) {
-                auto* pixel = frame.rgba_pixels.data() +
-                    static_cast<std::size_t>(y) * static_cast<std::size_t>(frame.stride);
-                for (int x = 0; x < frame.width; ++x, pixel += 4) {
-                    const auto result = evaluateVideoCurves(*effect.video_curves, tables,
-                        {pixel[0] / 255.0, pixel[1] / 255.0, pixel[2] / 255.0});
-                    pixel[0] = result[0]; pixel[1] = result[1]; pixel[2] = result[2];
-                }
-            }
+            try {
+                if (applyVideoCurvesFrame(frame, *effect.video_curves) !=
+                    ProcessingResult::Completed) return false;
+            } catch (...) { return false; }
             continue;
         }
         const auto primary_grade = id == "video.primary_grade"
@@ -344,20 +338,7 @@ ProcessingResult applyColorAdjustment(
     if (!validFrame(frame) || !validColorAdjustment(parameters))
         return ProcessingResult::InvalidInput;
     if (parameters.video_curves) {
-        if (identityVideoCurves(*parameters.video_curves)) return ProcessingResult::Completed;
-        const auto tables = videoCurvesLuts(*parameters.video_curves);
-        for (int y = 0; y < frame.height; ++y) {
-            if (should_cancel && should_cancel()) return ProcessingResult::Cancelled;
-            auto* row = frame.rgba_pixels.data() +
-                static_cast<std::size_t>(y) * static_cast<std::size_t>(frame.stride);
-            for (int x = 0; x < frame.width; ++x) {
-                auto* pixel = row + static_cast<std::size_t>(x) * 4U;
-                const auto result = evaluateVideoCurves(*parameters.video_curves, tables,
-                    {pixel[0] / 255.0, pixel[1] / 255.0, pixel[2] / 255.0});
-                pixel[0] = result[0]; pixel[1] = result[1]; pixel[2] = result[2];
-            }
-        }
-        return ProcessingResult::Completed;
+        return applyVideoCurvesFrame(frame, *parameters.video_curves, should_cancel);
     }
     if (parameters.brightness == 0.0 && parameters.contrast_percent == 100.0 &&
         parameters.saturation_percent == 100.0 &&
@@ -386,6 +367,51 @@ ProcessingResult applyColorAdjustment(
             auto* pixel = row + static_cast<std::size_t>(x) * 4U;
             const auto rgb=colorAdjustmentRgb({pixel[0]/255.,pixel[1]/255.,pixel[2]/255.},parameters);
             for(int c=0;c<3;++c)pixel[c]=rgb[c];
+        }
+    }
+    return ProcessingResult::Completed;
+}
+
+ProcessingResult applyVideoCurvesFrame(
+    media::RgbaFrame& frame, const VideoCurvesParameters& parameters,
+    const std::function<bool()>& should_cancel) {
+    if (!validFrame(frame) || !validVideoCurves(parameters))
+        return ProcessingResult::InvalidInput;
+    if (identityVideoCurves(parameters)) return ProcessingResult::Completed;
+    const auto tables = videoCurvesLuts(parameters);
+    if (tonalQualifierRefinementIsNeutral(parameters.qualifier)) {
+        for (int y = 0; y < frame.height; ++y) {
+            if (should_cancel && should_cancel()) return ProcessingResult::Cancelled;
+            auto* row = frame.rgba_pixels.data() +
+                static_cast<std::size_t>(y) * static_cast<std::size_t>(frame.stride);
+            for (int x = 0; x < frame.width; ++x) {
+                auto* pixel = row + static_cast<std::size_t>(x) * 4U;
+                const auto result = evaluateVideoCurves(parameters, tables,
+                    {pixel[0] / 255.0, pixel[1] / 255.0, pixel[2] / 255.0});
+                pixel[0] = result[0]; pixel[1] = result[1]; pixel[2] = result[2];
+            }
+        }
+        return ProcessingResult::Completed;
+    }
+    auto matte = refinedTonalQualifierMatte(parameters.qualifier, frame.rgba_pixels,
+        frame.width, frame.height, frame.stride, should_cancel);
+    if (matte.size() != static_cast<std::size_t>(frame.width) * frame.height)
+        return should_cancel && should_cancel()
+            ? ProcessingResult::Cancelled : ProcessingResult::InvalidInput;
+    auto full_coverage = parameters;
+    full_coverage.qualifier.enabled = false;
+    for (int y = 0; y < frame.height; ++y) {
+        if (should_cancel && should_cancel()) return ProcessingResult::Cancelled;
+        auto* row = frame.rgba_pixels.data() +
+            static_cast<std::size_t>(y) * static_cast<std::size_t>(frame.stride);
+        for (int x = 0; x < frame.width; ++x) {
+            auto* pixel = row + static_cast<std::size_t>(x) * 4U;
+            const double coverage = matte[static_cast<std::size_t>(y) * frame.width + x] / 255.0;
+            const auto adjusted = evaluateVideoCurves(full_coverage, tables,
+                {pixel[0] / 255.0, pixel[1] / 255.0, pixel[2] / 255.0});
+            for (std::size_t channel = 0; channel < 3; ++channel)
+                pixel[channel] = static_cast<std::uint8_t>(std::clamp(std::lround(
+                    pixel[channel] * (1.0 - coverage) + adjusted[channel] * coverage), 0L, 255L));
         }
     }
     return ProcessingResult::Completed;
