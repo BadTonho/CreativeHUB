@@ -1,5 +1,6 @@
 #include "workspaces/color/ui/color_workspace.h"
 #include "workspaces/color/ui/color_node_canvas.h"
+#include "workspaces/color/evaluation/color_graph_evaluator.h"
 #include "ui/preview/preview_widget.h"
 
 #include <QApplication>
@@ -419,7 +420,16 @@ int main(int argc, char** argv) {
         require(removed_id == QStringLiteral("still-a"),
                 "Color Gallery removal did not target the selected still.");
         auto scope_curves_graph = color::makePassthroughGraph();
-        require(color::insertCurvesAfter(scope_curves_graph, 1),
+        const auto upstream_grayscale = creative_suite::effects::makeDefaultInstance(
+            "video.grayscale");
+        require(color::insertEffectAfter(scope_curves_graph, 1, upstream_grayscale),
+                "Could not create the upstream Curves preview correction.");
+        const auto upstream_node = std::find_if(scope_curves_graph.nodes.begin(),
+            scope_curves_graph.nodes.end(), [](const color::Node& node) {
+                return node.effect && node.effect->id == "video.grayscale";
+            });
+        require(upstream_node != scope_curves_graph.nodes.end() &&
+                    color::insertCurvesAfter(scope_curves_graph, upstream_node->id),
                 "Could not create the scope matte-preview Curves fixture.");
         const auto scope_curves_node = std::find_if(scope_curves_graph.nodes.begin(),
             scope_curves_graph.nodes.end(), [](const color::Node& node) {
@@ -445,6 +455,25 @@ int main(int argc, char** argv) {
                               0, 0, 255, 255, 255, 255, 255, 255};
         viewer->setFrame(frame);
         workspace.setPreviewWidget(viewer);
+        int curves_input_requests = 0;
+        quint64 last_curves_input_request = 0;
+        media::VideoFramePtr captured_curves_input;
+        workspace.setColorInputFrameRequestHandler(
+            [&](quint64 request_id, timeline::ClipId clip_id, color::NodeId node_id,
+                qint64 timeline_frame, quint64 delivery_epoch, quint64 revision,
+                quint64 playback_generation, color::Graph request_graph) {
+                require(clip_id == 7 && node_id == scope_curves_id,
+                    "Curves input requests must identify the active clip and node.");
+                ++curves_input_requests;
+                last_curves_input_request = request_id;
+                auto evaluated = color::evaluateInput(request_graph, node_id, *frame);
+                if (!evaluated) return;
+                captured_curves_input =
+                    std::make_shared<const media::VideoFrame>(*evaluated);
+                workspace.acceptColorInputFrame(request_id, clip_id, node_id,
+                    captured_curves_input, timeline_frame, delivery_epoch, revision,
+                    playback_generation);
+            });
         workspace.setActive(true);
         auto* waveform = workspace.findChild<QLabel*>("colorWaveform");
         require(waveform != nullptr, "Color waveform display must exist.");
@@ -457,8 +486,22 @@ int main(int argc, char** argv) {
         require(!waveform->pixmap().isNull() && waveform->pixmap().size() == QSize(480, 256),
                 "Waveform must process the composed RGBA frame asynchronously at bounded resolution.");
         auto* matte_preview = workspace.findChild<QLabel*>("colorQualifierMattePreview");
-        require(matte_preview && !matte_preview->pixmap().isNull(),
-                "The Curves qualifier must provide a preview from the composed scope frame.");
+        require(matte_preview && !matte_preview->pixmap().isNull() &&
+                    curves_input_requests > 0 && captured_curves_input &&
+                    captured_curves_input->rgba_pixels[0] ==
+                        captured_curves_input->rgba_pixels[1] &&
+                    captured_curves_input->rgba_pixels[1] ==
+                        captured_curves_input->rgba_pixels[2],
+                "The Curves qualifier preview must use its upstream corrected input frame.");
+        const auto matte_before_stale_input = matte_preview->pixmap().toImage();
+        auto later_frame = std::make_shared<media::VideoFrame>(*frame);
+        later_frame->rgba_pixels[0] = 17;
+        viewer->setFrame(later_frame);
+        workspace.acceptColorInputFrame(last_curves_input_request, 7, scope_curves_id,
+            captured_curves_input, 0, 0, 0, 0);
+        require(matte_preview->pixmap().toImage() == matte_before_stale_input,
+                "A delayed Curves input response must be ignored after the Viewer frame changes.");
+        viewer->setFrame(frame);
         const std::array<const char*, 5> matte_controls{
             "colorQualifier_denoise_percent", "colorQualifier_clean_black_percent",
             "colorQualifier_clean_white_percent", "colorQualifier_in_out_percent",

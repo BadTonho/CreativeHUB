@@ -382,17 +382,72 @@ void primaryGradeOnly(const std::shared_ptr<VulkanDevice>& device) {
     curves.qualifier.luminance_max = 97.0;
     effects::ColorAdjustmentParameters curve_adjustment;
     curve_adjustment.video_curves = curves;
-    auto spatial_refinement = curve_adjustment;
-    spatial_refinement.video_curves->qualifier.blur_radius_pixels = 2.0;
-    OpenGlImageOperation refined_operation;
-    refined_operation.kind = OpenGlImageOperationKind::Color;
-    refined_operation.background.rgba = &source;
-    refined_operation.colors = {spatial_refinement};
-    const auto refined_result = gpu.processImage(refined_operation);
-    require(refined_result.status == OpenGlCompositionStatus::Unsupported &&
-                !refined_result.frame &&
-                refined_result.cause.find("CPU frame fallback") != std::string::npos,
-            "Vulkan must route spatial Curves refinement to the CPU fallback.");
+    auto refinement_source = fixture(31, 19, true);
+    const std::array<std::array<double, 4>, 4> refinement_controls{{
+        {30.0, 0.0, 100.0, 0.0},
+        {0.0, 12.0, 91.0, -27.0},
+        {0.0, 0.0, 100.0, 0.0},
+        {65.0, 8.0, 89.0, 23.0}}};
+    for (std::size_t index = 0; index < refinement_controls.size(); ++index) {
+        auto spatial_refinement = curve_adjustment;
+        const auto& controls = refinement_controls[index];
+        spatial_refinement.video_curves->qualifier.denoise_percent = controls[0];
+        spatial_refinement.video_curves->qualifier.clean_black_percent = controls[1];
+        spatial_refinement.video_curves->qualifier.clean_white_percent = controls[2];
+        spatial_refinement.video_curves->qualifier.in_out_percent = controls[3];
+        spatial_refinement.video_curves->qualifier.blur_radius_pixels =
+            index == 2 || index == 3 ? 2.0 : 0.0;
+        auto expected_refinement = refinement_source;
+        require(effects::applyColorAdjustment(expected_refinement, spatial_refinement) ==
+                    effects::ProcessingResult::Completed,
+                "Vulkan CPU qualifier refinement reference failed.");
+        OpenGlImageOperation refined_operation;
+        refined_operation.kind = OpenGlImageOperationKind::Color;
+        refined_operation.background.rgba = &refinement_source;
+        refined_operation.colors = {spatial_refinement};
+        const auto refined_result = gpu.processImage(refined_operation);
+        require(refined_result.status == OpenGlCompositionStatus::Complete &&
+                    refined_result.frame,
+                "Vulkan must process spatial Curves refinement on the GPU: " +
+                    refined_result.cause);
+        const auto refined_pixels = gpu.readback(refined_result.frame);
+        require(bool(refined_pixels.frame),
+                "Vulkan qualifier refinement readback failed: " + refined_pixels.cause);
+        parity(expected_refinement, *refined_pixels.frame, 1,
+            "Vulkan qualifier refinement and alpha preservation");
+    }
+
+    auto composed_refinement = curve_adjustment;
+    composed_refinement.video_curves->qualifier.denoise_percent = 65.0;
+    composed_refinement.video_curves->qualifier.clean_black_percent = 8.0;
+    composed_refinement.video_curves->qualifier.clean_white_percent = 89.0;
+    composed_refinement.video_curves->qualifier.in_out_percent = 23.0;
+    composed_refinement.video_curves->qualifier.blur_radius_pixels = 2.0;
+    auto composed_refinement_source = source;
+    require(effects::applyColorAdjustment(composed_refinement_source,
+                composed_refinement) == effects::ProcessingResult::Completed,
+            "Vulkan CPU composed qualifier refinement reference failed.");
+    CompositionLayer refined_layer{&source};
+    refined_layer.gpu_color_adjustments = {composed_refinement};
+    const auto refined_frame = gpu.compose(source.width, source.height, {refined_layer});
+    const auto expected_refined_frame = FrameCompositor::compose(
+        source.width, source.height, {{&composed_refinement_source}});
+    require(refined_frame.status == OpenGlCompositionStatus::Complete &&
+                refined_frame.frame && expected_refined_frame,
+            "Vulkan composition must evaluate refined Curves on the GPU: " +
+                refined_frame.cause);
+    parity(*expected_refined_frame, *refined_frame.frame, 1,
+        "Vulkan composed qualifier refinement");
+    OpenGlImageOperation cancelled_refinement;
+    cancelled_refinement.kind = OpenGlImageOperationKind::Color;
+    cancelled_refinement.background.rgba = &source;
+    cancelled_refinement.colors = {composed_refinement};
+    int refinement_cancel_checks = 0;
+    const auto cancelled_refinement_result = gpu.processImage(cancelled_refinement,
+        [&] { return ++refinement_cancel_checks >= 3; });
+    require(cancelled_refinement_result.status == OpenGlCompositionStatus::Cancelled &&
+                !cancelled_refinement_result.frame,
+            "Vulkan matte passes must honor cancellation without publishing a partial frame.");
     auto second_expanded = expanded;
     second_expanded.log_shadows_blue = -33;
     second_expanded.log_midtones_red = 18;

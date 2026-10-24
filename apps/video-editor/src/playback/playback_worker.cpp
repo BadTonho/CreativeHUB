@@ -18,6 +18,8 @@
 #include <QFileInfo>
 #include <QByteArray>
 #include <QMetaObject>
+#include <QPointer>
+#include <QThreadPool>
 #include <QTimer>
 
 #include <algorithm>
@@ -176,6 +178,13 @@ void PlaybackWorker::clearCompositionCache() noexcept {
     cached_composition_generation_ = 0;
     cached_composition_global_frame_ = -1;
     cached_composition_frame_ = {};
+    cached_color_inputs_.clear();
+    cached_color_input_timeline_frame_ = -1;
+    cached_color_input_revision_ = 0;
+    cached_color_input_generation_ = 0;
+    cached_color_input_delivery_epoch_ = 0;
+    latest_color_input_request_id_.store(0, std::memory_order_release);
+    queued_color_input_request_.reset();
     pending_gpu_frame_.reset();
 }
 
@@ -1183,6 +1192,19 @@ void PlaybackWorker::renderCompositionFrame(
         if (!decoded_layers.has_value()) {
             throw media::MediaError("The timeline composition could not produce a frame.");
         }
+        cached_color_inputs_.clear();
+        cached_color_input_timeline_frame_ = global_frame;
+        cached_color_input_revision_ = composition_revision_;
+        cached_color_input_generation_ = generation_;
+        cached_color_input_delivery_epoch_ = delivery_epoch_;
+        for (const auto& layer : *decoded_layers) {
+            if (!layer.color_graph.has_value()) continue;
+            const auto& composition = composition_sessions_[layer.composition_session_index];
+            cached_color_inputs_.push_back(CachedColorInput{
+                layer.clip_id, layer.color_input_frame, layer.color_input_texture,
+                *layer.color_graph, layer.native_frame, composition.session.get(),
+                layer.source_frame});
+        }
 
         std::optional<media::VideoFrame> composed;
         auto& composition_timings = composition_timings_scratch_;
@@ -1550,6 +1572,225 @@ void PlaybackWorker::requestScopeFrame(quint64 request_id, qint64 timeline_frame
     scope_readback_timer_->start();
 }
 
+void PlaybackWorker::requestColorInputFrame(quint64 request_id,
+    timeline::ClipId clip_id, color::NodeId node_id, qint64 timeline_frame,
+    quint64 project_generation, quint64 requested_delivery_epoch,
+    quint64 requested_revision, quint64 generation, color::Graph graph) {
+    using creative_suite::composition::OpenGlCompositionStatus;
+    if (request_id == 0) return;
+    latest_color_input_request_id_.store(request_id, std::memory_order_release);
+    const auto cached = std::find_if(cached_color_inputs_.begin(),
+        cached_color_inputs_.end(), [clip_id](const CachedColorInput& input) {
+            return input.clip_id == clip_id;
+        });
+    const bool identity_matches = generation == generation_ &&
+        requested_delivery_epoch == delivery_epoch_ &&
+        requested_revision == composition_revision_ &&
+        timeline_frame == cached_color_input_timeline_frame_ &&
+        cached_color_input_revision_ == requested_revision &&
+        cached_color_input_generation_ == generation &&
+        cached_color_input_delivery_epoch_ == requested_delivery_epoch &&
+        cached != cached_color_inputs_.end() && cached->graph == graph &&
+        color::findNode(graph, node_id) != nullptr;
+    if (!identity_matches) {
+        emit colorInputFrameReady(request_id, clip_id, node_id, {}, timeline_frame,
+            project_generation, requested_delivery_epoch, requested_revision,
+            generation);
+        return;
+    }
+    if (pending_scope_readback_) {
+        queued_color_input_request_ = QueuedColorInputRequest{
+            request_id, clip_id, node_id, timeline_frame, project_generation,
+            requested_delivery_epoch, requested_revision, generation,
+            std::move(graph)};
+        return;
+    }
+    auto cpu_input = cached->frame && usableRgbaFrame(*cached->frame)
+        ? cached->frame : VideoFramePtr{};
+    auto texture = cached->texture;
+    if (!cpu_input && (!texture || !texture->valid()) && cached->native_frame) {
+        using creative_suite::composition::OpenGlCompositionStatus;
+        if (!gpu_compositor_ && gpu_composition_enabled_ && !gpu_composition_failed_) {
+            try {
+                gpu_compositor_ = createGpuFrameCompositor(gpu_surface_,
+                    creative_suite::composition::OpenGlPrecisionPolicy::Automatic,
+                    gpu_share_context_ ? gpu_share_context_ : QOpenGLContext::globalShareContext(),
+                    gpu_texture_budget_);
+            } catch (const std::exception& error) {
+                logging::Logger::instance().log(logging::Level::Error,
+                    "color-curves-input", "create_gpu_backend", error.what(),
+                    {{"clip_id", std::to_string(clip_id)},
+                     {"node_id", std::to_string(node_id)},
+                     {"timeline_frame", std::to_string(timeline_frame)},
+                     {"fallback", "cpu-source-decode"}});
+            }
+        }
+        if (gpu_compositor_) {
+            try {
+                const auto imported = gpu_compositor_->importFrame(cached->native_frame);
+                if (imported.status == OpenGlCompositionStatus::Complete && imported.frame) {
+                    texture = imported.frame;
+                } else {
+                    logging::Logger::instance().log(
+                        imported.status == OpenGlCompositionStatus::Unsupported
+                            ? logging::Level::Warning : logging::Level::Error,
+                        "color-curves-input", imported.operation, imported.cause,
+                        {{"error_code", std::to_string(imported.error_code)},
+                         {"clip_id", std::to_string(clip_id)},
+                         {"node_id", std::to_string(node_id)},
+                         {"timeline_frame", std::to_string(timeline_frame)},
+                         {"fallback", "cpu-source-decode"}});
+                }
+            } catch (const std::exception& error) {
+                logging::Logger::instance().log(
+                    logging::Level::Error, "color-curves-input", "import_native_source",
+                    error.what(),
+                    {{"clip_id", std::to_string(clip_id)},
+                     {"node_id", std::to_string(node_id)},
+                     {"timeline_frame", std::to_string(timeline_frame)},
+                     {"fallback", "cpu-source-decode"}});
+            }
+        }
+        if ((!texture || !texture->valid()) && cached->decode_session &&
+            cached->source_frame >= 0) {
+            try {
+                const auto decoded = cached->decode_session->decode_frame_at(
+                    cached->source_frame);
+                if (decoded && *decoded && usableRgbaFrame(**decoded))
+                    cpu_input = *decoded;
+            } catch (const std::exception& error) {
+                logging::Logger::instance().log(logging::Level::Error,
+                    "color-curves-input", "decode_native_source_fallback", error.what(),
+                    {{"clip_id", std::to_string(clip_id)},
+                     {"node_id", std::to_string(node_id)},
+                     {"source_frame", std::to_string(cached->source_frame)},
+                     {"timeline_frame", std::to_string(timeline_frame)}});
+            }
+        }
+    }
+    bool gpu_prefix_evaluated = false;
+    const bool has_gpu_input = (texture && texture->valid()) || bool(cpu_input);
+    if (!pending_scope_readback_ && has_gpu_input && gpu_compositor_) {
+        const auto prefix = color::linearEffectStackBefore(graph, node_id);
+        const auto passes = prefix
+            ? creative_suite::effects::colorAdjustmentPasses(*prefix)
+            : std::optional<std::vector<creative_suite::effects::ColorAdjustmentParameters>>{};
+        if (passes) {
+            if (passes->empty()) {
+                gpu_prefix_evaluated = bool(texture && texture->valid());
+            } else {
+                creative_suite::composition::OpenGlImageOperation operation;
+                operation.kind = creative_suite::composition::OpenGlImageOperationKind::Color;
+                if (texture && texture->valid())
+                    operation.background = {nullptr, texture};
+                else
+                    operation.background.rgba = cpu_input.get();
+                operation.colors = *passes;
+                const auto processed = gpu_compositor_->processImage(operation);
+                if (processed.status == OpenGlCompositionStatus::Complete && processed.frame) {
+                    texture = processed.frame;
+                    gpu_prefix_evaluated = true;
+                } else {
+                    logging::Logger::instance().log(
+                        processed.status == OpenGlCompositionStatus::Unsupported
+                            ? logging::Level::Warning : logging::Level::Error,
+                        "color-curves-input", processed.operation, processed.cause,
+                        {{"error_code", std::to_string(processed.error_code)},
+                         {"clip_id", std::to_string(clip_id)},
+                         {"node_id", std::to_string(node_id)},
+                         {"timeline_frame", std::to_string(timeline_frame)},
+                         {"fallback", cpu_input ? "cpu-frame" : "cpu-after-readback"}});
+                }
+            }
+        }
+    }
+    if (!gpu_prefix_evaluated && cpu_input) {
+        evaluateColorInputAsync(request_id, clip_id, node_id, cpu_input,
+            std::move(graph), timeline_frame, project_generation,
+            requested_delivery_epoch, requested_revision, generation);
+        return;
+    }
+    if (!gpu_prefix_evaluated && !texture) {
+        emit colorInputFrameReady(request_id, clip_id, node_id, {}, timeline_frame,
+            project_generation, requested_delivery_epoch, requested_revision,
+            generation);
+        return;
+    }
+    if (!gpu_prefix_evaluated && !texture->valid()) {
+        emit colorInputFrameReady(request_id, clip_id, node_id, {}, timeline_frame,
+            project_generation, requested_delivery_epoch, requested_revision,
+            generation);
+        return;
+    }
+    if (gpu_prefix_evaluated && (!texture || !texture->valid())) {
+        emit colorInputFrameReady(request_id, clip_id, node_id, {}, timeline_frame,
+            project_generation, requested_delivery_epoch, requested_revision,
+            generation);
+        return;
+    }
+    if (!gpu_compositor_) {
+        emit colorInputFrameReady(request_id, clip_id, node_id, {}, timeline_frame,
+            project_generation, requested_delivery_epoch, requested_revision,
+            generation);
+        return;
+    }
+    if (prepared_scope_compositor_ != gpu_compositor_.get() ||
+        prepared_scope_width_ != texture->width() ||
+        prepared_scope_height_ != texture->height()) {
+        unsigned prepared_slots = 0;
+        const auto prepared = gpu_compositor_->prepareAsyncReadback(texture->width(),
+            texture->height(), 64ULL * 1024 * 1024, 1, &prepared_slots);
+        if (prepared.status != OpenGlCompositionStatus::Complete || prepared_slots == 0) {
+            logging::Logger::instance().log(
+                prepared.status == OpenGlCompositionStatus::Unsupported
+                    ? logging::Level::Warning : logging::Level::Error,
+                "color-curves-input", prepared.operation, prepared.cause,
+                {{"error_code", std::to_string(prepared.error_code)},
+                 {"clip_id", std::to_string(clip_id)},
+                 {"node_id", std::to_string(node_id)},
+                 {"timeline_frame", std::to_string(timeline_frame)}});
+            emit colorInputFrameReady(request_id, clip_id, node_id, {}, timeline_frame,
+                project_generation, requested_delivery_epoch, requested_revision,
+                generation);
+            return;
+        }
+        prepared_scope_compositor_ = gpu_compositor_.get();
+        prepared_scope_width_ = texture->width();
+        prepared_scope_height_ = texture->height();
+    }
+    const auto submitted = gpu_compositor_->submitAsyncReadback(texture);
+    if (submitted.status != OpenGlCompositionStatus::Complete ||
+        submitted.ticket.value == 0) {
+        if (submitted.status != OpenGlCompositionStatus::Busy) {
+            logging::Logger::instance().log(
+                submitted.status == OpenGlCompositionStatus::Unsupported
+                    ? logging::Level::Warning : logging::Level::Error,
+                "color-curves-input", submitted.operation, submitted.cause,
+                {{"error_code", std::to_string(submitted.error_code)},
+                 {"clip_id", std::to_string(clip_id)},
+                 {"node_id", std::to_string(node_id)},
+                 {"timeline_frame", std::to_string(timeline_frame)}});
+        }
+        emit colorInputFrameReady(request_id, clip_id, node_id, {}, timeline_frame,
+            project_generation, requested_delivery_epoch, requested_revision,
+            generation);
+        return;
+    }
+    if (!scope_readback_timer_) {
+        scope_readback_timer_ = new QTimer(this);
+        scope_readback_timer_->setTimerType(Qt::PreciseTimer);
+        scope_readback_timer_->setInterval(8);
+        connect(scope_readback_timer_, &QTimer::timeout, this,
+            &PlaybackWorker::pollScopeReadback);
+    }
+    pending_scope_readback_ = PendingScopeReadback{
+        gpu_compositor_.get(), submitted.ticket, texture, request_id, generation,
+        requested_revision, timeline_frame, true, clip_id, node_id,
+        project_generation, requested_delivery_epoch, std::move(graph),
+        gpu_prefix_evaluated};
+    scope_readback_timer_->start();
+}
+
 void PlaybackWorker::pollScopeReadback() {
     using creative_suite::composition::OpenGlCompositionStatus;
     if (!pending_scope_readback_) {
@@ -1566,7 +1807,8 @@ void PlaybackWorker::pollScopeReadback() {
         if (collected.status == OpenGlCompositionStatus::Complete && collected.frame) {
             frame = std::make_shared<const media::VideoFrame>(std::move(*collected.frame));
         } else if (collected.status != OpenGlCompositionStatus::Cancelled) {
-            logging::Logger::instance().log(logging::Level::Error, "color-scopes",
+            logging::Logger::instance().log(logging::Level::Error,
+                pending.color_input ? "color-curves-input" : "color-scopes",
                 collected.operation, collected.cause,
                 {{"error_code", std::to_string(collected.error_code)},
                  {"timeline_frame", std::to_string(pending.timeline_frame)},
@@ -1581,7 +1823,8 @@ void PlaybackWorker::pollScopeReadback() {
     } else {
         logging::Logger::instance().log(ready.status == OpenGlCompositionStatus::Unsupported
                 ? logging::Level::Warning : logging::Level::Error,
-            "color-scopes", ready.operation, ready.cause,
+            pending.color_input ? "color-curves-input" : "color-scopes",
+            ready.operation, ready.cause,
             {{"error_code", std::to_string(ready.error_code)},
              {"timeline_frame", std::to_string(pending.timeline_frame)},
              {"composition_revision", std::to_string(pending.composition_revision)},
@@ -1597,10 +1840,99 @@ void PlaybackWorker::pollScopeReadback() {
     const bool still_current = pending.generation == generation_ &&
         pending.composition_revision == composition_revision_ &&
         pending.timeline_frame == cached_composition_global_frame_ &&
-        cached_composition_generation_ == pending.generation;
+        cached_composition_generation_ == pending.generation &&
+        (!pending.color_input ||
+            (pending.request_id == latest_color_input_request_id_.load(
+                 std::memory_order_acquire) &&
+             pending.timeline_frame == cached_color_input_timeline_frame_ &&
+             pending.composition_revision == cached_color_input_revision_ &&
+             pending.generation == cached_color_input_generation_ &&
+             pending.delivery_epoch == cached_color_input_delivery_epoch_));
     if (!still_current) frame.reset();
-    emit scopeFrameReady(pending.request_id, std::move(frame), pending.timeline_frame,
-        pending.composition_revision, pending.generation);
+    if (pending.color_input) {
+        if (frame) {
+            if (pending.gpu_prefix_evaluated) {
+                emit colorInputFrameReady(pending.request_id, pending.clip_id,
+                    pending.node_id, std::move(frame), pending.timeline_frame,
+                    pending.project_generation, pending.delivery_epoch,
+                    pending.composition_revision, pending.generation);
+            } else {
+                evaluateColorInputAsync(pending.request_id, pending.clip_id,
+                    pending.node_id, std::move(frame), pending.color_graph,
+                    pending.timeline_frame, pending.project_generation,
+                    pending.delivery_epoch,
+                    pending.composition_revision,
+                    pending.generation);
+            }
+        } else {
+            emit colorInputFrameReady(pending.request_id, pending.clip_id,
+                pending.node_id, {}, pending.timeline_frame,
+                pending.project_generation, pending.delivery_epoch,
+                pending.composition_revision,
+                pending.generation);
+        }
+    } else {
+        emit scopeFrameReady(pending.request_id, std::move(frame), pending.timeline_frame,
+            pending.composition_revision, pending.generation);
+    }
+    if (queued_color_input_request_) {
+        auto queued = std::move(*queued_color_input_request_);
+        queued_color_input_request_.reset();
+        requestColorInputFrame(queued.request_id, queued.clip_id, queued.node_id,
+            queued.timeline_frame, queued.project_generation, queued.delivery_epoch,
+            queued.composition_revision, queued.generation, std::move(queued.graph));
+    }
+}
+
+void PlaybackWorker::evaluateColorInputAsync(quint64 request_id,
+    timeline::ClipId clip_id, color::NodeId node_id, VideoFramePtr frame,
+    color::Graph graph, qint64 timeline_frame, quint64 project_generation,
+    quint64 requested_delivery_epoch,
+    quint64 requested_revision, quint64 generation) {
+    QPointer<PlaybackWorker> target(this);
+    QThreadPool::globalInstance()->start(
+        [target, request_id, clip_id, node_id, frame = std::move(frame),
+         graph = std::move(graph), timeline_frame, requested_delivery_epoch,
+         project_generation, requested_revision, generation]() mutable {
+            if (!target || target->latest_color_input_request_id_.load(
+                    std::memory_order_acquire) != request_id) return;
+            const auto should_cancel = [target, request_id] {
+                return !target || target->latest_color_input_request_id_.load(
+                    std::memory_order_acquire) != request_id;
+            };
+            std::optional<media::VideoFrame> result;
+            try {
+                result = color::evaluateInput(graph, node_id, *frame, should_cancel);
+            } catch (const std::exception& error) {
+                logging::Logger::instance().log(logging::Level::Error,
+                    "color-curves-input", "evaluate_input", error.what(),
+                    {{"clip_id", std::to_string(clip_id)},
+                     {"node_id", std::to_string(node_id)},
+                     {"timeline_frame", std::to_string(timeline_frame)}});
+            }
+            VideoFramePtr evaluated;
+            if (result) evaluated = std::make_shared<const media::VideoFrame>(
+                std::move(*result));
+            if (!target) return;
+            QMetaObject::invokeMethod(target,
+                [target, request_id, clip_id, node_id, evaluated = std::move(evaluated),
+                 timeline_frame, project_generation, requested_delivery_epoch,
+                 requested_revision, generation] {
+                    if (!target || target->latest_color_input_request_id_.load(
+                            std::memory_order_acquire) != request_id) return;
+                    const bool current = generation == target->generation_ &&
+                        requested_delivery_epoch == target->delivery_epoch_ &&
+                        requested_revision == target->composition_revision_ &&
+                        timeline_frame == target->cached_color_input_timeline_frame_ &&
+                        requested_revision == target->cached_color_input_revision_ &&
+                        generation == target->cached_color_input_generation_ &&
+                        requested_delivery_epoch == target->cached_color_input_delivery_epoch_;
+                    emit target->colorInputFrameReady(request_id, clip_id, node_id,
+                        current ? evaluated : VideoFramePtr{}, timeline_frame,
+                        project_generation, requested_delivery_epoch,
+                        requested_revision, generation);
+                }, Qt::QueuedConnection);
+        });
 }
 
 void PlaybackWorker::stepForward() {
@@ -3246,6 +3578,11 @@ PlaybackWorker::decodeCompositionLayers(
             }
             native_frame.reset();
         }
+        VideoFramePtr color_input_frame;
+        auto color_input_texture = graph_texture;
+        if (spec.color_graph.has_value()) {
+            if (frame && usableRgbaFrame(*frame)) color_input_frame = frame;
+        }
         if (spec.color_graph.has_value() &&
             !color::linearEffectStack(*spec.color_graph).has_value()) {
             if (!frame || !usableRgbaFrame(*frame))
@@ -3266,7 +3603,7 @@ PlaybackWorker::decodeCompositionLayers(
             ? std::chrono::duration_cast<std::chrono::nanoseconds>(
                 Clock::now() - layer_started).count()
             : 0;
-        layers.push_back(DecodedCompositionLayer{
+        DecodedCompositionLayer decoded_layer{
             std::move(frame),
             transform,
             spec.kind == timeline::ClipKind::Text
@@ -3283,7 +3620,13 @@ PlaybackWorker::decodeCompositionLayers(
                 ? 0U
                 : static_cast<std::uint64_t>(layer_decode_nanoseconds),
             forward_decode_diagnostics,
-            request.session_index, std::move(native_frame), std::move(graph_texture)});
+            request.session_index, std::move(native_frame), std::move(graph_texture)};
+        if (spec.color_graph.has_value()) {
+            decoded_layer.color_input_frame = std::move(color_input_frame);
+            decoded_layer.color_input_texture = std::move(color_input_texture);
+            decoded_layer.color_graph = *spec.color_graph;
+        }
+        layers.push_back(std::move(decoded_layer));
     }
     return layers;
 }

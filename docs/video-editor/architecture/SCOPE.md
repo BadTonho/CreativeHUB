@@ -10,10 +10,17 @@ and advanced color management remain outside the current stage. See the
 [Color Workspace Roadmap](../COLOR_WORKSPACE_ROADMAP.md).
 
 Curves qualifier refinement and the Inspector Matte/Highlight preview are
-available. Spatial refinement currently uses CPU processing; non-neutral GPU
-requests fall back to CPU while native GPU matte filters remain pending. The
-Inspector preview uses the latest composed frame; routing it from the selected
-Curves node's actual input remains pending.
+available. OpenGL and Vulkan process the qualifier's Denoise, Clean Black/White,
+In/Out, and Blur passes with bounded reusable R8 intermediates. Resource or
+processing failures fall back to CPU. The Inspector preview asynchronously
+inspects the selected Curves node's actual input after upstream corrections,
+including when the selected node is disabled. Linear GPU prefixes are evaluated
+before asynchronous texture readback; mixers and unsupported GPU operations use
+the CPU evaluator. The preview shares one pending readback slot with scopes and
+keeps only the latest queued Curves request. Stale project, clip, node, and
+frame responses are discarded. The preview remains local to the Inspector and
+does not change the Viewer or Gallery. Native visual interaction and platform
+acceptance are tracked separately from implementation status.
 
 [Gaussian Blur](../features/GAUSSIAN_BLUR.md) is a static, maskable Fusion-only
 catalog node and an editable cscomp v3 stage. It shares CPU/GPU processing with

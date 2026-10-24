@@ -734,6 +734,16 @@ void MainWindow::createWorkspace() {
                     playback_controller_->requestScopeFrame(request_id, frame,
                         revision, generation);
             });
+        color_workspace_->setColorInputFrameRequestHandler(
+            [this](quint64 request_id, timeline::ClipId clip_id,
+                   color::NodeId node_id, qint64 frame, quint64 delivery_epoch,
+                   quint64 revision, quint64 generation, color::Graph graph) {
+                if (playback_controller_)
+                    playback_controller_->requestColorInputFrame(request_id,
+                        clip_id, node_id, frame, project_generation_, delivery_epoch,
+                        revision, generation,
+                        std::move(graph));
+            });
         color_workspace_->setCaptureStillHandler([this] { captureColorStill(); });
         color_workspace_->setRenameStillHandler([this](const QString& id, const QString& name) {
             renameColorStill(id, name);

@@ -68,19 +68,19 @@ std::optional<media::VideoFrame> mix(
 
 }  // namespace
 
-std::optional<media::VideoFrame> evaluate(
-    const Graph& graph, const media::VideoFrame& input,
+namespace {
+
+std::optional<media::VideoFrame> evaluateFrom(
+    const Graph& graph, const media::VideoFrame& input, NodeId root,
+    std::optional<NodeId> stop_before,
     const std::function<bool()>& should_cancel) {
     if (!validate(graph) || !usable(input) ||
         (should_cancel && should_cancel())) return std::nullopt;
     const auto order = evaluationOrder(graph);
     if (!order) return std::nullopt;
 
-    const auto output_node = std::find_if(graph.nodes.begin(), graph.nodes.end(),
-        [](const Node& node) { return node.type == NodeType::Output; });
-    if (output_node == graph.nodes.end()) return std::nullopt;
-    std::unordered_set<NodeId> required{output_node->id};
-    std::vector<NodeId> pending{output_node->id};
+    std::unordered_set<NodeId> required{root};
+    std::vector<NodeId> pending{root};
     while (!pending.empty()) {
         const auto id = pending.back();
         pending.pop_back();
@@ -99,6 +99,13 @@ std::optional<media::VideoFrame> evaluate(
         if (should_cancel && should_cancel()) return std::nullopt;
         const auto* node = findNode(graph, id);
         if (!node) return std::nullopt;
+        if (stop_before && id == *stop_before) {
+            const auto* edge = incoming(graph, id, 0);
+            const auto source = edge ? values.find(edge->from) : values.end();
+            return source == values.end()
+                ? std::nullopt
+                : std::optional<media::VideoFrame>{source->second};
+        }
         if (node->type == NodeType::Input) {
             values.emplace(id, input);
         } else if (node->type == NodeType::Effect || node->type == NodeType::Curves) {
@@ -147,13 +154,66 @@ std::optional<media::VideoFrame> evaluate(
         for (const auto* edge : inputs(graph, id)) {
             auto remaining = remaining_consumers.find(edge->from);
             if (remaining != remaining_consumers.end() && --remaining->second == 0 &&
-                edge->from != output_node->id) values.erase(edge->from);
+                edge->from != root) values.erase(edge->from);
         }
     }
-    const auto result = values.find(output_node->id);
+    const auto result = values.find(root);
     return result == values.end()
         ? std::nullopt
         : std::optional<media::VideoFrame>{std::move(result->second)};
+}
+
+}  // namespace
+
+std::optional<media::VideoFrame> evaluate(
+    const Graph& graph, const media::VideoFrame& input,
+    const std::function<bool()>& should_cancel) {
+    const auto output_node = std::find_if(graph.nodes.begin(), graph.nodes.end(),
+        [](const Node& node) { return node.type == NodeType::Output; });
+    if (output_node == graph.nodes.end()) return std::nullopt;
+    return evaluateFrom(graph, input, output_node->id, {}, should_cancel);
+}
+
+std::optional<media::VideoFrame> evaluateInput(
+    const Graph& graph, NodeId curves_node, const media::VideoFrame& input,
+    const std::function<bool()>& should_cancel) {
+    const auto* node = findNode(graph, curves_node);
+    if (!node || node->type != NodeType::Curves || !incoming(graph, curves_node, 0))
+        return std::nullopt;
+    return evaluateFrom(graph, input, curves_node, curves_node, should_cancel);
+}
+
+std::optional<std::vector<creative_suite::effects::EffectInstance>>
+linearEffectStackBefore(const Graph& graph, NodeId curves_node) {
+    if (!validate(graph)) return std::nullopt;
+    const auto* selected = findNode(graph, curves_node);
+    if (!selected || selected->type != NodeType::Curves || !selected->curves)
+        return std::nullopt;
+    std::vector<creative_suite::effects::EffectInstance> reversed;
+    std::unordered_set<NodeId> visited;
+    NodeId current = curves_node;
+    while (visited.insert(current).second) {
+        const auto* edge = incoming(graph, current, 0);
+        if (!edge) return std::nullopt;
+        const auto* previous = findNode(graph, edge->from);
+        if (!previous) return std::nullopt;
+        if (previous->type == NodeType::Input) {
+            std::reverse(reversed.begin(), reversed.end());
+            return reversed;
+        }
+        if (previous->type == NodeType::Effect && previous->effect) {
+            reversed.push_back(*previous->effect);
+        } else if (previous->type == NodeType::Curves && previous->curves) {
+            auto effect = creative_suite::effects::makeDefaultInstance("video.curves");
+            effect.enabled = previous->curves->enabled;
+            effect.video_curves = previous->curves->parameters;
+            reversed.push_back(std::move(effect));
+        } else {
+            return std::nullopt;
+        }
+        current = previous->id;
+    }
+    return std::nullopt;
 }
 
 }  // namespace color

@@ -147,6 +147,16 @@ PlaybackController::PlaybackController(
             emitEvent(PlaybackScopeFrameEvent{request_id, std::move(frame),
                 timeline_frame, composition_revision, generation});
         }, Qt::QueuedConnection);
+    QObject::connect(worker_, &PlaybackWorker::colorInputFrameReady, this,
+        [this](quint64 request_id, timeline::ClipId clip_id,
+               color::NodeId node_id, VideoFramePtr frame, qint64 timeline_frame,
+               quint64 project_generation, quint64 delivery_epoch,
+               quint64 composition_revision,
+               quint64 generation) {
+            emitEvent(PlaybackColorInputFrameEvent{request_id, clip_id, node_id,
+                std::move(frame), timeline_frame, project_generation, delivery_epoch,
+                composition_revision, generation});
+        }, Qt::QueuedConnection);
     worker_thread_.start();
 }
 
@@ -503,6 +513,23 @@ void PlaybackController::requestScopeFrame(quint64 request_id, qint64 timeline_f
                  playback_generation](PlaybackWorker& worker) {
         worker.requestScopeFrame(request_id, timeline_frame,
             composition_revision, playback_generation);
+    });
+}
+
+void PlaybackController::requestColorInputFrame(quint64 request_id,
+    timeline::ClipId clip_id, color::NodeId node_id, qint64 timeline_frame,
+    quint64 project_generation, quint64 delivery_epoch, quint64 composition_revision,
+    quint64 playback_generation,
+    color::Graph graph) {
+    if (!available() || request_id == 0 || clip_id == 0) return;
+    queueWorker([request_id, clip_id, node_id, timeline_frame,
+                 project_generation, delivery_epoch, composition_revision,
+                 playback_generation,
+                 graph = std::move(graph)](PlaybackWorker& worker) mutable {
+        worker.requestColorInputFrame(request_id, clip_id, node_id, timeline_frame,
+            project_generation, delivery_epoch, composition_revision,
+            playback_generation,
+            std::move(graph));
     });
 }
 

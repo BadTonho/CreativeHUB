@@ -114,6 +114,18 @@ struct PlaybackScopeFrameEvent {
     quint64 playback_generation = 0;
 };
 
+struct PlaybackColorInputFrameEvent {
+    quint64 request_id = 0;
+    timeline::ClipId clip_id = 0;
+    color::NodeId node_id = 0;
+    VideoFramePtr frame;
+    qint64 timeline_frame = 0;
+    quint64 project_generation = 0;
+    quint64 delivery_epoch = 0;
+    quint64 composition_revision = 0;
+    quint64 playback_generation = 0;
+};
+
 struct FusionNodePreviewTarget {
     timeline::ClipId clip_id = 0;
     fusion::nodes::NodeId node_id = 0;
@@ -133,7 +145,8 @@ using PlaybackControllerEvent = std::variant<
     PlaybackCompositionWarningEvent,
     PlaybackDeliveryEpochEvent,
     PlaybackStillCaptureEvent,
-    PlaybackScopeFrameEvent>;
+    PlaybackScopeFrameEvent,
+    PlaybackColorInputFrameEvent>;
 
 class PlaybackController final : public QObject {
 public:
@@ -169,6 +182,12 @@ public:
         quint64 composition_revision);
     void requestScopeFrame(quint64 request_id, qint64 timeline_frame,
         quint64 composition_revision, quint64 playback_generation);
+    void requestColorInputFrame(quint64 request_id, timeline::ClipId clip_id,
+        color::NodeId node_id, qint64 timeline_frame,
+        quint64 project_generation, quint64 delivery_epoch,
+        quint64 composition_revision,
+        quint64 playback_generation,
+        color::Graph graph);
     [[nodiscard]] bool gpuCompositionEnabled() const noexcept { return gpu_composition_enabled_; }
     void setHardwareDecodingEnabled(bool enabled);
     [[nodiscard]] bool hardwareDecodingEnabled() const noexcept { return hardware_decoding_enabled_; }

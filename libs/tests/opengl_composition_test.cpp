@@ -494,20 +494,124 @@ void colorAdjustmentParity(OpenGlFrameCompositor& gpu) {
                 timings.color_adjustment_submission_nanoseconds > 0,
             "GPU color adjustment work is measured");
 
+    const std::array<std::array<double, 4>, 4> refinement_controls{{
+        {30.0, 0.0, 100.0, 0.0},
+        {0.0, 12.0, 91.0, -27.0},
+        {0.0, 0.0, 100.0, 0.0},
+        {65.0, 8.0, 89.0, 23.0}}};
+    for (std::size_t index = 0; index < refinement_controls.size(); ++index) {
+        auto spatial_refinement = curve_adjustment;
+        const auto& controls = refinement_controls[index];
+        spatial_refinement.video_curves->qualifier.denoise_percent = controls[0];
+        spatial_refinement.video_curves->qualifier.clean_black_percent = controls[1];
+        spatial_refinement.video_curves->qualifier.clean_white_percent = controls[2];
+        spatial_refinement.video_curves->qualifier.in_out_percent = controls[3];
+        spatial_refinement.video_curves->qualifier.blur_radius_pixels =
+            index == 2 || index == 3 ? 2.0 : 0.0;
+        auto expected = source;
+        require(effects::applyColorAdjustment(expected, spatial_refinement) ==
+                    effects::ProcessingResult::Completed,
+                "CPU qualifier refinement reference failed.");
+        OpenGlImageOperation refined_operation;
+        refined_operation.kind = OpenGlImageOperationKind::Color;
+        refined_operation.background.rgba = &source;
+        refined_operation.colors = {spatial_refinement};
+        const auto refined_texture = gpu.processImage(refined_operation);
+        require(refined_texture.status == OpenGlCompositionStatus::Complete &&
+                    refined_texture.frame,
+                "OpenGL must process spatial Curves refinement on the GPU: " +
+                    refined_texture.cause);
+        const auto refined_readback = gpu.readback(refined_texture.frame);
+        require(bool(refined_readback.frame),
+                "OpenGL qualifier refinement readback failed: " + refined_readback.cause);
+        require(expected.width == refined_readback.frame->width &&
+                    expected.height == refined_readback.frame->height,
+                "OpenGL qualifier refinement dimensions changed.");
+        for (int y = 0; y < expected.height; ++y) {
+            for (int x = 0; x < expected.width * 4; ++x) {
+                const auto expected_value = expected.rgba_pixels[
+                    static_cast<std::size_t>(y) * expected.stride + x];
+                const auto actual_value = refined_readback.frame->rgba_pixels[
+                    static_cast<std::size_t>(y) * refined_readback.frame->stride + x];
+                const int difference = std::abs(int(expected_value) - int(actual_value));
+                if (difference > (x % 4 == 3 ? 0 : 1)) {
+                    throw std::runtime_error("OpenGL qualifier refinement parity at case " +
+                        std::to_string(index) + " pixel " +
+                        std::to_string(x / 4) + "," + std::to_string(y) +
+                        " channel " + std::to_string(x % 4) + " CPU=" +
+                        std::to_string(expected_value) + " GPU=" +
+                        std::to_string(actual_value));
+                }
+            }
+        }
+    }
+
     auto spatial_refinement = curve_adjustment;
-    spatial_refinement.video_curves->qualifier.denoise_percent = 1.0;
+    spatial_refinement.video_curves->qualifier.denoise_percent = 65.0;
+    spatial_refinement.video_curves->qualifier.clean_black_percent = 8.0;
+    spatial_refinement.video_curves->qualifier.clean_white_percent = 89.0;
+    spatial_refinement.video_curves->qualifier.in_out_percent = 23.0;
+    spatial_refinement.video_curves->qualifier.blur_radius_pixels = 2.0;
+    auto expected_refined_source = source;
+    require(effects::applyColorAdjustment(expected_refined_source, spatial_refinement) ==
+                effects::ProcessingResult::Completed,
+            "CPU composed qualifier refinement reference failed.");
     CompositionLayer refined_layer{&source};
     refined_layer.gpu_color_adjustments = {spatial_refinement};
     const auto refined_output = gpu.compose(source.width, source.height, {refined_layer});
-    require(refined_output.status == OpenGlCompositionStatus::Unsupported &&
-                refined_output.operation == "color-matte-refinement" && !refined_output.frame,
-            "OpenGL must route spatial Curves refinement to the CPU fallback.");
+    const auto expected_refined_output = FrameCompositor::compose(
+        source.width, source.height, {{&expected_refined_source}});
+    require(refined_output.status == OpenGlCompositionStatus::Complete &&
+                refined_output.frame && expected_refined_output,
+            "OpenGL composition must preprocess a refined Curves node on the GPU: " +
+                refined_output.cause);
+    for (std::size_t i = 0; i < expected_refined_output->rgba_pixels.size(); ++i) {
+        const auto tolerance = i % 4 == 3 ? 0 : 1;
+        require(std::abs(int(expected_refined_output->rgba_pixels[i]) -
+                         int(refined_output.frame->rgba_pixels[i])) <= tolerance,
+                "OpenGL composed qualifier refinement differs from the CPU frame.");
+    }
+
+    OpenGlImageOperation cancelled_refinement;
+    cancelled_refinement.kind = OpenGlImageOperationKind::Color;
+    cancelled_refinement.background.rgba = &source;
+    cancelled_refinement.colors = {spatial_refinement};
+    int refinement_cancel_checks = 0;
+    const auto cancelled_refinement_result = gpu.processImage(cancelled_refinement,
+        [&] { return ++refinement_cancel_checks >= 3; });
+    require(cancelled_refinement_result.status == OpenGlCompositionStatus::Cancelled &&
+                !cancelled_refinement_result.frame,
+            "OpenGL matte passes must honor cancellation without publishing a partial frame.");
 
     int cancellation_checks = 0;
     const auto cancelled = gpu.compose(source.width, source.height, {layer},
         [&] { return ++cancellation_checks >= 5; });
     require(cancelled.status == OpenGlCompositionStatus::Cancelled && !cancelled.frame,
         "cancelled GPU color adjustment does not publish a partial frame");
+}
+
+void matteBudgetFallback(QOffscreenSurface* surface) {
+    auto source = fixture(4, 4, true);
+    auto curves = effects::VideoCurvesParameters{};
+    curves.qualifier.enabled = true;
+    curves.qualifier.denoise_percent = 30.0;
+    effects::ColorAdjustmentParameters adjustment;
+    adjustment.video_curves = curves;
+    OpenGlImageOperation operation;
+    operation.kind = OpenGlImageOperationKind::Color;
+    operation.background.rgba = &source;
+    operation.colors = {adjustment};
+    auto budget = std::make_shared<OpenGlTexturePoolBudget>(128, 1);
+    OpenGlFrameCompositor constrained(surface, OpenGlPrecisionPolicy::Automatic,
+        nullptr, budget);
+    const auto refused = constrained.processImage(operation);
+    require(refused.status == OpenGlCompositionStatus::Unsupported &&
+                refused.operation == "color-matte-budget" && !refused.frame,
+            "A two-buffer R8 matte allocation beyond the GPU budget must be refused cleanly.");
+    auto recovered = source;
+    require(effects::applyColorAdjustment(recovered, adjustment) ==
+                effects::ProcessingResult::Completed,
+            "The same matte adjustment must remain available through CPU recovery.");
 }
 
 void primaryGradeStackParity(OpenGlFrameCompositor& gpu) {
@@ -1092,6 +1196,7 @@ int main(int argc, char** argv) {
                     parity(gpu);
                     primaryGradeStackParity(gpu);
                     colorAdjustmentParity(gpu);
+                    matteBudgetFallback(surface.get());
                     trackMatteParity(gpu);
                     glowParity(gpu);
                     {

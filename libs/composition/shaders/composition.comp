@@ -16,6 +16,8 @@ layout(binding=2,rgba8ui) uniform readonly uimage2D mask_image;
 layout(binding=3,rgba8ui) uniform writeonly uimage2D output_image;
 layout(binding=4,rgba8) uniform image2D presentation_image;
 layout(binding=5,std430) readonly buffer AdjustmentValues { vec4 adjustment_values[]; };
+layout(binding=6,r8ui) uniform readonly uimage2D matte_image;
+layout(binding=7,r8ui) uniform writeonly uimage2D matte_output;
 layout(push_constant) uniform Parameters {
     ivec4 control; // operation, blur radius, horizontal, stage
     REAL2 center; REAL2 extent;
@@ -90,7 +92,7 @@ float qualifierMatte(vec3 rgb, int index) {
     float luma_weight = rangeWeight(luma, softness.x, softness.y, flags.x);
     return hue_weight * sat_weight * luma_weight;
 }
-vec3 applyVideoCurves(vec3 source_rgb, int index) {
+vec3 applyVideoCurves(vec3 source_rgb, int index, float external_matte) {
     int base = index * 586;
     precise float luminance = clamp(source_rgb.r * 0.2126 + source_rgb.g * 0.7152 +
         source_rgb.b * 0.0722, 0.0, 1.0);
@@ -114,13 +116,13 @@ vec3 applyVideoCurves(vec3 source_rgb, int index) {
             adjusted.b * 0.0722;
         if (adjusted_luma > 1e-12) adjusted = clamp(adjusted * (target_luma / adjusted_luma), 0.0, 1.0);
     }
-    float matte = qualifierMatte(source_rgb, index);
+    float matte = external_matte >= 0.0 ? external_matte : qualifierMatte(source_rgb, index);
     return floor(clamp(mix(source_rgb, adjusted, matte), 0.0, 1.0) * 255.0 + 0.5) / 255.0;
 }
-vec3 adjustColor(vec3 rgb, int index) {
+vec3 adjustColor(vec3 rgb, int index, float external_matte) {
     int base = index * 586;
     if (adjustment_values[base + 585].z > 0.5)
-        return applyVideoCurves(rgb, index);
+        return applyVideoCurves(rgb, index, external_matte);
     vec4 affine = adjustment_values[base];
     vec4 lift_saturation = adjustment_values[base + 1];
     vec4 gamma_gain_red = adjustment_values[base + 2];
@@ -159,6 +161,42 @@ void main() {
     uvec4 c=uvec4(0);
     if(op==10) { imageStore(output_image,pixel,uvec4(floor(clamp(imageLoad(presentation_image,pixel),0,1)*255.0+0.5)));return; }
     if(op==8) { imageStore(output_image,pixel,uvec4(0,0,0,255));return; }
+    if(op==12) {
+        vec3 rgb=vec3(imageLoad(background_image,pixel).rgb)/255.0;
+        uint coverage=uint(floor(clamp(qualifierMatte(rgb,0),0.0,1.0)*255.0+0.5));
+        imageStore(matte_output,pixel,uvec4(coverage,0,0,0));return;
+    }
+    if(op==13) {
+        uint values[9];int index=0;
+        for(int y=-1;y<=1;++y)for(int x=-1;x<=1;++x)
+            values[index++]=imageLoad(matte_image,clamp(pixel+ivec2(x,y),ivec2(0),size-1)).r;
+        for(int i=1;i<9;++i){uint value=values[i];int j=i-1;
+            while(j>=0 && values[j]>value){values[j+1]=values[j];--j;}values[j+1]=value;}
+        float current=float(imageLoad(matte_image,pixel).r);
+        float amount=clamp(p.color.x/100.0,0.0,1.0);
+        uint coverage=uint(floor(clamp(mix(current,float(values[4]),amount),0.0,255.0)+0.5));
+        imageStore(matte_output,pixel,uvec4(coverage,0,0,0));return;
+    }
+    if(op==14) {
+        float value=float(imageLoad(matte_image,pixel).r)/255.0;
+        float black=clamp(p.color.x/100.0,0.0,1.0);
+        float white=clamp(p.color.y/100.0,0.0,1.0);
+        float shift=clamp(p.color.z/100.0,-1.0,1.0);
+        float normalized=clamp((value-black)/(white-black),0.0,1.0);
+        uint coverage=uint(floor(clamp(normalized*255.0+shift*255.0,0.0,255.0)+0.5));
+        imageStore(matte_output,pixel,uvec4(coverage,0,0,0));return;
+    }
+    if(op==15) {
+        int radius=clamp(p.control.y,0,8);bool horizontal=p.control.z!=0;
+        float sigma=max(0.5,float(radius)/2.0),sum=0.0,total=0.0;
+        for(int offset=-radius;offset<=radius;++offset){
+            float weight=exp(-float(offset*offset)/(2.0*sigma*sigma));
+            ivec2 sample_pos=clamp(pixel+(horizontal?ivec2(offset,0):ivec2(0,offset)),ivec2(0),size-1);
+            sum+=float(imageLoad(matte_image,sample_pos).r)*weight;total+=weight;
+        }
+        uint coverage=uint(floor(clamp(sum/max(total,1e-12),0.0,255.0)+0.5));
+        imageStore(matte_output,pixel,uvec4(coverage,0,0,0));return;
+    }
     if(op==1 || op==7) {
         ivec2 srcsize=op==7?imageSize(foreground_image):imageSize(background_image);
         precise REAL2 delta=REAL2(pixel)+REAL(0.5)-p.center;
@@ -190,7 +228,7 @@ void main() {
             adjusted=imageLoad(foreground_image,samplepos).rgb;
             vec3 rgb=vec3(adjusted)/255.0;
             for(int i=0;i<p.control.y;++i) {
-                rgb=adjustColor(rgb,i);
+                rgb=adjustColor(rgb,i,-1.0);
                 rgb=floor(clamp(rgb,0.0,1.0)*255.0+0.5)/255.0;
             }
             adjusted=uvec3(floor(rgb*255.0+0.5));
@@ -204,7 +242,8 @@ void main() {
         if(op==2) {
             vec3 rgb=vec3(c.rgb)/255.0;
             for(int i=0;i<p.control.y;++i) {
-                rgb=adjustColor(rgb,i);
+                float matte=p.control.w==1 ? float(imageLoad(matte_image,pixel).r)/255.0 : -1.0;
+                rgb=adjustColor(rgb,i,matte);
                 rgb=floor(clamp(rgb,0.0,1.0)*255.0+0.5)/255.0;
             }
             c.rgb=uvec3(floor(rgb*255.0+0.5));

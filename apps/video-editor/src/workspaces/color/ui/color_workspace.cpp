@@ -1037,7 +1037,13 @@ ColorWorkspace::ColorWorkspace(QWidget* parent) : QWidget(parent) {
     });
     nodes_->setSelectionChangedHandler([this](color::NodeId id) {
         selected_node_ = id;
+        active_color_input_request_id_ = 0;
+        latest_curves_input_ = {};
         refreshControls();
+        if (active_ && preview_) {
+            if (auto* viewer = qobject_cast<PreviewWidget*>(preview_))
+                requestCurvesInputFrame(viewer->currentPayload());
+        }
     });
     connect(add, &QPushButton::clicked, this, [this] {
         if (!selected_clip_ || !selected_node_) return;
@@ -1120,17 +1126,21 @@ void ColorWorkspace::setActive(bool active) {
         waveform_timer_->stop();
         waveform_pending_ = false;
         active_scope_request_id_ = 0;
+        active_color_input_request_id_ = 0;
         waveform_->setPixmap({});
         waveform_->setText(QCoreApplication::translate("ColorWorkspace", "No frame"));
         latest_scope_source_ = {};
+        latest_curves_input_ = {};
         refreshMattePreview();
     }
 }
 
 void ColorWorkspace::setClips(std::vector<ClipItem> clips, timeline::ClipId selected,
     color::Graph graph) {
-    if (selected_clip_ != selected) {
+    if (selected_clip_ != selected || graph_ != graph) {
         latest_scope_source_ = {};
+        latest_curves_input_ = {};
+        active_color_input_request_id_ = 0;
         refreshMattePreview();
     }
     const auto old_selected = selected_node_;
@@ -1219,6 +1229,12 @@ void ColorWorkspace::setScopeFrameRequestHandler(
     scope_frame_request_handler_ = std::move(handler);
 }
 
+void ColorWorkspace::setColorInputFrameRequestHandler(
+    std::function<void(quint64, timeline::ClipId, color::NodeId, qint64,
+        quint64, quint64, quint64, color::Graph)> handler) {
+    color_input_frame_request_handler_ = std::move(handler);
+}
+
 void ColorWorkspace::acceptScopeFrame(quint64 request_id, playback::VideoFramePtr frame,
     qint64 timeline_frame, quint64 composition_revision, quint64 playback_generation) {
     if (!active_ || !waveform_pending_ || request_id != active_scope_request_id_) return;
@@ -1239,6 +1255,44 @@ void ColorWorkspace::acceptScopeFrame(quint64 request_id, playback::VideoFramePt
         return;
     }
     renderScopeFrame(active_scope_identity_, std::move(frame), request_id);
+}
+
+void ColorWorkspace::acceptColorInputFrame(quint64 request_id,
+    timeline::ClipId clip_id, color::NodeId node_id,
+    playback::VideoFramePtr frame, qint64 timeline_frame,
+    quint64 delivery_epoch, quint64 composition_revision,
+    quint64 playback_generation) {
+    if (!active_ || request_id != active_color_input_request_id_ ||
+        clip_id != selected_clip_ || !selected_node_ || node_id != *selected_node_)
+        return;
+    active_color_input_request_id_ = 0;
+    auto* viewer = qobject_cast<PreviewWidget*>(preview_);
+    if (!viewer || !frame || frame->width <= 0 || frame->height <= 0 ||
+        frame->stride < frame->width * 4 ||
+        frame->rgba_pixels.size() < static_cast<std::size_t>(frame->stride) * frame->height) {
+        latest_curves_input_ = {};
+        refreshMattePreview();
+        return;
+    }
+    const auto current = viewer->currentPayload();
+    if (!current.valid() || current.timeline_frame != timeline_frame ||
+        current.composition_revision != composition_revision ||
+        current.playback_generation != playback_generation ||
+        current.delivery_epoch != delivery_epoch ||
+        current.delivery_epoch != active_color_input_identity_.delivery_epoch ||
+        current.timeline_frame != active_color_input_identity_.timeline_frame ||
+        current.composition_revision != active_color_input_identity_.composition_revision ||
+        current.playback_generation != active_color_input_identity_.playback_generation) {
+        latest_curves_input_ = {};
+        refreshMattePreview();
+        return;
+    }
+    QImage source(frame->rgba_pixels.data(), frame->width, frame->height,
+        frame->stride, QImage::Format_RGBA8888);
+    latest_curves_input_ = source.isNull() ? QImage{} :
+        source.scaled(256, 144, Qt::IgnoreAspectRatio,
+            Qt::FastTransformation).convertToFormat(QImage::Format_RGB32);
+    refreshMattePreview();
 }
 
 void ColorWorkspace::setGalleryStills(std::vector<StillItem> stills) {
@@ -1392,6 +1446,7 @@ void ColorWorkspace::removeSelectedGradeVersion() {
 }
 
 void ColorWorkspace::refreshNodes(std::optional<color::NodeId> selected) {
+    const auto previous_selection = selected_node_;
     if (selected && color::findNode(graph_, *selected)) selected_node_ = selected;
     else if (!selected_node_ || !color::findNode(graph_, *selected_node_)) {
         const auto input = std::find_if(graph_.nodes.begin(), graph_.nodes.end(),
@@ -1401,6 +1456,10 @@ void ColorWorkspace::refreshNodes(std::optional<color::NodeId> selected) {
             : std::optional<color::NodeId>{input->id};
     }
     nodes_->setGraph(graph_, selected_node_);
+    if (previous_selection != selected_node_) {
+        active_color_input_request_id_ = 0;
+        latest_curves_input_ = {};
+    }
     refreshControls();
 }
 
@@ -1752,11 +1811,26 @@ void ColorWorkspace::refreshControls() {
 void ColorWorkspace::submit(color::Graph graph, std::optional<color::NodeId> selected,
     bool rebuild_controls) {
     if (graph == graph_) return;
+    bool preserve_curves_input = false;
+    if (selected && selected_node_ == selected && !latest_curves_input_.isNull()) {
+        auto comparable_graph = graph;
+        auto* comparable_node = color::findNode(comparable_graph, *selected);
+        const auto* previous_node = color::findNode(graph_, *selected);
+        if (comparable_node && previous_node && comparable_node->curves &&
+            previous_node->curves && comparable_node->type == color::NodeType::Curves &&
+            previous_node->type == color::NodeType::Curves) {
+            comparable_node->curves = previous_node->curves;
+            preserve_curves_input = comparable_graph == graph_;
+        }
+    }
     graph_ = std::move(graph);
+    if (!preserve_curves_input) latest_curves_input_ = {};
+    active_color_input_request_id_ = 0;
     selected_node_ = selected && color::findNode(graph_, *selected)
         ? selected : std::optional<color::NodeId>{};
     if (rebuild_controls) refreshNodes(selected_node_);
     else nodes_->setGraph(graph_, selected_node_);
+    if (preserve_curves_input) refreshMattePreview();
     if (selected_clip_ && effects_changed_handler_)
         effects_changed_handler_(selected_clip_, graph_);
 }
@@ -1770,6 +1844,8 @@ void ColorWorkspace::scheduleWaveform() {
         waveform_->setPixmap({});
         waveform_->setText(QCoreApplication::translate("ColorWorkspace", "No frame"));
         latest_scope_source_ = {};
+        latest_curves_input_ = {};
+        active_color_input_request_id_ = 0;
         refreshMattePreview();
         return;
     }
@@ -1786,6 +1862,8 @@ void ColorWorkspace::scheduleWaveform() {
             waveform_->setPixmap({});
             waveform_->setText(QCoreApplication::translate("ColorWorkspace", "No frame"));
             latest_scope_source_ = {};
+            latest_curves_input_ = {};
+            active_color_input_request_id_ = 0;
             refreshMattePreview();
             return;
         }
@@ -1797,6 +1875,8 @@ void ColorWorkspace::scheduleWaveform() {
         waveform_->setPixmap({});
         waveform_->setText(QCoreApplication::translate("ColorWorkspace", "No frame"));
         latest_scope_source_ = {};
+        latest_curves_input_ = {};
+        active_color_input_request_id_ = 0;
         refreshMattePreview();
         return;
     }
@@ -1812,6 +1892,9 @@ void ColorWorkspace::renderScopeFrame(rendering::PreviewFramePayload identity,
             waveform_pending_ = false;
             waveform_->setPixmap({});
             waveform_->setText(QCoreApplication::translate("ColorWorkspace", "No frame"));
+            latest_curves_input_ = {};
+            active_color_input_request_id_ = 0;
+            refreshMattePreview();
         }
         return;
     }
@@ -1822,12 +1905,15 @@ void ColorWorkspace::renderScopeFrame(rendering::PreviewFramePayload identity,
         waveform_->setPixmap({});
         waveform_->setText(QCoreApplication::translate("ColorWorkspace", "No frame"));
         latest_scope_source_ = {};
+        latest_curves_input_ = {};
+        active_color_input_request_id_ = 0;
         refreshMattePreview();
         return;
     }
     latest_scope_source_ = source.scaled(256, 144, Qt::IgnoreAspectRatio,
         Qt::FastTransformation).convertToFormat(QImage::Format_RGB32);
     refreshMattePreview();
+    requestCurvesInputFrame(identity);
     const auto generation = waveform_generation_;
     const auto scope_mode = scope_mode_->currentData().toString();
     const QPointer<ColorWorkspace> target(this);
@@ -1860,24 +1946,62 @@ void ColorWorkspace::renderScopeFrame(rendering::PreviewFramePayload identity,
     });
 }
 
+void ColorWorkspace::requestCurvesInputFrame(
+    const rendering::PreviewFramePayload& identity) {
+    const auto* node = selected_node_ ? color::findNode(graph_, *selected_node_) : nullptr;
+    if (!identity.valid() || !node || node->type != color::NodeType::Curves ||
+        !node->curves || selected_clip_ == 0 || !color_input_frame_request_handler_) {
+        active_color_input_request_id_ = 0;
+        latest_curves_input_ = {};
+        refreshMattePreview();
+        if (identity.valid() && selected_clip_ != 0 &&
+            color_input_frame_request_handler_) {
+            if (next_scope_request_id_ == 0) ++next_scope_request_id_;
+            const auto cancel_id = next_scope_request_id_++;
+            color_input_frame_request_handler_(cancel_id, selected_clip_,
+                node ? node->id : color::NodeId{}, identity.timeline_frame,
+                identity.delivery_epoch, identity.composition_revision,
+                identity.playback_generation, graph_);
+        }
+        return;
+    }
+    const bool same_identity =
+        active_color_input_identity_.delivery_epoch == identity.delivery_epoch &&
+        active_color_input_identity_.composition_revision == identity.composition_revision &&
+        active_color_input_identity_.playback_generation == identity.playback_generation &&
+        active_color_input_identity_.timeline_frame == identity.timeline_frame;
+    if ((active_color_input_request_id_ != 0 || !latest_curves_input_.isNull()) &&
+        same_identity) return;
+    if (next_scope_request_id_ == 0) ++next_scope_request_id_;
+    const auto request_id = next_scope_request_id_++;
+    active_color_input_request_id_ = request_id;
+    active_color_input_identity_ = identity;
+    latest_curves_input_ = {};
+    refreshMattePreview();
+    color_input_frame_request_handler_(request_id, selected_clip_, node->id,
+        identity.timeline_frame, identity.delivery_epoch,
+        identity.composition_revision,
+        identity.playback_generation, graph_);
+}
+
 void ColorWorkspace::refreshMattePreview() {
     if (!matte_preview_) return;
     const auto* node = selected_node_ ? color::findNode(graph_, *selected_node_) : nullptr;
     if (!node || node->type != color::NodeType::Curves || !node->curves ||
-        latest_scope_source_.isNull()) {
+        latest_curves_input_.isNull()) {
         matte_preview_->setPixmap({});
         matte_preview_->setText(QCoreApplication::translate("ColorWorkspace", "No frame"));
         return;
     }
     auto qualifier = node->curves->parameters.qualifier;
     qualifier.enabled = true;
-    const int width = latest_scope_source_.width();
-    const int height = latest_scope_source_.height();
+    const int width = latest_curves_input_.width();
+    const int height = latest_curves_input_.height();
     const int stride = width * 4;
     std::vector<std::uint8_t> rgba(static_cast<std::size_t>(stride) * height);
     for (int y = 0; y < height; ++y) {
         const auto* source = reinterpret_cast<const QRgb*>(
-            latest_scope_source_.constScanLine(y));
+            latest_curves_input_.constScanLine(y));
         auto* target = rgba.data() + static_cast<std::size_t>(y) * stride;
         for (int x = 0; x < width; ++x) {
             target[x * 4] = static_cast<std::uint8_t>(qRed(source[x]));
@@ -1898,7 +2022,7 @@ void ColorWorkspace::refreshMattePreview() {
         matte_preview_mode_->currentData().toString() == QLatin1String("highlight");
     for (int y = 0; y < height; ++y) {
         const auto* source = reinterpret_cast<const QRgb*>(
-            latest_scope_source_.constScanLine(y));
+            latest_curves_input_.constScanLine(y));
         auto* target = reinterpret_cast<QRgb*>(matte.scanLine(y));
         for (int x = 0; x < width; ++x) {
             const double amount = coverage[static_cast<std::size_t>(y) * width + x] / 255.0;

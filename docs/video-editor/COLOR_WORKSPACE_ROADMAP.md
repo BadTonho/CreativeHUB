@@ -1,6 +1,6 @@
 # Color Workspace Roadmap
 
-Status: **The project-owned Color graph, Curves, CPU qualifier matte refinement, Gallery capture and organization, Wheels/Bars/Log Primary Grade, four scopes, shared Edit controls, reusable grades, and per-clip grade versions are implemented. CSP v39 persists curves, qualifier refinements, and named graph snapshots. Two qualifier refinements remain pending: GPU R8 filter passes, and routing the Inspector preview from the selected Curves node's actual input frame. Until then, refined GPU compositions fall back to CPU and the Inspector preview uses the latest composed frame. General graph action controls remain hidden; Curves is created and managed from the canvas context menu. Native visual interaction and platform acceptance remain pending.**
+Status: **The project-owned Color graph, Curves, CPU/OpenGL/Vulkan qualifier matte refinement, selected-node input preview, Gallery capture and organization, Wheels/Bars/Log Primary Grade, four scopes, shared Edit controls, reusable grades, and per-clip grade versions are implemented. CSP v39 persists curves, qualifier refinements, and named graph snapshots. Refined serial GPU compositions use bounded R8 intermediates and fall back to CPU when allocation or processing fails; branched graphs continue through the CPU evaluator. The Inspector matte preview evaluates the selected Curves node's actual input asynchronously and does not change the Viewer. General graph action controls remain hidden; Curves is created and managed from the canvas context menu. Native visual interaction and platform acceptance remain pending.**
 
 This document records the current implementation, the functional areas expected
 from a complete color workspace, and a staged order for developing them. The
@@ -26,11 +26,13 @@ existing implementation and behavior; its evaluated output feeds the Color
 graph.
 
 Preview and export follow the graph. A serial graph uses the existing GPU
-effect path when available, including Curves LUTs and unrefined qualifier matte.
-Non-neutral spatial matte refinement uses the CPU fallback. Graphs with branches use the CPU RGBA evaluator,
-which calculates each required upstream node once and mixes the branch
-outputs. The evaluator also handles adjustment clips after lower-track
-composition.
+effect path when available, including Curves LUTs and refined qualifier matte.
+OpenGL and Vulkan reuse two bounded R8 intermediates for the ordered denoise,
+clean-level/In/Out, and blur passes. Cancellation, allocation failure, or a GPU
+pass failure leaves CPU composition available as the fallback. Graphs with
+branches use the CPU RGBA evaluator, which calculates each required upstream
+node once and mixes the branch outputs. The evaluator also handles adjustment
+clips after lower-track composition.
 
 The page keeps the shared Viewer, visual-clip strip, RGB Waveform/RGB Parade,
 Vectorscope, RGB Histogram, and project Gallery. Still capture records the composed Viewer frame after
@@ -67,10 +69,16 @@ Saturation. Each curve supports 2–16 ordered points. Curves use normalized
 encoded RGB, Rec. 709 luminance, and HSV hue/saturation; hue changes wrap at
 360 degrees. An optional per-node qualifier combines hue, saturation, and
 luminance ranges with adjustable softness, including wrapped hue ranges. Its
-matte preview currently displays the latest composed frame; routing it from the
-selected Curves node's actual input frame remains pending. The first refinement
-controls are implemented on CPU, with GPU R8 filtering still pending. Power
-Windows, tracking, advanced matte refinement, and keyframes remain later work.
+Matte and Highlight preview modes inspect the selected Curves node's actual
+input after Fusion and preceding Color nodes, including when that Curves node
+is disabled. Linear GPU prefixes are evaluated through the selected compositor
+and read back asynchronously at the Curves input. Mixer paths and unavailable
+GPU operations use the CPU evaluator; if there is no CPU frame, the source is
+read back first. Native hardware frames are imported into the GPU tap, with CPU
+decode fallback if import fails. Curves previews and scopes share one pending readback, retaining
+only the newest queued Curves request. Results are discarded after project,
+clip, node, or frame changes. The preview does not alter the Viewer. Power
+Windows and tracking remain future work.
 
 ## Functional capability inventory
 
@@ -227,10 +235,8 @@ and restoration. Keep large image assets outside the main CSP document.
    comparisons remain future work. Add group corrections only with a clear
    grade ordering model.
 4. **Add secondary grading (partially implemented).** Curves, targeted
-   selection, qualifiers, and CPU matte refinement controls are implemented.
-   Next: route the matte preview from the selected Curves node's input and add
-   GPU filtering with bounded R8 intermediates, then add windows, tracking,
-   advanced matte refinement, and their keyframes.
+   selection, qualifier refinement, GPU R8 filters, and selected-node input
+    preview are implemented. Add windows, tracking, and their keyframes.
 5. **Establish color management and source support.** Define project and
    output transforms, LUT handling, display profiles, RAW decode controls,
    and wide-gamut/HDR behavior across preview and export.

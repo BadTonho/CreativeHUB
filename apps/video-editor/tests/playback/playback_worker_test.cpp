@@ -1592,6 +1592,85 @@ void validateStaticImageComposition() {
             "Static image composition did not reuse the same image pixels.");
 }
 
+void validateColorInputInspection(QCoreApplication& application) {
+    playback::PlaybackWorker worker;
+    auto source = std::make_shared<const media::VideoFrame>(media::VideoFrame{
+        2, 1, 8, std::vector<std::uint8_t>{220, 40, 80, 173, 12, 90, 170, 61}});
+    auto graph = color::makePassthroughGraph();
+    const auto grayscale = creative_suite::effects::makeDefaultInstance("video.grayscale");
+    require(color::insertEffectAfter(graph, 1, grayscale),
+        "Color input inspection fixture could not add an upstream node.");
+    const auto upstream = std::find_if(graph.nodes.begin(), graph.nodes.end(),
+        [](const color::Node& node) {
+            return node.effect && node.effect->id == "video.grayscale";
+        });
+    require(upstream != graph.nodes.end() && color::insertCurvesAfter(graph, upstream->id),
+        "Color input inspection fixture could not add Curves.");
+    const auto curves = std::find_if(graph.nodes.begin(), graph.nodes.end(),
+        [](const color::Node& node) { return node.type == color::NodeType::Curves; });
+    require(curves != graph.nodes.end(), "Color input inspection Curves node is missing.");
+    const auto curves_id = curves->id;
+    require(color::setCurvesEnabled(graph, curves_id, false),
+        "Color input inspection fixture could not disable the selected Curves node.");
+    auto layer = playback::CompositionLayerSpec{};
+    layer.frame_rate = 30.0;
+    layer.timeline_frame_rate = {30, 1};
+    layer.segment_frame_count = 1;
+    layer.source_duration_frames = 1;
+    layer.track_index = 0;
+    layer.clip_index = 0;
+    layer.track_id = 4;
+    layer.clip_id = 77;
+    layer.kind = timeline::ClipKind::Image;
+    layer.still_frame = source;
+    layer.color_graph = graph;
+    layer.effects = color::effectInstancesInOrder(graph);
+    worker.setComposition({layer}, {}, 990);
+
+    rendering::PreviewFramePayload preview_identity;
+    QObject::connect(&worker, &playback::PlaybackWorker::previewFrameReady,
+        [&preview_identity](rendering::PreviewFramePayload payload, qint64,
+                            quint64, quint64) {
+            preview_identity = std::move(payload);
+        });
+    worker.renderCompositionFrame(0, 0, 990);
+    require(preview_identity.valid(),
+        "Color input inspection fixture failed to compose its Viewer frame.");
+
+    bool received = false;
+    playback::VideoFramePtr input_at_curves;
+    QObject::connect(&worker, &playback::PlaybackWorker::colorInputFrameReady,
+        [&](quint64 request_id, timeline::ClipId clip_id, color::NodeId node_id,
+            playback::VideoFramePtr frame, qint64 timeline_frame,
+            quint64 project_generation, quint64 delivery_epoch,
+            quint64 composition_revision, quint64 generation) {
+            if (request_id != 42) return;
+            received = clip_id == 77 && node_id == curves_id && timeline_frame == 0 &&
+                project_generation == 18 &&
+                delivery_epoch == preview_identity.delivery_epoch &&
+                composition_revision == preview_identity.composition_revision &&
+                generation == 990;
+            input_at_curves = std::move(frame);
+        });
+    worker.requestColorInputFrame(42, 77, curves_id, 0, 18,
+        preview_identity.delivery_epoch, preview_identity.composition_revision,
+        990, graph);
+    QEventLoop loop;
+    QTimer timeout;
+    timeout.setSingleShot(true);
+    QObject::connect(&worker, &playback::PlaybackWorker::colorInputFrameReady,
+        &loop, &QEventLoop::quit);
+    QObject::connect(&timeout, &QTimer::timeout, &loop, &QEventLoop::quit);
+    timeout.start(2000);
+    loop.exec();
+    QCoreApplication::processEvents();
+    require(received && input_at_curves &&
+        input_at_curves->rgba_pixels == std::vector<std::uint8_t>{81, 81, 81, 173,
+                                                                  79, 79, 79, 61},
+        "Playback must asynchronously return the selected Curves input after prior nodes with alpha intact.");
+    Q_UNUSED(application);
+}
+
 void validateFusionNodePreview() {
     playback::PlaybackWorker worker;
     std::vector<playback::VideoFramePtr> frames;
@@ -2286,6 +2365,7 @@ int main(int argc, char* argv[]) {
         validateCompositionCaching();
         validateAnimatedTextGeometry();
         validateStaticImageComposition();
+        validateColorInputInspection(application);
         validateFusionNodePreview();
         validateVisualEffectPreview();
         if (argc == 2) {

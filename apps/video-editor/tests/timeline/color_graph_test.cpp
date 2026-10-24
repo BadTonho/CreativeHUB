@@ -197,6 +197,49 @@ int main() {
                     color::linearEffectStack(curves_graph)->front().id == "video.curves",
                 "Curves must project to the shared serial effect pipeline.");
         const auto curves_id = curves_node->id;
+        auto upstream_graph = color::makePassthroughGraph();
+        const auto upstream_effect = creative_suite::effects::makeDefaultInstance("video.grayscale");
+        require(color::insertEffectAfter(upstream_graph, 1, upstream_effect),
+                "The upstream input fixture could not add its first correction.");
+        const auto upstream_id = color::effectNodesInOrder(upstream_graph).front();
+        require(color::insertCurvesAfter(upstream_graph, upstream_id),
+                "The upstream input fixture could not add Curves.");
+        const auto upstream_curves_id = std::find_if(upstream_graph.nodes.begin(),
+            upstream_graph.nodes.end(), [](const auto& node) {
+                return node.type == color::NodeType::Curves;
+            })->id;
+        auto color_input_frame = sampleFrame();
+        color_input_frame.rgba_pixels = {220, 40, 80, 173};
+        const auto curves_input = color::evaluateInput(
+            upstream_graph, upstream_curves_id, color_input_frame);
+        require(curves_input && curves_input->rgba_pixels ==
+                    std::vector<std::uint8_t>{81, 81, 81, 173},
+                "Curves input inspection must include preceding graph nodes and preserve alpha.");
+        const auto prefix_stack = color::linearEffectStackBefore(
+            upstream_graph, upstream_curves_id);
+        require(prefix_stack && prefix_stack->size() == 1 &&
+                    prefix_stack->front().id == "video.grayscale",
+                "The GPU Curves tap must contain only corrections before the selected node.");
+        require(!color::evaluateInput(upstream_graph, upstream_id, color_input_frame),
+                "Input inspection must reject a non-Curves node.");
+        auto branched_input_graph = color::makePassthroughGraph();
+        require(color::addParallelBranch(branched_input_graph, 1, upstream_effect),
+                "The branched Curves tap fixture could not add a parallel branch.");
+        const auto branch_mixer = std::find_if(branched_input_graph.nodes.begin(),
+            branched_input_graph.nodes.end(), [](const color::Node& node) {
+                return node.type == color::NodeType::ParallelMixer;
+            });
+        require(branch_mixer != branched_input_graph.nodes.end() &&
+                    color::insertCurvesAfter(branched_input_graph, branch_mixer->id),
+                "The branched Curves tap fixture could not place Curves after its mixer.");
+        const auto branched_curves = std::find_if(branched_input_graph.nodes.begin(),
+            branched_input_graph.nodes.end(), [](const color::Node& node) {
+                return node.type == color::NodeType::Curves;
+            });
+        require(branched_curves != branched_input_graph.nodes.end() &&
+                    !color::linearEffectStackBefore(branched_input_graph,
+                        branched_curves->id),
+                "The GPU prefix tap must decline paths that require a Parallel Mixer.");
         auto points = creative_suite::effects::CurvesPointList{{0, 0}, {128, 200}, {255, 255}};
         require(color::setCurvePoints(curves_graph, curves_id, color::CurveKind::Master, points),
                 "Curves control points must update through the Color graph model.");

@@ -288,6 +288,10 @@ uniform ivec3 glow_rgb;
 uniform GEOMETRY_VEC2 glow_strength;
 uniform int glow_mode;
 uniform int color_count;
+uniform bool use_refined_matte;
+uniform vec4 matte_parameters;
+uniform int matte_radius;
+uniform int matte_horizontal;
 layout(std140) uniform ColorAdjustments { vec4 color_adjustments[1024]; };
 layout(std140) uniform LogAdjustments { vec4 log_adjustments[768]; };
 layout(std140) uniform CurveQualifiers { vec4 curve_qualifiers[768]; };
@@ -345,7 +349,7 @@ float curveMatte(vec3 rgb, int index) {
     float y = clamp(rgb.r * 0.2126 + rgb.g * 0.7152 + rgb.b * 0.0722, 0.0, 1.0) * 100.0;
     return wh * ws * rangeWeight(y, softness.x, softness.y, flags.x);
 }
-vec3 applyVideoCurves(vec3 source_rgb, int index) {
+vec3 applyVideoCurves(vec3 source_rgb, int index, float external_matte) {
     float y = clamp(source_rgb.r * 0.2126 + source_rgb.g * 0.7152 + source_rgb.b * 0.0722, 0.0, 1.0);
     float mapped = curveValue(index, 0, y);
     vec3 rgb = y > 1e-12 ? clamp(source_rgb * (mapped / y), 0.0, 1.0) : vec3(mapped);
@@ -364,10 +368,11 @@ vec3 applyVideoCurves(vec3 source_rgb, int index) {
         float adjusted_y = adjusted.r * 0.2126 + adjusted.g * 0.7152 + adjusted.b * 0.0722;
         if (adjusted_y > 1e-12) adjusted = clamp(adjusted * (target_y / adjusted_y), 0.0, 1.0);
     }
-    return floor(clamp(mix(source_rgb, adjusted, curveMatte(source_rgb, index)), 0.0, 1.0) * 255.0 + 0.5) / 255.0;
+    float matte = external_matte >= 0.0 ? external_matte : curveMatte(source_rgb, index);
+    return floor(clamp(mix(source_rgb, adjusted, matte), 0.0, 1.0) * 255.0 + 0.5) / 255.0;
 }
-vec3 adjustColor(vec3 rgb, int index) {
-    if (curve_qualifiers[index * 3 + 2].z > 0.5) return applyVideoCurves(rgb, index);
+vec3 adjustColor(vec3 rgb, int index, float external_matte) {
+    if (curve_qualifiers[index * 3 + 2].z > 0.5) return applyVideoCurves(rgb, index, external_matte);
     int base = index * 4;
     vec4 affine = color_adjustments[base];
     vec4 lift_saturation = color_adjustments[base + 1];
@@ -440,7 +445,7 @@ void main() {
             adjusted = ivec4(floor(foreground(source_pixel) * 255.0 + 0.5));
             vec3 rgb = vec3(adjusted.rgb) / 255.0;
             for (int i = 0; i < color_count; ++i) {
-                rgb = adjustColor(rgb, i);
+                rgb = adjustColor(rgb, i, -1.0);
                 rgb = floor(clamp(rgb, 0.0, 1.0) * 255.0 + 0.5) / 255.0;
             }
             adjusted.rgb = ivec3(floor(rgb * 255.0 + 0.5));
@@ -510,9 +515,60 @@ void main() {
         return;
     }
     color = background(pixel);
+    ivec2 matte_pixel = ivec2(gl_FragCoord.xy);
+    if (operation == 12) {
+        float coverage = clamp(curveMatte(color.rgb, 0), 0.0, 1.0);
+        color = vec4(floor(coverage * 255.0 + 0.5) / 255.0, 0.0, 0.0, 1.0);
+        return;
+    }
+    if (operation == 13) {
+        int values[9]; int count = 0;
+        ivec2 matte_size = textureSize(mask_image, 0);
+        for (int y = -1; y <= 1; ++y) for (int x = -1; x <= 1; ++x) {
+            ivec2 pos = clamp(matte_pixel + ivec2(x, y), ivec2(0), matte_size - 1);
+            values[count++] = int(floor(texelFetch(mask_image, pos, 0).r * 255.0 + 0.5));
+        }
+        for (int i = 1; i < 9; ++i) {
+            int value = values[i], j = i - 1;
+            while (j >= 0 && values[j] > value) { values[j + 1] = values[j]; --j; }
+            values[j + 1] = value;
+        }
+        float current = floor(texelFetch(mask_image, matte_pixel, 0).r * 255.0 + 0.5);
+        float amount = clamp(matte_parameters.x / 100.0, 0.0, 1.0);
+        float filtered = floor(clamp(mix(current, float(values[4]), amount), 0.0, 255.0) + 0.5);
+        color = vec4(filtered / 255.0, 0.0, 0.0, 1.0);
+        return;
+    }
+    if (operation == 14) {
+        float value = texelFetch(mask_image, matte_pixel, 0).r;
+        float black = clamp(matte_parameters.x / 100.0, 0.0, 1.0);
+        float white = clamp(matte_parameters.y / 100.0, 0.0, 1.0);
+        float shift = clamp(matte_parameters.z / 100.0, -1.0, 1.0);
+        float normalized = clamp((value - black) / (white - black), 0.0, 1.0);
+        float adjusted = floor(clamp(normalized * 255.0 + shift * 255.0, 0.0, 255.0) + 0.5);
+        color = vec4(adjusted / 255.0, 0.0, 0.0, 1.0);
+        return;
+    }
+    if (operation == 15) {
+        int radius = clamp(matte_radius, 0, 8);
+        float sigma = max(0.5, float(radius) / 2.0), total = 0.0, sum = 0.0;
+        ivec2 matte_size = textureSize(mask_image, 0);
+        for (int offset = -radius; offset <= radius; ++offset) {
+            float weight = exp(-float(offset * offset) / (2.0 * sigma * sigma));
+            ivec2 step = matte_horizontal != 0 ? ivec2(offset, 0) : ivec2(0, offset);
+            ivec2 pos = clamp(matte_pixel + step, ivec2(0), matte_size - 1);
+            sum += floor(texelFetch(mask_image, pos, 0).r * 255.0 + 0.5) * weight;
+            total += weight;
+        }
+        float blurred = floor(clamp(sum / max(total, 1e-12), 0.0, 255.0) + 0.5);
+        color = vec4(blurred / 255.0, 0.0, 0.0, 1.0);
+        return;
+    }
     if (operation == 2) {
         for (int i = 0; i < color_count; ++i) {
-            color.rgb = adjustColor(color.rgb, i);
+            float matte = use_refined_matte
+                ? texelFetch(mask_image, matte_pixel, 0).r : -1.0;
+            color.rgb = adjustColor(color.rgb, i, matte);
             color.rgb = floor(clamp(color.rgb, 0.0, 1.0) * 255.0 + 0.5) / 255.0;
         }
         return;
@@ -759,6 +815,9 @@ struct OpenGlFrameCompositor::Impl {
     std::uint64_t blend_reserved = 0;
     GLuint texture = 0;
     GLuint effect_source_fbo = 0;
+    GLuint matte_textures[2]{};
+    int matte_width = 0, matte_height = 0;
+    std::uint64_t matte_scratch_reserved = 0;
     GLuint vao = 0;
     GLuint curve_lut_texture = 0;
     std::uint64_t curve_lut_bytes = 0;
@@ -829,6 +888,7 @@ struct OpenGlFrameCompositor::Impl {
             output.reset();
             effect_scratch.reset();
             blend_backdrop.reset();
+            discardMatteScratch();
             program.reset();
             effect_program.reset();
             image_program.reset();
@@ -1001,6 +1061,53 @@ struct OpenGlFrameCompositor::Impl {
     void releaseRaster(std::uint64_t bytes) {
         std::lock_guard lock(budget->impl_->mutex);
         budget->impl_->bytes -= bytes; raster_reserved -= bytes;
+    }
+    void discardMatteScratch() {
+        if (matte_textures[0] || matte_textures[1])
+            gl->glDeleteTextures(2, matte_textures);
+        matte_textures[0] = matte_textures[1] = 0;
+        matte_width = matte_height = 0;
+        if (matte_scratch_reserved) {
+            releaseRaster(matte_scratch_reserved);
+            matte_scratch_reserved = 0;
+        }
+    }
+    bool ensureMatteScratch(int width, int height) {
+        if (matte_width == width && matte_height == height &&
+            matte_textures[0] && matte_textures[1]) return true;
+        discardMatteScratch();
+        const auto per_texture = static_cast<std::uint64_t>(width) * height;
+        const auto bytes = per_texture * 2;
+        if (!reserveRaster(bytes)) return false;
+        matte_scratch_reserved = bytes;
+        gl->glGenTextures(2, matte_textures);
+        for (unsigned index = 0; index < 2; ++index) {
+            gl->glBindTexture(GL_TEXTURE_2D, matte_textures[index]);
+            gl->glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+            gl->glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+            gl->glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+            gl->glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+            gl->glTexImage2D(GL_TEXTURE_2D, 0, GL_R8, width, height, 0,
+                GL_RED, GL_UNSIGNED_BYTE, nullptr);
+            gl->glBindFramebuffer(GL_FRAMEBUFFER, effect_source_fbo);
+            gl->glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+                GL_TEXTURE_2D, matte_textures[index], 0);
+            if (!matte_textures[index] ||
+                gl->glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+                discardMatteScratch();
+                return false;
+            }
+        }
+        gl->glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+            GL_TEXTURE_2D, 0, 0);
+        matte_width = width;
+        matte_height = height;
+        rememberResourcePeak();
+        if (gl->glGetError() != GL_NO_ERROR) {
+            discardMatteScratch();
+            return false;
+        }
+        return true;
     }
     void discardMatteUploads() {
         for(unsigned i=0;i<3;++i)if(matte_upload_reserved[i]) {
@@ -1646,6 +1753,102 @@ void main() {
             static_cast<GLsizei>(9 * operation.colors.size()), 0, GL_RED,
             GL_UNSIGNED_BYTE, curve_luts.data());
         curve_lut_bytes = curve_luts.size();
+        const bool refined_color = operation.kind == OpenGlImageOperationKind::Color &&
+            operation.colors.size() == 1 && requiresCpuMatteRefinement(operation.colors.front());
+        if (refined_color) {
+            const auto& qualifier = operation.colors.front().video_curves->qualifier;
+            if (!ensureMatteScratch(width, height))
+                return result(OpenGlCompositionStatus::Unsupported, "color-matte-budget",
+                    "The bounded R8 qualifier matte intermediates are unavailable.");
+            gl->glActiveTexture(GL_TEXTURE3);
+            gl->glBindTexture(GL_TEXTURE_2D, curve_lut_texture);
+            gl->glActiveTexture(GL_TEXTURE2);
+            gl->glUniform1i(image_program->uniformLocation("use_refined_matte"), GL_FALSE);
+            gl->glUniform4f(image_program->uniformLocation("matte_parameters"), 0, 0, 0, 0);
+            gl->glUniform1i(image_program->uniformLocation("matte_radius"), 0);
+            gl->glUniform1i(image_program->uniformLocation("matte_horizontal"), 0);
+            const auto draw_matte_pass = [&](unsigned destination, int opcode,
+                unsigned source_matte, float first, float second, float third,
+                int radius, int horizontal) {
+                if (cancel && cancel()) return OpenGlCompositionStatus::Cancelled;
+                gl->glBindFramebuffer(GL_FRAMEBUFFER, effect_source_fbo);
+                gl->glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0,
+                    GL_TEXTURE_2D, matte_textures[destination], 0);
+                if (gl->glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
+                    return OpenGlCompositionStatus::Failed;
+                gl->glViewport(0, 0, width, height);
+                gl->glActiveTexture(GL_TEXTURE2);
+                gl->glBindTexture(GL_TEXTURE_2D, source_matte);
+                gl->glUniform1i(image_program->uniformLocation("operation"), opcode);
+                gl->glUniform4f(image_program->uniformLocation("matte_parameters"),
+                    first, second, third, 0.0F);
+                gl->glUniform1i(image_program->uniformLocation("matte_radius"), radius);
+                gl->glUniform1i(image_program->uniformLocation("matte_horizontal"), horizontal);
+                gl->glDrawArrays(GL_TRIANGLES, 0, 3);
+                if (gl->glGetError() != GL_NO_ERROR) return OpenGlCompositionStatus::Failed;
+                return OpenGlCompositionStatus::Complete;
+            };
+            auto matte_index = 0U;
+            auto pass = draw_matte_pass(matte_index, 12, 0, 0, 0, 0, 0, 0);
+            if (pass != OpenGlCompositionStatus::Complete)
+                return result(pass, "color-matte-source", "Cannot generate the R8 qualifier matte.");
+            const auto run_filter = [&](int opcode, float first, float second,
+                float third, int radius, int horizontal) {
+                const auto destination = 1U - matte_index;
+                const auto status = draw_matte_pass(destination, opcode,
+                    matte_textures[matte_index], first, second, third, radius, horizontal);
+                if (status == OpenGlCompositionStatus::Complete) matte_index = destination;
+                return status;
+            };
+            if (qualifier.denoise_percent > 0.0) {
+                pass = run_filter(13, float(qualifier.denoise_percent), 0, 0, 0, 0);
+                if (pass != OpenGlCompositionStatus::Complete)
+                    return result(pass, "color-matte-denoise", "The R8 median denoise pass failed.");
+            }
+            if (qualifier.clean_black_percent > 0.0 ||
+                qualifier.clean_white_percent < 100.0 || qualifier.in_out_percent != 0.0) {
+                pass = run_filter(14, float(qualifier.clean_black_percent),
+                    float(qualifier.clean_white_percent), float(qualifier.in_out_percent), 0, 0);
+                if (pass != OpenGlCompositionStatus::Complete)
+                    return result(pass, "color-matte-levels", "The R8 clean-level pass failed.");
+            }
+            const int radius = static_cast<int>(std::lround(qualifier.blur_radius_pixels));
+            if (radius > 0) {
+                pass = run_filter(15, 0, 0, 0, radius, 1);
+                if (pass == OpenGlCompositionStatus::Complete)
+                    pass = run_filter(15, 0, 0, 0, radius, 0);
+                if (pass != OpenGlCompositionStatus::Complete)
+                    return result(pass, "color-matte-blur", "The separable R8 Gaussian blur failed.");
+            }
+            if (!selected_output->bind())
+                return result(OpenGlCompositionStatus::Failed, "color-matte-output",
+                    "Cannot bind the corrected RGBA output target.");
+            gl->glViewport(0, 0, width, height);
+            gl->glActiveTexture(GL_TEXTURE2);
+            gl->glBindTexture(GL_TEXTURE_2D, matte_textures[matte_index]);
+            gl->glUniform1i(image_program->uniformLocation("operation"), 2);
+            gl->glUniform1i(image_program->uniformLocation("use_refined_matte"), GL_TRUE);
+            gl->glUniform1i(image_program->uniformLocation("color_count"), 1);
+            gl->glDrawArrays(GL_TRIANGLES, 0, 3);
+            gl->glUniform1i(image_program->uniformLocation("use_refined_matte"), GL_FALSE);
+            if (const auto code = gl->glGetError(); code != GL_NO_ERROR)
+                return result(OpenGlCompositionStatus::Failed, "color-matte-grade",
+                    "The refined Curves correction pass failed.", code);
+            measured.color_adjustment_count += 1;
+            measured.draw_submission_nanoseconds += elapsed(started);
+            for (const auto& frame : uses.frames) {
+                std::string cause; std::int64_t code = 0;
+                if (!frame->endUse(context.get(), cause, code))
+                    return result(OpenGlCompositionStatus::Failed, "protect-image-texture", cause, code);
+            }
+            uses.frames.clear();
+            if (interop_guard.adapter) {
+                auto released = interop_guard.adapter->end(); interop_guard.adapter = nullptr;
+                if (released.status != OpenGlCompositionStatus::Complete) return released;
+            }
+            if (cancel && cancel()) return result(OpenGlCompositionStatus::Cancelled);
+            return result(OpenGlCompositionStatus::Complete);
+        }
         gl->glActiveTexture(GL_TEXTURE0);
         measured.color_adjustment_count += operation.colors.size();
         gl->glDrawArrays(GL_TRIANGLES, 0, 3);
@@ -1805,6 +2008,33 @@ OpenGlCompositionResult OpenGlFrameCompositor::copyToNative(const OpenGlTextureF
 
 OpenGlTextureCompositionResult OpenGlFrameCompositor::processImage(
     const OpenGlImageOperation& operation, const CancellationPredicate& cancel, OpenGlCompositionTimings* timings) {
+    const bool has_refined_color = operation.kind == OpenGlImageOperationKind::Color &&
+        std::any_of(operation.colors.begin(), operation.colors.end(), requiresCpuMatteRefinement);
+    if (has_refined_color && operation.colors.size() > 1) {
+        OpenGlImageInput source = operation.background;
+        OpenGlTextureFramePtr retained;
+        OpenGlCompositionTimings total;
+        for (const auto& color : operation.colors) {
+            if (cancel && cancel()) return {OpenGlCompositionStatus::Cancelled};
+            auto single = operation;
+            single.background = source;
+            single.colors = {color};
+            OpenGlCompositionTimings measured;
+            auto processed = processImage(single, cancel, &measured);
+            total.uploaded_bytes += measured.uploaded_bytes;
+            total.uploaded_layers += measured.uploaded_layers;
+            total.upload_nanoseconds += measured.upload_nanoseconds;
+            total.draw_submission_nanoseconds += measured.draw_submission_nanoseconds;
+            total.color_adjustment_submission_nanoseconds += measured.color_adjustment_submission_nanoseconds;
+            total.color_adjustment_count += measured.color_adjustment_count;
+            if (timings) *timings = total;
+            if (processed.status != OpenGlCompositionStatus::Complete) return processed;
+            retained = processed.frame;
+            source = {nullptr, retained};
+        }
+        if (timings) *timings = total;
+        return {OpenGlCompositionStatus::Complete, std::move(retained)};
+    }
     if (operation.kind == OpenGlImageOperationKind::Glow && !operation.foreground.texture) {
         if (cancel && cancel()) return {OpenGlCompositionStatus::Cancelled};
         if (!effects::validGlow(operation.glow))
@@ -2446,6 +2676,67 @@ OpenGlCompositionResult OpenGlFrameCompositor::render(int width, int height,
         }
         return render(width, height, prepared_layers, cancel, timings, read_output, output_alpha);
     }
+    const bool needs_refined_preprocess = std::any_of(layers.begin(), layers.end(),
+        [](const auto& layer) {
+            return std::any_of(layer.gpu_color_adjustments.begin(),
+                    layer.gpu_color_adjustments.end(), requiresCpuMatteRefinement) ||
+                std::any_of(layer.gpu_effects.begin(), layer.gpu_effects.end(), [](const auto& effect) {
+                    const auto* adjustment = std::get_if<effects::ColorAdjustmentParameters>(&effect);
+                    return adjustment && requiresCpuMatteRefinement(*adjustment);
+                });
+        });
+    if (needs_refined_preprocess) {
+        auto prepared_layers = layers;
+        for (std::size_t index = 0; index < prepared_layers.size(); ++index) {
+            auto& layer = prepared_layers[index];
+            const bool refined = std::any_of(layer.gpu_color_adjustments.begin(),
+                    layer.gpu_color_adjustments.end(), requiresCpuMatteRefinement) ||
+                std::any_of(layer.gpu_effects.begin(), layer.gpu_effects.end(), [](const auto& effect) {
+                    const auto* adjustment = std::get_if<effects::ColorAdjustmentParameters>(&effect);
+                    return adjustment && requiresCpuMatteRefinement(*adjustment);
+                });
+            if (!refined) continue;
+            if (!layer.gpu_color_adjustments.empty() && !layer.gpu_effects.empty())
+                return result(OpenGlCompositionStatus::Unsupported, "check-effects",
+                    "A layer cannot combine legacy and ordered GPU effect lists.", 0,
+                    static_cast<int>(index));
+            OpenGlImageInput source{layer.frame, layer.texture_frame, layer.native_frame};
+            const auto apply = [&](OpenGlImageOperation operation) -> OpenGlCompositionResult {
+                operation.background = source;
+                const auto processed = processImage(operation, cancel);
+                if (processed.status != OpenGlCompositionStatus::Complete || !processed.frame)
+                    return result(processed.status, processed.operation.c_str(), processed.cause,
+                        processed.error_code, static_cast<int>(index));
+                source = {nullptr, processed.frame};
+                return result(OpenGlCompositionStatus::Complete);
+            };
+            if (!layer.gpu_effects.empty()) {
+                for (const auto& effect : layer.gpu_effects) {
+                    OpenGlImageOperation operation;
+                    if (const auto* adjustment = std::get_if<effects::ColorAdjustmentParameters>(&effect)) {
+                        operation.kind = OpenGlImageOperationKind::Color;
+                        operation.colors = {*adjustment};
+                    } else {
+                        operation.kind = OpenGlImageOperationKind::GaussianBlur;
+                        operation.blur_radius_pixels = std::get<GpuGaussianBlurParameters>(effect).radius_pixels;
+                    }
+                    const auto processed = apply(std::move(operation));
+                    if (processed.status != OpenGlCompositionStatus::Complete) return processed;
+                }
+            } else {
+                OpenGlImageOperation operation;
+                operation.kind = OpenGlImageOperationKind::Color;
+                operation.colors = layer.gpu_color_adjustments;
+                const auto processed = apply(std::move(operation));
+                if (processed.status != OpenGlCompositionStatus::Complete) return processed;
+            }
+            layer.texture_frame = source.texture;
+            layer.native_frame.reset();
+            layer.gpu_color_adjustments.clear();
+            layer.gpu_effects.clear();
+        }
+        return render(width, height, prepared_layers, cancel, timings, read_output, output_alpha);
+    }
     for (std::size_t index = 0; index < layers.size(); ++index) {
         const auto& layer = layers[index];
         const bool refined_adjustment = std::any_of(layer.gpu_color_adjustments.begin(),
@@ -2456,7 +2747,7 @@ OpenGlCompositionResult OpenGlFrameCompositor::render(int width, int height,
             });
         if (refined_adjustment)
             return result(OpenGlCompositionStatus::Unsupported, "color-matte-refinement",
-                "Spatial Color qualifier refinement requires the CPU frame fallback.",
+                "The spatial Color qualifier could not be prepared for GPU processing.",
                 0, static_cast<int>(index));
     }
     OpenGlCompositionTimings measured;

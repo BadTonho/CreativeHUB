@@ -15,19 +15,25 @@
 | Scope GPU readback status, FIFO order, bounded staging and collection errors; stale GPU frames are rejected by request identity | `creative-suite-composition-opengl-color`, `creative-suite-composition-vulkan-color`, `creative-suite-main-editor-color-workspace-integration` |
 | CPU/GPU full-canvas still capture, stale revision/no-frame handling, source clip/frame provenance, Gallery rename/remove | `creative-suite-main-editor-playback-worker-errors`, `creative-suite-main-editor-color-workspace`, MainWindow integration |
 | CSP v39 matte-refinement save/reopen; v38 receives neutral defaults; v40 rejection, autosave/recovery and Hub backup/restoration with Gallery sidecars | `creative-suite-main-editor-project`, `creative-suite-main-editor-autosave`, `hub-backup-format-test`, `hub-backup-manager-test` |
-| Qualifier refinement limits, 3x3 denoise, clean levels, In/Out, Gaussian edges, alpha and graph cancellation; OpenGL/Vulkan return Unsupported for non-neutral spatial filters so the app can use CPU fallback | `creative-suite-effects-video-curves`, `creative-suite-main-editor-color-graph`, `creative-suite-composition-opengl-color`, `creative-suite-composition-vulkan-color`, `creative-suite-main-editor-color-workspace` |
+| Qualifier refinement limits, 3x3 denoise, clean levels, In/Out, Gaussian edges, exact alpha, cancellation, CPU/OpenGL/Vulkan parity within one RGB level, and bounded OpenGL resource refusal with a valid CPU reference path | `creative-suite-effects-video-curves`, `creative-suite-main-editor-color-graph`, `creative-suite-composition-opengl-color`, `creative-suite-composition-vulkan-color`, `creative-suite-main-editor-color-workspace` |
+| Selected Curves input after upstream nodes, disabled-node inspection, linear GPU-prefix selection, and stale preview rejection after a Viewer frame change | `creative-suite-main-editor-color-graph`, `creative-suite-main-editor-color-workspace`, `creative-suite-main-editor-playback-worker-errors`, `creative-suite-composition-opengl-color`, `creative-suite-composition-vulkan-color` |
 
-Windows Release evidence (2026-10-24): this change's nine selected gates passed,
-covering CPU matte processing and cancellation, unrefined OpenGL/Vulkan Curves,
-Color workspace and graph integration, CSP persistence, autosave/recovery, and
-Hub backup format/manager behavior. OpenGL and Vulkan tests also confirm that
-non-neutral spatial refinement returns Unsupported for the CPU fallback; native
-GPU R8 matte passes remain pending. The Inspector matte preview currently uses
-the latest composed frame rather than the selected Curves node input. The
-separate broad `creative-suite-composition-opengl`
-test currently fails its transparent track-matte blend comparison (pixel 2,
-green: CPU 79, GPU 75); this failure is outside the Curves-specific gate. No
-manual visual check was performed.
+Windows Release verification on 2026-10-24 for GPU matte refinement and
+selected-Curves input preview: `creative-suite-effects-video-curves`,
+`creative-suite-composition-opengl-color`, `creative-suite-composition-vulkan-color`,
+`creative-suite-main-editor-color-graph`,
+`creative-suite-main-editor-color-workspace`,
+`creative-suite-main-editor-color-workspace-integration`, and
+`creative-suite-main-editor-playback-worker-errors` passed. OpenGL and Vulkan
+tests cover each matte filter, combined order, cancellation, alpha and one-level
+RGB parity; OpenGL also exercises bounded-memory refusal while the CPU effects
+gate covers the reference processing path.
+`creative-suite-composition` failed at its unchanged assertion
+“Transparent composition preserves source-mask coverage.” The failure is in the
+CPU masked-composition path, which this change does not modify. The separate
+broad `creative-suite-composition-opengl` test also has a previously observed
+transparent track-matte blend discrepancy (pixel 2, green: CPU 79, GPU 75),
+outside Curves behavior. No manual visual check was performed.
 
 The automated checks cover the model, pixel paths, persistence and backup
 contracts. Manual Release check: open a project with a visible frame and create a
@@ -49,8 +55,12 @@ an interior point with right-click, and confirm one Undo/Redo reverses a whole
 drag. Enable the qualifier, set Hue minimum to 350 and maximum to 12, adjust
 saturation/luminance ranges and softness. Adjust Denoise, Clean Black, Clean
 White, In/Out, and Blur; switch between Matte and Highlight and confirm only the
-Inspector preview changes while the Viewer remains unchanged. Scrub to another
-frame and confirm the preview refreshes. Save/reopen the project and confirm all
+Inspector preview changes while the Viewer remains unchanged. Use a clip whose
+graph has a correction before Curves; confirm the matte reflects the corrected
+upstream image. Disable the selected Curves node and confirm its Inspector
+preview still inspects the incoming image. Scrub to another frame, switch clips,
+and quickly select another Curves node; confirm a delayed preview never replaces
+the current selection. Save/reopen the project and confirm all
 curve points and qualifier settings remain. Open a project with two visual clips, use the Color clip context
 menu to Copy Grade on one clip and Apply Grade on the other, then confirm one
 Undo restores the target's prior graph and Redo reapplies the copied graph.

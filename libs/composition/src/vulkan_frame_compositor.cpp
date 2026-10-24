@@ -486,7 +486,7 @@ struct VulkanDevice::Impl {
                 command.level=VK_COMMAND_BUFFER_LEVEL_PRIMARY;command.commandBufferCount=1;
                 check(vkAllocateCommandBuffers(device,&command,&c->command),"Allocate Vulkan command context.");
                 VkFenceCreateInfo fence{VK_STRUCTURE_TYPE_FENCE_CREATE_INFO};check(vkCreateFence(device,&fence,nullptr,&c->fence),"Create Vulkan context fence.");
-                std::array<VkDescriptorPoolSize,3> sizes{{{VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,5*256},{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,256},{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,256}}};
+                std::array<VkDescriptorPoolSize,3> sizes{{{VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,7*256},{VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,256},{VK_DESCRIPTOR_TYPE_STORAGE_BUFFER,256}}};
                 VkDescriptorPoolCreateInfo descriptor_info{VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};descriptor_info.maxSets=256;descriptor_info.poolSizeCount=uint32_t(sizes.size());descriptor_info.pPoolSizes=sizes.data();
                 check(vkCreateDescriptorPool(device,&descriptor_info,nullptr,&c->descriptors),"Create Vulkan context descriptors.");
                 available=c.get();contexts.push_back(std::move(c));
@@ -561,6 +561,10 @@ struct VulkanDevice::Impl {
         std::unique_ptr<ImageAllocation> allocation;
         if(found!=pool.end()){allocation=std::move(*found);pool.erase(found);}
         else {
+            VkFormatProperties format_properties{};
+            vkGetPhysicalDeviceFormatProperties(physical,format,&format_properties);
+            if((format_properties.optimalTilingFeatures&VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT)==0)
+                throw Failure("The Vulkan device does not support the required matte storage image format.",0,Status::Unsupported);
             allocation=std::make_unique<ImageAllocation>();allocation->width=width;allocation->height=height;allocation->format=format;
             VkImageCreateInfo info{VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO};
             info.imageType=VK_IMAGE_TYPE_2D;info.format=format;info.extent={uint32_t(width),uint32_t(height),1};
@@ -733,7 +737,9 @@ struct VulkanDevice::Impl {
     void dispatch(const std::shared_ptr<VulkanImage>& bg,const std::shared_ptr<VulkanImage>& fg,
         const std::shared_ptr<VulkanImage>& mask,const std::shared_ptr<VulkanImage>& output,
         const Parameters& parameters,const std::shared_ptr<VulkanImage>& display={},
-        const std::vector<std::array<float,4>>* adjustment_values=nullptr) {
+        const std::vector<std::array<float,4>>* adjustment_values=nullptr,
+        const std::shared_ptr<VulkanImage>& matte_input={},
+        const std::shared_ptr<VulkanImage>& matte_output={}) {
         if(current()->sets++>=256)throw Failure("The bounded Vulkan descriptor batch is full.",0,Status::Busy);
         VkDescriptorSetAllocateInfo allocate{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO};
         allocate.descriptorPool=current()->descriptors;allocate.descriptorSetCount=1;allocate.pSetLayouts=&descriptors;
@@ -746,6 +752,23 @@ struct VulkanDevice::Impl {
             writes[i]={VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};writes[i].dstSet=set;writes[i].dstBinding=i;
             writes[i].descriptorCount=1;writes[i].descriptorType=VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;writes[i].pImageInfo=&image_info[i];}
         vkUpdateDescriptorSets(device,5,writes.data(),0,nullptr);
+        auto matte_dummy=image(output->device,1,1,VK_FORMAT_R8_UINT);
+        const auto input_matte=matte_input?matte_input:matte_dummy;
+        const auto output_matte=matte_output?matte_output:matte_dummy;
+        retain(input_matte);retain(output_matte);
+        std::array<VkDescriptorImageInfo,2> matte_info{};
+        std::array<VkWriteDescriptorSet,2> matte_writes{};
+        for(unsigned i=0;i<2;++i){
+            const auto& value=i==0?input_matte:output_matte;
+            matte_info[i].imageView=allocation(value).view;
+            matte_info[i].imageLayout=VK_IMAGE_LAYOUT_GENERAL;
+            matte_writes[i]={VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET};
+            matte_writes[i].dstSet=set;matte_writes[i].dstBinding=6+i;
+            matte_writes[i].descriptorCount=1;
+            matte_writes[i].descriptorType=VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+            matte_writes[i].pImageInfo=&matte_info[i];
+        }
+        vkUpdateDescriptorSets(device,2,matte_writes.data(),0,nullptr);
         const auto color_bytes=std::max<std::size_t>(sizeof(std::array<float,4>),
             adjustment_values?adjustment_values->size()*sizeof(std::array<float,4>):0);
         auto color_buffer=buffer(color_bytes);
@@ -768,6 +791,7 @@ struct VulkanDevice::Impl {
         }
         vkCmdDispatch(cmd,(output->width+15)/16,(output->height+15)/16,1);
         barrier(cmd,allocation(output).image,VK_IMAGE_LAYOUT_GENERAL,VK_IMAGE_LAYOUT_GENERAL);
+        if(matte_output)barrier(cmd,allocation(matte_output).image,VK_IMAGE_LAYOUT_GENERAL,VK_IMAGE_LAYOUT_GENERAL);
         if(display)barrier(cmd,allocation(display).image,VK_IMAGE_LAYOUT_GENERAL,VK_IMAGE_LAYOUT_GENERAL);
         submit(cmd);
     }
@@ -848,9 +872,10 @@ std::shared_ptr<VulkanDevice> VulkanDevice::create(std::string& cause,const Crea
         info.enabledExtensionCount=uint32_t(extensions.size());info.ppEnabledExtensionNames=extensions.data();info.pEnabledFeatures=&enabled;
         check(vkCreateDevice(p.physical,&info,nullptr,&p.device),"Create Vulkan device.");
         vkGetDeviceQueue(p.device,p.family,0,&p.queue);
-        std::array<VkDescriptorSetLayoutBinding,6> bindings{};
+        std::array<VkDescriptorSetLayoutBinding,8> bindings{};
         for(unsigned i=0;i<5;++i){bindings[i].binding=i;bindings[i].descriptorType=VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;bindings[i].descriptorCount=1;bindings[i].stageFlags=VK_SHADER_STAGE_COMPUTE_BIT;}
         bindings[5].binding=5;bindings[5].descriptorType=VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;bindings[5].descriptorCount=1;bindings[5].stageFlags=VK_SHADER_STAGE_COMPUTE_BIT;
+        for(unsigned i=6;i<8;++i){bindings[i].binding=i;bindings[i].descriptorType=VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;bindings[i].descriptorCount=1;bindings[i].stageFlags=VK_SHADER_STAGE_COMPUTE_BIT;}
         VkDescriptorSetLayoutCreateInfo descriptor{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};descriptor.bindingCount=uint32_t(bindings.size());descriptor.pBindings=bindings.data();
         check(vkCreateDescriptorSetLayout(p.device,&descriptor,nullptr,&p.descriptors),"Create Vulkan descriptor layout.");
         VkPushConstantRange range{VK_SHADER_STAGE_COMPUTE_BIT,0,uint32_t(p.precise?sizeof(Parameters):64)};
@@ -1213,10 +1238,6 @@ OpenGlTextureCompositionResult VulkanFrameCompositor::processImage(const OpenGlI
     const CancellationPredicate& cancel,OpenGlCompositionTimings* timings) {
     try {
         cancelled(cancel);
-        if(operation.kind==OpenGlImageOperationKind::Color &&
-            std::any_of(operation.colors.begin(),operation.colors.end(),requiresCpuMatteRefinement))
-            throw Failure("Spatial Color qualifier refinement requires the CPU frame fallback.",
-                0,Status::Unsupported);
         if(operation.kind==OpenGlImageOperationKind::DropShadow)throw Failure("Drop Shadow is not implemented by Vulkan.",0,Status::Unsupported);
         if(operation.kind==OpenGlImageOperationKind::Glow)throw Failure("Glow is not implemented by Vulkan.",0,Status::Unsupported);
         if(operation.kind==OpenGlImageOperationKind::ApplyTrackMatte)
@@ -1307,7 +1328,48 @@ OpenGlTextureCompositionResult VulkanFrameCompositor::processImage(const OpenGlI
                 adjustment_values.clear();
                 append_color(color);
                 params.control[1]=1;
-                execute(&adjustment_values);
+                const bool refined=color.video_curves &&
+                    !effects::tonalQualifierRefinementIsNeutral(color.video_curves->qualifier);
+                if(refined) {
+                    const auto& qualifier=color.video_curves->qualifier;
+                    auto matte_a=p.image(device_,width,height,VK_FORMAT_R8_UINT);
+                    auto matte_b=p.image(device_,width,height,VK_FORMAT_R8_UINT);
+                    auto sink=p.image(device_,width,height);
+                    params.control={12,0,0,0};
+                    cancelled(cancel);
+                    p.dispatch(bg,{}, {},sink,params,{},&adjustment_values,{},matte_a);
+                    auto matte=matte_a;
+                    const auto run_matte_pass=[&](int opcode,const std::array<float,4>& values,
+                        int radius=0,int horizontal=0) {
+                        cancelled(cancel);
+                        Parameters filter;
+                        filter.control={opcode,radius,horizontal,0};
+                        filter.color=values;
+                        auto destination=matte==matte_a?matte_b:matte_a;
+                        p.dispatch(bg,{}, {},sink,filter,{},nullptr,matte,destination);
+                        matte=std::move(destination);
+                    };
+                    if(qualifier.denoise_percent>0.0)
+                        run_matte_pass(13,{float(qualifier.denoise_percent),0,0,0});
+                    if(qualifier.clean_black_percent>0.0 ||
+                       qualifier.clean_white_percent<100.0 || qualifier.in_out_percent!=0.0)
+                        run_matte_pass(14,{float(qualifier.clean_black_percent),
+                            float(qualifier.clean_white_percent),float(qualifier.in_out_percent),0});
+                    const int radius=static_cast<int>(std::lround(qualifier.blur_radius_pixels));
+                    if(radius>0) {
+                        run_matte_pass(15,{},radius,1);
+                        run_matte_pass(15,{},radius,0);
+                    }
+                    params.control={2,1,0,1};
+                    auto out=p.image(device_,width,height);
+                    cancelled(cancel);
+                    p.dispatch(bg,{}, {},out,params,{},&adjustment_values,matte,{});
+                    bg=std::move(out);
+                } else {
+                    params.control={2,1,0,0};
+                    execute(&adjustment_values);
+                }
+                p.traceMemory("effects");
                 if(timings)++timings->color_adjustment_count;
             }
         }else if(operation.kind==OpenGlImageOperationKind::GaussianBlur){
@@ -1339,17 +1401,6 @@ OpenGlTextureCompositionResult VulkanFrameCompositor::composeTexture(int width,i
         cancelled(cancel);
         if(std::any_of(layers.begin(),layers.end(),[](const auto& layer){return !validBlendMode(layer.blend_mode)||layer.blend_mode!=BlendMode::Normal;}))
             throw Failure("Non-Normal blend modes are not implemented by Vulkan.",0,Status::Unsupported);
-        for (const auto& layer : layers) {
-            const bool refined_adjustment = std::any_of(layer.gpu_color_adjustments.begin(),
-                layer.gpu_color_adjustments.end(), requiresCpuMatteRefinement) ||
-                std::any_of(layer.gpu_effects.begin(), layer.gpu_effects.end(), [](const auto& effect) {
-                    const auto* adjustment = std::get_if<effects::ColorAdjustmentParameters>(&effect);
-                    return adjustment && requiresCpuMatteRefinement(*adjustment);
-                });
-            if (refined_adjustment)
-                throw Failure("Spatial Color qualifier refinement requires the CPU frame fallback.",
-                    0,Status::Unsupported);
-        }
 #ifdef CS_HAS_VULKAN
         if(!device_ || !device_->valid())throw Failure("The Vulkan device is unavailable.");
         checkCapacity(width,height);

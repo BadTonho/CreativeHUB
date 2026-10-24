@@ -1267,6 +1267,15 @@ void MainWindow::handlePlaybackEvent(
                 color_workspace_->acceptScopeFrame(value.request_id, value.frame,
                     value.timeline_frame, value.composition_revision,
                     value.playback_generation);
+        } else if constexpr (std::is_same_v<Event,
+                             playback::PlaybackColorInputFrameEvent>) {
+            if (color_workspace_ != nullptr &&
+                value.project_generation == project_generation_)
+                color_workspace_->acceptColorInputFrame(value.request_id,
+                    value.clip_id, value.node_id, value.frame,
+                    value.timeline_frame, value.delivery_epoch,
+                    value.composition_revision,
+                    value.playback_generation);
         }
     }, event);
 }

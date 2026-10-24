@@ -11,11 +11,24 @@ normalized weighted average; this currently uses the CPU evaluator. The qualifie
 matte refines the input at the Curves stage using Denoise, Clean Black/White,
 In/Out, and Gaussian Blur in that order. CPU filtering uses bounded matte buffers,
 keeps alpha unchanged, and checks cancellation between rows. OpenGL and Vulkan
-return an explicit unsupported result for non-neutral spatial refinement so
-Preview and export use the CPU frame fallback; unrefined Curves retain the GPU
-path. R8 matte filter passes are not yet implemented on GPU. Inspector Matte
-and Highlight previews currently use the latest composed frame; they do not yet
-receive the selected Curves node's actual input frame. Color scopes offer RGB
+use two reusable R8 intermediates for the same filter order, preserve RGBA alpha,
+and check cancellation between GPU passes. Unsupported R8 formats, allocation
+limits, or failed passes return to CPU composition; graphs with branches continue
+through the CPU graph evaluator. Inspector Matte and Highlight previews evaluate
+the selected Curves node's upstream graph and stop before that node, including
+when the selected Curves node is disabled. GPU-only upstream textures use the
+playback worker's bounded asynchronous readback path. For a serial upstream
+chain, the playback worker evaluates the prefix through the selected compositor
+and reads back the tapped texture; mixers or unavailable GPU operations use the
+CPU graph evaluator, reading back the source first when no CPU frame exists.
+Native hardware-decoded frames are imported for the GPU tap; failed imports
+fall back to decoding that source frame into RGBA on the worker.
+Color-input requests share the single outstanding scope readback slot, retaining
+only the newest queued request until that transfer completes. Requests carry
+project generation, clip, node, delivery epoch, composition revision, playback
+generation, and Timeline frame; obsolete responses are discarded.
+These local previews do not alter the Viewer or exported pixels. Color scopes
+offer RGB
 Waveform, RGB Parade, Vectorscope, and RGB Histogram. They
 sample the composed frame after correction and do not enter exported pixels.
 The Vectorscope plots Rec. 709-derived Cb/Cr with a neutral center and hue

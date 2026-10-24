@@ -14,10 +14,18 @@ Gamma, Gain and Offset each have an RGB wheel and editable R/G/B values; a drag
 is one shared history edit. Contrast, pivot, saturation, temperature and tint
 remain scalar controls. Primary Grade also provides synchronized Wheels, Bars,
 and Log presentations. Curves exposes qualifier refinement controls and local
-Matte/Highlight preview modes. The Inspector preview currently uses the latest
-composed frame, not the selected Curves node's actual input. Spatial refinement
-runs on CPU; non-neutral OpenGL/Vulkan requests use CPU fallback while GPU R8
-filter passes remain pending. The combined RGB Waveform and RGB Parade use the
+Matte/Highlight preview modes. The Inspector preview evaluates the selected
+Curves node's actual input after Fusion and upstream Color nodes, even when that
+Curves node is disabled; it does not change the Viewer. Serial upstream chains
+are evaluated on the GPU when possible, then read back asynchronously at the
+Curves input. Mixer graphs and GPU failures use the CPU graph evaluator, with an
+asynchronous source readback when the frame has no CPU buffer. Native hardware
+frames are imported for the GPU tap or decoded to CPU RGBA if import fails. The
+input preview shares one outstanding readback slot with scopes and keeps only the latest
+queued request. Replies are discarded after project, clip, node, or frame
+changes. Refined serial Color graphs run their R8 filter passes on
+OpenGL/Vulkan and fall back to CPU if GPU resources or a pass fail. The combined
+RGB Waveform and RGB Parade use the
 composed frame, a normalized 0–100% scale, channel labels and a grid. CPU RGBA
 is sampled directly; GPU RGBA readback is asynchronous, limited to one request
 and performed on the playback worker. Results for stale frames or projects are

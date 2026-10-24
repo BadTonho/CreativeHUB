@@ -179,6 +179,10 @@ public slots:
         quint64 generation);
     virtual void requestScopeFrame(quint64 request_id, qint64 timeline_frame,
         quint64 composition_revision, quint64 generation);
+    virtual void requestColorInputFrame(quint64 request_id,
+        timeline::ClipId clip_id, color::NodeId node_id, qint64 timeline_frame,
+        quint64 project_generation, quint64 delivery_epoch,
+        quint64 composition_revision, quint64 generation, color::Graph graph);
     virtual void stepForward();
     virtual void stepBackward();
     virtual void seekToFrame(qint64 frame_index, quint64 generation);
@@ -209,6 +213,10 @@ signals:
         quint64 generation);
     void scopeFrameReady(quint64 request_id, VideoFramePtr frame,
         qint64 timeline_frame, quint64 composition_revision, quint64 generation);
+    void colorInputFrameReady(quint64 request_id, timeline::ClipId clip_id,
+        color::NodeId node_id, VideoFramePtr frame, qint64 timeline_frame,
+        quint64 project_generation, quint64 delivery_epoch,
+        quint64 composition_revision, quint64 generation);
 
 private slots:
     void decodeTick();
@@ -232,6 +240,9 @@ private:
         std::size_t composition_session_index = 0;
         creative_suite::media::NativeVideoFramePtr native_frame;
         creative_suite::composition::OpenGlTextureFramePtr texture_frame;
+        VideoFramePtr color_input_frame;
+        creative_suite::composition::OpenGlTextureFramePtr color_input_texture;
+        std::optional<color::Graph> color_graph;
     };
 
     bool ensureSessionAtCurrentFrame();
@@ -245,6 +256,10 @@ private:
     void ensureGpuMaintenance();
     void collectGpuResources();
     void pollScopeReadback();
+    void evaluateColorInputAsync(quint64 request_id, timeline::ClipId clip_id,
+        color::NodeId node_id, VideoFramePtr frame, color::Graph graph,
+        qint64 timeline_frame, quint64 project_generation, quint64 delivery_epoch,
+        quint64 composition_revision, quint64 generation);
     void emitComposedFrame();
     [[nodiscard]] std::optional<std::vector<DecodedCompositionLayer>>
         decodeCompositionLayers(
@@ -367,8 +382,42 @@ private:
         quint64 generation = 0;
         quint64 composition_revision = 0;
         qint64 timeline_frame = 0;
+        bool color_input = false;
+        timeline::ClipId clip_id = 0;
+        color::NodeId node_id = 0;
+        quint64 project_generation = 0;
+        quint64 delivery_epoch = 0;
+        color::Graph color_graph;
+        bool gpu_prefix_evaluated = false;
+    };
+    struct QueuedColorInputRequest {
+        quint64 request_id = 0;
+        timeline::ClipId clip_id = 0;
+        color::NodeId node_id = 0;
+        qint64 timeline_frame = 0;
+        quint64 project_generation = 0;
+        quint64 delivery_epoch = 0;
+        quint64 composition_revision = 0;
+        quint64 generation = 0;
+        color::Graph graph;
     };
     std::optional<PendingScopeReadback> pending_scope_readback_;
+    std::optional<QueuedColorInputRequest> queued_color_input_request_;
+    std::atomic<quint64> latest_color_input_request_id_{0};
+    struct CachedColorInput {
+        timeline::ClipId clip_id = 0;
+        VideoFramePtr frame;
+        creative_suite::composition::OpenGlTextureFramePtr texture;
+        color::Graph graph;
+        creative_suite::media::NativeVideoFramePtr native_frame;
+        media::VideoPlaybackSession* decode_session = nullptr;
+        std::int64_t source_frame = -1;
+    };
+    std::vector<CachedColorInput> cached_color_inputs_;
+    qint64 cached_color_input_timeline_frame_ = -1;
+    quint64 cached_color_input_revision_ = 0;
+    quint64 cached_color_input_generation_ = 0;
+    quint64 cached_color_input_delivery_epoch_ = 0;
     creative_suite::composition::GpuFrameCompositor* prepared_scope_compositor_ = nullptr;
     int prepared_scope_width_ = 0;
     int prepared_scope_height_ = 0;

@@ -157,12 +157,13 @@ it is evaluated by the same CPU, OpenGL, and Vulkan processing boundary.
 Curves values and qualifier state live in the Color graph instead of the shared
 built-in effect catalog. Denoise, Clean Black/White, In/Out coverage shift, and
 Gaussian Blur refine its matte after hue/saturation/luminance selection. CPU
-frame evaluation preserves alpha and uses bounded matte buffers. Serial GPU
-composition reports spatial refinement as unsupported so Preview and export
-take the correctness-preserving CPU frame path; neutral and unrefined Curves
-continue through the existing GPU path. Filter parameters, enabled states, connections,
-mixer weights and positions are Timeline project data; caches and temporary
-preview state are not added by this library. The Video Editor persists graphs
+frame evaluation preserves alpha and uses bounded matte buffers. Serial OpenGL
+and Vulkan composition use two reusable, bounded R8 intermediates to run the
+same ordered matte passes before Curves. Neutral filters keep the existing GPU
+path. Allocation and processing failures return to the CPU frame path; branched
+Color graphs continue through the CPU graph evaluator. Filter parameters,
+enabled states, connections, mixer weights and positions are Timeline project
+data; caches and temporary preview state are not added by this library. The Video Editor persists graphs
 and named per-clip snapshots in CSP v39 as described in [PROJECT.md](PROJECT.md).
 Versions 1–37 migrate without Curves nodes, versions through v38 receive neutral
 matte refinement values, and versions through v36 start with
