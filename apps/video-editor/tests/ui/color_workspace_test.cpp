@@ -4,8 +4,10 @@
 #include "ui/preview/preview_widget.h"
 
 #include <QApplication>
+#include <QColor>
 #include <QCheckBox>
 #include <QComboBox>
+#include <QCoreApplication>
 #include <QContextMenuEvent>
 #include <QDoubleSpinBox>
 #include <QElapsedTimer>
@@ -448,6 +450,7 @@ int main(int argc, char** argv) {
             scope_curves_node->x + 77.0, scope_curves_node->y + 20.0));
         QTest::mouseClick(nodes->viewport(), Qt::LeftButton, Qt::NoModifier,
             curves_canvas_position);
+        qputenv("CREATIVE_SUITE_DISABLE_GPU_PREVIEW", "1");
         auto* viewer = new PreviewWidget(&workspace);
         auto frame = std::make_shared<media::VideoFrame>();
         frame->width = 2; frame->height = 2; frame->stride = 8;
@@ -455,6 +458,97 @@ int main(int argc, char** argv) {
                               0, 0, 255, 255, 255, 255, 255, 255};
         viewer->setFrame(frame);
         workspace.setPreviewWidget(viewer);
+        std::vector<std::pair<quint64, QString>> gallery_reference_requests;
+        workspace.setGalleryReferenceRequestHandler(
+            [&](quint64 request_id, const QString& still_id) {
+                gallery_reference_requests.emplace_back(request_id, still_id);
+            });
+        const ui::ColorWorkspace::StillItem still_a{
+            QStringLiteral("still-a"), QStringLiteral("Still 1"), QStringLiteral("Shot A"),
+            42, thumbnail, true};
+        const ui::ColorWorkspace::StillItem still_b{
+            QStringLiteral("still-b"), QStringLiteral("Still 2"), QStringLiteral("Shot A"),
+            84, thumbnail, true};
+        const ui::ColorWorkspace::StillItem missing_still{
+            QStringLiteral("still-missing"), QStringLiteral("Missing"),
+            QStringLiteral("Shot A"), 126, {}, false};
+        workspace.setGalleryStills({still_a, still_b}, 1);
+        gallery_list->setCurrentRow(0);
+        require(gallery_reference_requests.size() == 1 &&
+                    gallery_reference_requests.back().second == QStringLiteral("still-a"),
+                "Selecting a Gallery still must request its reference image.");
+        const auto stale_reference_request = gallery_reference_requests.back().first;
+        gallery_list->setCurrentRow(1);
+        require(gallery_reference_requests.size() == 2 &&
+                    gallery_reference_requests.back().second == QStringLiteral("still-b"),
+                "Selecting another Gallery still must replace the pending reference request.");
+        auto reference = QImage(8, 4, QImage::Format_RGBA8888);
+        reference.fill(QColor(15, 35, 220));
+        const auto active_reference_request = gallery_reference_requests.back().first;
+        workspace.acceptGalleryReferenceImage(stale_reference_request,
+            QStringLiteral("still-a"), reference);
+        auto* comparison_mode = workspace.findChild<QComboBox*>("colorGalleryComparisonMode");
+        auto* wipe_position = workspace.findChild<QSlider*>("colorGalleryWipePosition");
+        auto* reference_label = workspace.findChild<QLabel*>("colorGalleryReferenceName");
+        require(comparison_mode && wipe_position && reference_label &&
+                    comparison_mode->currentData().toInt() == 0 &&
+                    !comparison_mode->isEnabled(),
+                "A stale reference response enabled comparison for the wrong still.");
+        const auto viewer_payload_before_comparison = viewer->currentPayload();
+        const auto edits_before_comparison = edits;
+        workspace.acceptGalleryReferenceImage(active_reference_request,
+            QStringLiteral("still-b"), reference);
+        require(comparison_mode->isEnabled() && comparison_mode->currentData().toInt() == 0 &&
+                    reference_label->text().contains(QStringLiteral("Still 2")),
+                "A selected still must load as a reference while comparison remains Off.");
+        workspace.setActive(true);
+        comparison_mode->setCurrentIndex(1);
+        require(comparison_mode->currentData().toInt() == 1 && !wipe_position->isEnabled(),
+                "Split-screen comparison should not enable the wipe control.");
+        comparison_mode->setCurrentIndex(2);
+        require(comparison_mode->currentData().toInt() == 2 && wipe_position->isEnabled() &&
+                    wipe_position->value() == 50,
+                "Wipe comparison must start at the accessible center position.");
+        wipe_position->setValue(0);
+        wipe_position->setValue(100);
+        require(viewer->currentPayload().timeline_frame ==
+                    viewer_payload_before_comparison.timeline_frame &&
+                    viewer->currentPayload().composition_revision ==
+                    viewer_payload_before_comparison.composition_revision &&
+                    viewer->currentPayload().playback_generation ==
+                    viewer_payload_before_comparison.playback_generation &&
+                    viewer->currentPayload().rgba == viewer_payload_before_comparison.rgba &&
+                    edits == edits_before_comparison,
+                "Gallery comparison must not change the Viewer frame or Color project history.");
+        workspace.setActive(false);
+        workspace.setActive(true);
+        require(comparison_mode->currentData().toInt() == 2 && wipe_position->isEnabled(),
+                "Returning to Color must restore its temporary comparison mode.");
+
+        workspace.setGalleryStills({still_a, still_b, missing_still}, 1);
+        gallery_list->setCurrentRow(2);
+        require(comparison_mode->currentData().toInt() == 0 &&
+                    !comparison_mode->isEnabled() && !wipe_position->isEnabled() &&
+                    reference_label->text().contains(QStringLiteral("unavailable"),
+                        Qt::CaseInsensitive),
+                "An unavailable Gallery still must disable comparison and return to Off.");
+        workspace.setGalleryStills({still_a, still_b}, 1);
+        require(comparison_mode->currentData().toInt() == 0 &&
+                    !comparison_mode->isEnabled() &&
+                    reference_label->text().contains(QStringLiteral("No Gallery")),
+                "Removing the active Gallery still must clear its reference and reset Off.");
+        gallery_list->setCurrentRow(0);
+        require(gallery_reference_requests.size() == 3,
+                "Selecting a replacement still must issue a new async request.");
+        const auto prior_project_request = gallery_reference_requests.back().first;
+        workspace.setGalleryStills({still_a}, 2);
+        workspace.acceptGalleryReferenceImage(prior_project_request,
+            QStringLiteral("still-a"), reference);
+        require(comparison_mode->currentData().toInt() == 0 &&
+                    !comparison_mode->isEnabled() &&
+                    reference_label->text().contains(QStringLiteral("No Gallery")),
+                "A response from the previous project must be discarded.");
+        workspace.setGalleryStills({}, 2);
         int curves_input_requests = 0;
         quint64 last_curves_input_request = 0;
         media::VideoFramePtr captured_curves_input;

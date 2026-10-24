@@ -14,6 +14,9 @@
 | Nine Curves families, point limits and editing batches, wrapped hue qualifier, matte preview, alpha and CPU/OpenGL/Vulkan parity for unrefined Curves | `creative-suite-effects`, `creative-suite-main-editor-color-graph`, `creative-suite-main-editor-color-workspace`, `creative-suite-composition-opengl-color`, `creative-suite-composition-vulkan-color`, `creative-suite-main-editor-gpu-color`, `creative-suite-main-editor-vulkan-color` |
 | Scope GPU readback status, FIFO order, bounded staging and collection errors; stale GPU frames are rejected by request identity | `creative-suite-composition-opengl-color`, `creative-suite-composition-vulkan-color`, `creative-suite-main-editor-color-workspace-integration` |
 | CPU/GPU full-canvas still capture, stale revision/no-frame handling, source clip/frame provenance, Gallery rename/remove | `creative-suite-main-editor-playback-worker-errors`, `creative-suite-main-editor-color-workspace`, MainWindow integration |
+| Vulkan ApplyMask and MaskedBlend use the same Rec. 709 RGB coverage and exact alpha rounding as the shared CPU compositor | `creative-suite-composition-vulkan`, `creative-suite-composition`, `creative-suite-composition-opengl` |
+| Gallery reference selection, stale async replies, unavailable/removal reset, Off/Split-screen/Wipe state, page re-entry, and clip/playhead/history/project invariance | `creative-suite-main-editor-color-workspace`, `creative-suite-main-editor-color-workspace-integration` |
+| Synthetic comparison pixels: CPU/OpenGL Off identity, left/right split, aspect fit, wipe at 0/50/100%, and draggable divider; Vulkan presentation API modes and endpoints | `creative-suite-main-editor-preview`, `creative-suite-main-editor-opengl-preview`, `creative-suite-composition-vulkan` |
 | CSP v39 matte-refinement save/reopen; v38 receives neutral defaults; v40 rejection, autosave/recovery and Hub backup/restoration with Gallery sidecars | `creative-suite-main-editor-project`, `creative-suite-main-editor-autosave`, `hub-backup-format-test`, `hub-backup-manager-test` |
 | Qualifier refinement limits, 3x3 denoise, clean levels, In/Out, Gaussian edges, exact alpha, cancellation, CPU/OpenGL/Vulkan parity within one RGB level, and bounded OpenGL resource refusal with a valid CPU reference path | `creative-suite-effects-video-curves`, `creative-suite-main-editor-color-graph`, `creative-suite-composition-opengl-color`, `creative-suite-composition-vulkan-color`, `creative-suite-main-editor-color-workspace` |
 | Selected Curves input after upstream nodes, disabled-node inspection, linear GPU-prefix selection, and stale preview rejection after a Viewer frame change | `creative-suite-main-editor-color-graph`, `creative-suite-main-editor-color-workspace`, `creative-suite-main-editor-playback-worker-errors`, `creative-suite-composition-opengl-color`, `creative-suite-composition-vulkan-color` |
@@ -864,6 +867,18 @@ the result in the task or release validation record. This check is pending until
 the installer can be generated with Inno Setup.
 
 ## Manual UI validation
+
+Color Gallery comparison manual check (pending): in the Release Video Editor,
+open a project with a captured Gallery still and a visible Color Viewer frame.
+Select the still and confirm the Viewer stays unchanged until a comparison mode
+is chosen. Check Off, then Split-screen (reference left, current frame right,
+both preserving aspect ratio), and Wipe at the center, both endpoints, by
+dragging the divider, and with the accessible slider. Switch to Edit and back
+to Color; confirm the reference and selected mode return. Select an unavailable
+still and remove the active still; confirm comparison turns Off. Check that
+selection and mode changes do not dirty the project or change the clip,
+playhead, or Undo/Redo state. This interface check remains pending; automated
+coverage is listed above.
 
 Inspector expansion regression evidence (2026-10-11, Windows, Qt 6.7.2,
 Video Editor 0.1.0 Release): the earlier dock-geometry checks passed but missed

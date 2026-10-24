@@ -85,6 +85,21 @@ int main(int argc, char* argv[]) {
             QStringLiteral("Copiar correção") ||
         QCoreApplication::translate("ColorWorkspace", "Offset") !=
             QStringLiteral("Deslocamento") ||
+        QCoreApplication::translate("ColorWorkspace", "Compare") !=
+            QStringLiteral("Comparar") ||
+        QCoreApplication::translate("ColorWorkspace", "Off") !=
+            QStringLiteral("Desativado") ||
+        QCoreApplication::translate("ColorWorkspace", "Split-screen") !=
+            QStringLiteral("Tela dividida") ||
+        QCoreApplication::translate("ColorWorkspace", "Wipe") !=
+            QStringLiteral("Cortina") ||
+        QCoreApplication::translate("ColorWorkspace", "Wipe position") !=
+            QStringLiteral("Posição da cortina") ||
+        QCoreApplication::translate("ColorWorkspace", "Comparison unavailable") !=
+            QStringLiteral("Comparação indisponível") ||
+        QCoreApplication::translate("MainWindow",
+            "Gallery comparison is unavailable; the Viewer remains unchanged.") !=
+            QStringLiteral("A comparação da Galeria está indisponível; o Viewer permanece inalterado.") ||
         ::effects::translateCatalogLabel(QStringLiteral("Lift red")) !=
             QStringLiteral("Eleva\u00e7\u00e3o vermelha")) {
         std::fprintf(stderr, "Primary Grade and scope labels were not translated.\n");

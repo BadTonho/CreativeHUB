@@ -46,6 +46,7 @@
 #include <QImage>
 #include <QImageReader>
 #include <QImageWriter>
+#include <QBuffer>
 #include <QIcon>
 #include <QKeyEvent>
 #include <QKeySequence>
@@ -331,6 +332,76 @@ public:
                     .clips[location->clip_index].color_graph->nodes.size() == 5 &&
                 controller->undo().changed() && controller->redo().changed(),
                 "Color graph topology must use the shared Timeline Undo/Redo history.");
+
+        QImage reference_image(32, 18, QImage::Format_RGBA8888);
+        reference_image.fill(QColor(20, 40, 220));
+        QByteArray reference_png;
+        QBuffer reference_buffer(&reference_png);
+        require(reference_buffer.open(QIODevice::WriteOnly) &&
+                    reference_image.save(&reference_buffer, "PNG"),
+                "Color comparison fixture could not encode its Gallery PNG.");
+        project::ColorGalleryStill reference_still;
+        reference_still.id = "color-reference-integration";
+        reference_still.name = "Integration Still";
+        reference_still.source_clip_id = clip_id;
+        reference_still.timeline_frame = window.timelinePlayheadFrame();
+        reference_still.image_file = reference_still.id + ".png";
+        reference_still.image_png = std::make_shared<const std::vector<std::uint8_t>>(
+            reinterpret_cast<const std::uint8_t*>(reference_png.constData()),
+            reinterpret_cast<const std::uint8_t*>(reference_png.constData()) +
+                reference_png.size());
+        window.editor_session_.colorGalleryStillsForUi().push_back(reference_still);
+        window.updateProjectDirtyState();
+        window.refreshColorSelection();
+        auto* gallery = window.color_workspace_->findChild<QListWidget*>("colorGalleryStills");
+        auto* comparison = window.color_workspace_->findChild<QComboBox*>(
+            "colorGalleryComparisonMode");
+        auto* wipe = window.color_workspace_->findChild<QSlider*>("colorGalleryWipePosition");
+        auto* reference_status = window.color_workspace_->findChild<QLabel*>(
+            "colorGalleryReferenceName");
+        require(gallery && comparison && wipe && reference_status && gallery->count() == 1,
+                "MainWindow did not expose the project Gallery reference controls.");
+        const auto clip_before_comparison = window.active_timeline_clip_id_;
+        const auto playhead_before_comparison = window.timelinePlayheadFrame();
+        const auto dirty_before_comparison = window.project_dirty_;
+        const auto can_undo_before_comparison = window.timeline_command_service_.canUndo();
+        const auto can_redo_before_comparison = window.timeline_command_service_.canRedo();
+        const auto graph_before_comparison = timeline::colorGraphForClip(
+            window.timeline_model_.tracks()[location->track_index]
+                .clips[location->clip_index]);
+        gallery->setCurrentRow(0);
+        for (int attempt = 0; attempt < 200 &&
+                !reference_status->text().startsWith(QStringLiteral("Reference:"));
+             ++attempt) {
+            QApplication::processEvents();
+            std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        }
+        require(reference_status->text().contains(QStringLiteral("Integration Still")) &&
+                    comparison->currentData().toInt() == 0 && comparison->isEnabled(),
+                "MainWindow did not decode the selected still asynchronously with comparison Off.");
+        comparison->setCurrentIndex(1);
+        comparison->setCurrentIndex(2);
+        wipe->setValue(25);
+        require(window.active_timeline_clip_id_ == clip_before_comparison &&
+                    window.timelinePlayheadFrame() == playhead_before_comparison &&
+                    window.project_dirty_ == dirty_before_comparison &&
+                    window.timeline_command_service_.canUndo() == can_undo_before_comparison &&
+                    window.timeline_command_service_.canRedo() == can_redo_before_comparison &&
+                    timeline::colorGraphForClip(window.timeline_model_.tracks()
+                        [location->track_index].clips[location->clip_index]) ==
+                        graph_before_comparison,
+                "MainWindow Gallery comparison changed the clip, playhead, history or project state.");
+        setWorkspacePageImmediately(window, ui::WorkspacePageId::Edit);
+        setWorkspacePageImmediately(window, ui::WorkspacePageId::Color);
+        QApplication::processEvents();
+        require(comparison->currentData().toInt() == 2,
+                "Returning to Color did not restore its temporary wipe mode.");
+        window.removeColorStill(QStringLiteral("color-reference-integration"));
+        require(comparison->currentData().toInt() == 0 && !comparison->isEnabled() &&
+                    !wipe->isEnabled() &&
+                    reference_status->text().contains(QStringLiteral("No Gallery")),
+                "Removing the active Gallery still did not clear comparison and return Off.");
+
         const auto screenshot_path = qEnvironmentVariable("CS_COLOR_SCREENSHOT");
         if (!screenshot_path.isEmpty()) {
             QApplication::processEvents();

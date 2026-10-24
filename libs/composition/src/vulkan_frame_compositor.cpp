@@ -1498,7 +1498,8 @@ void VulkanDevice::releaseWindow(QWindow* window) noexcept {
 #endif
 }
 VulkanDevice::PresentationResult VulkanDevice::presentFrame(QWindow* window,const OpenGlTextureFramePtr& frame,bool grayscale,
-    std::array<float, 4> surround,bool defer_acquisition_for_testing) {
+    std::array<float, 4> surround,bool defer_acquisition_for_testing,
+    FrameComparisonOptions comparison) {
 #ifdef CS_HAS_VULKAN
     std::string cause;
     Impl::Context* context=nullptr;
@@ -1520,6 +1521,22 @@ VulkanDevice::PresentationResult VulkanDevice::presentFrame(QWindow* window,cons
     try {
         if(!window || !valid() || !frame || !frame->vulkanImage() || frame->vulkanImage()->device.get()!=this)
             throw Failure("The Vulkan presentation image or device is unavailable.");
+        const auto comparison_mode = comparison.mode;
+        if (comparison_mode != FrameComparisonMode::Off &&
+            comparison_mode != FrameComparisonMode::SplitScreen &&
+            comparison_mode != FrameComparisonMode::Wipe)
+            throw Failure("The Vulkan presentation comparison mode is invalid.", 0, Status::Unsupported);
+        std::shared_ptr<VulkanImage> reference;
+        if (comparison_mode != FrameComparisonMode::Off) {
+            if (!comparison.reference || !comparison.reference->valid() ||
+                !comparison.reference->vulkanImage() ||
+                comparison.reference->vulkanImage()->device.get() != this)
+                throw Failure("The Vulkan comparison reference is unavailable.", 0, Status::Unsupported);
+            if (!std::isfinite(comparison.reference_fraction) ||
+                comparison.reference_fraction < 0.0F || comparison.reference_fraction > 1.0F)
+                throw Failure("The Vulkan comparison divider is outside its valid range.", 0, Status::Unsupported);
+            reference = comparison.reference->vulkanImage();
+        }
         auto& p=*impl_;std::unique_lock lock(p.mutex,std::try_to_lock);
         if(!lock.owns_lock()){return {PresentStatus::Deferred,PresentDeferral::DeviceBusy};}
         auto& swap=p.windows[window];const auto surface=QVulkanInstance::surfaceForWindow(window);
@@ -1565,7 +1582,12 @@ VulkanDevice::PresentationResult VulkanDevice::presentFrame(QWindow* window,cons
         acquired_wait=swap.acquire[acquire_slot];
         auto bg=frame->vulkanImage();auto scratch=p.image(shared_from_this(),bg->width,bg->height);
         auto display=p.image(shared_from_this(),bg->width,bg->height,VK_FORMAT_R8G8B8A8_UNORM);
-        Parameters params;params.control={9,0,0,int(grayscale)};p.dispatch(bg,{},{},scratch,params,display);
+        Parameters params;
+        const int divider = int(std::lround(double(bg->width) *
+            double(comparison.reference_fraction)));
+        params.control={9,int(comparison_mode),divider,int(grayscale)};
+        std::copy(surround.begin(), surround.end(), params.color.begin());
+        p.dispatch(bg,reference,{},scratch,params,display);
         auto cmd=p.begin();p.barrier(cmd,swap.images[index],VK_IMAGE_LAYOUT_UNDEFINED,VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,0);
         VkClearColorValue clear{};std::copy(surround.begin(),surround.end(),clear.float32);
         VkImageSubresourceRange range{VK_IMAGE_ASPECT_COLOR_BIT,0,1,0,1};
@@ -1599,7 +1621,7 @@ VulkanDevice::PresentationResult VulkanDevice::presentFrame(QWindow* window,cons
         try{retire_failed_acquisition();}catch(...){impl_->lost=true;}
         cause=error.what();return {PresentStatus::Failed,PresentDeferral::None,{},std::move(cause)};}
 #else
-    Q_UNUSED(window);Q_UNUSED(frame);Q_UNUSED(grayscale);Q_UNUSED(surround);Q_UNUSED(defer_acquisition_for_testing);return {PresentStatus::Failed,PresentDeferral::None,{},"Vulkan was not compiled into this build."};
+    Q_UNUSED(window);Q_UNUSED(frame);Q_UNUSED(grayscale);Q_UNUSED(surround);Q_UNUSED(defer_acquisition_for_testing);Q_UNUSED(comparison);return {PresentStatus::Failed,PresentDeferral::None,{},"Vulkan was not compiled into this build."};
 #endif
 }
 bool VulkanDevice::present(QWindow* window,const OpenGlTextureFramePtr& frame,bool grayscale,

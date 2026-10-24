@@ -19,6 +19,8 @@ class QComboBox;
 class QPushButton;
 class QTimer;
 class QCheckBox;
+class QSlider;
+class PreviewWidget;
 
 namespace ui {
 
@@ -68,7 +70,11 @@ public:
         color::NodeId node_id, playback::VideoFramePtr frame, qint64 timeline_frame,
         quint64 delivery_epoch, quint64 composition_revision,
         quint64 playback_generation);
-    void setGalleryStills(std::vector<StillItem> stills);
+    void setGalleryStills(std::vector<StillItem> stills, quint64 project_generation = 0);
+    void setGalleryReferenceRequestHandler(
+        std::function<void(quint64, const QString&)> handler);
+    void acceptGalleryReferenceImage(quint64 request_id, const QString& still_id,
+        QImage image);
     void setCapturePending(bool pending);
     void setCaptureStillHandler(std::function<void()> handler);
     void setRenameStillHandler(std::function<void(const QString&, const QString&)> handler);
@@ -85,6 +91,9 @@ private:
     void requestCurvesInputFrame(const rendering::PreviewFramePayload& identity);
     void refreshMattePreview();
     void renameSelectedStill();
+    void handleGallerySelectionChanged();
+    void clearGalleryReference(bool reset_mode);
+    void applyPreviewComparison();
     void saveGradeVersion();
     void applySelectedGradeVersion();
     void renameSelectedGradeVersion();
@@ -92,6 +101,10 @@ private:
 
     QWidget* preview_container_ = nullptr;
     QWidget* preview_ = nullptr;
+    ::PreviewWidget* preview_widget_ = nullptr;
+    QLabel* comparison_reference_label_ = nullptr;
+    QComboBox* comparison_mode_ = nullptr;
+    QSlider* comparison_wipe_slider_ = nullptr;
     QListWidget* clips_ = nullptr;
     QListWidget* stills_ = nullptr;
     QPushButton* capture_still_button_ = nullptr;
@@ -134,6 +147,13 @@ private:
     std::function<void()> capture_still_handler_;
     std::function<void(const QString&, const QString&)> rename_still_handler_;
     std::function<void(const QString&)> remove_still_handler_;
+    std::function<void(quint64, const QString&)> gallery_reference_request_handler_;
+    QString reference_still_id_;
+    QString reference_still_name_;
+    QImage reference_image_;
+    quint64 gallery_project_generation_ = 0;
+    quint64 next_gallery_reference_request_id_ = 1;
+    quint64 active_gallery_reference_request_id_ = 0;
     bool active_ = false;
     bool can_apply_copied_grade_ = false;
     bool waveform_pending_ = false;

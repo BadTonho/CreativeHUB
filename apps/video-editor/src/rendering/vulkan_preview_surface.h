@@ -1,5 +1,6 @@
 #pragma once
 #include "preview_frame_payload.h"
+#include <creative_suite/composition/vulkan_frame_compositor.h>
 #include <QWidget>
 #include <memory>
 class QLabel;
@@ -16,6 +17,8 @@ public:
     void clearFrame();
     void setDeliveryEpoch(quint64);
     void setGrayscaleEnabled(bool);
+    void setComparisonReferenceImage(QImage);
+    void setComparison(creative_suite::composition::FrameComparisonMode, float);
     void suspendForTransition(bool);
     bool available() const noexcept;
     struct Diagnostics { quint64 submitted=0, completed=0, deferred=0, dropped=0; };
@@ -24,6 +27,8 @@ public:
     quint64 lastQueuedDeliveryTraceId() const noexcept;
 signals:
     void gpuFailure(const QString&,qint64);
+    void wipePositionDragged(float);
+    void comparisonUnavailable(const QString&,qint64);
 private:
     std::shared_ptr<creative_suite::composition::VulkanDevice> device_;
     VulkanPreviewWindow* window_=nullptr;
@@ -31,5 +36,9 @@ private:
     QLabel* snapshot_=nullptr;
     QStackedLayout* stack_=nullptr;
     bool suspended_=false,failed_=false;
+    creative_suite::composition::OpenGlTextureFramePtr reference_frame_;
+    creative_suite::composition::FrameComparisonMode comparison_mode_=
+        creative_suite::composition::FrameComparisonMode::Off;
+    float reference_fraction_=0.5F;
 };
 }

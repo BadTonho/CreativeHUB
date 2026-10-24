@@ -402,6 +402,64 @@
         <translation>Remover still</translation>
     </message>
     <message>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="807"/>
+        <source>Compare</source>
+        <translation>Comparar</translation>
+    </message>
+    <message>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="810"/>
+        <source>Off</source>
+        <translation>Desativado</translation>
+    </message>
+    <message>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="812"/>
+        <source>Split-screen</source>
+        <translation>Tela dividida</translation>
+    </message>
+    <message>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="814"/>
+        <source>Wipe</source>
+        <translation>Cortina</translation>
+    </message>
+    <message>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="822"/>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="824"/>
+        <source>Wipe position</source>
+        <translation>Posição da cortina</translation>
+    </message>
+    <message>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="829"/>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="1513"/>
+        <source>No Gallery reference selected</source>
+        <translation>Nenhuma referência da Galeria selecionada</translation>
+    </message>
+    <message>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="1423"/>
+        <source>Reference unavailable</source>
+        <translation>Referência indisponível</translation>
+    </message>
+    <message>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="1165"/>
+        <source>Comparison unavailable</source>
+        <translation>Comparação indisponível</translation>
+    </message>
+    <message>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="1463"/>
+        <source>Reference unavailable: %1</source>
+        <translation>Referência indisponível: %1</translation>
+    </message>
+    <message>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="1487"/>
+        <source>Loading reference: %1</source>
+        <translation>Carregando referência: %1</translation>
+    </message>
+    <message>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="1430"/>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="1471"/>
+        <source>Reference: %1</source>
+        <translation>Referência: %1</translation>
+    </message>
+    <message>
         <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="917"/>
         <source>Clip %1</source>
         <translation>Clipe %1</translation>
@@ -1409,6 +1467,11 @@
         <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="1042"/>
         <source>Could not save the Color Gallery still.</source>
         <translation>Não foi possível salvar o still da Galeria de cor.</translation>
+    </message>
+    <message>
+        <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="459"/>
+        <source>Gallery comparison is unavailable; the Viewer remains unchanged.</source>
+        <translation>A comparação da Galeria está indisponível; o Viewer permanece inalterado.</translation>
     </message>
     <message>
         <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="773"/>

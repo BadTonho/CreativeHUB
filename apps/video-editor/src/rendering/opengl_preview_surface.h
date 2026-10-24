@@ -1,6 +1,7 @@
 #pragma once
 
 #include "preview_frame_payload.h"
+#include <creative_suite/composition/gpu_frame_compositor.h>
 
 #include <QOpenGLWidget>
 #include <QString>
@@ -12,6 +13,7 @@
 class QOpenGLFunctions_3_2_Core;
 class QOpenGLShaderProgram;
 class QShowEvent;
+class QMouseEvent;
 
 namespace rendering {
 
@@ -26,6 +28,9 @@ public:
     void setFrame(PreviewFramePayload frame, quint64 delivery_trace_id = 0);
     void clearFrame();
     void setGrayscaleEnabled(bool enabled);
+    void setComparisonReferenceImage(QImage image);
+    void setComparison(creative_suite::composition::FrameComparisonMode mode,
+        float reference_fraction);
     [[nodiscard]] bool textureDeliveryAvailable() const noexcept;
     void retryTextureDelivery() noexcept { retry_texture_delivery_ = true; }
     [[nodiscard]] quint64 lastPresentedDeliveryTraceId() const noexcept { return last_swapped_delivery_trace_id_; }
@@ -34,16 +39,23 @@ signals:
     void gpuFailure(const QString& message, qint64 error_code);
     void gpuTextureFailure(const QString& message, qint64 error_code);
     void textureDeliveryAvailabilityChanged(bool available);
+    void wipePositionDragged(float reference_fraction);
+    void comparisonUnavailable(const QString& cause, qint64 error_code);
 
 protected:
     void initializeGL() override;
     void paintGL() override;
     void resizeGL(int width, int height) override;
     void showEvent(QShowEvent* event) override;
+    void mousePressEvent(QMouseEvent* event) override;
+    void mouseMoveEvent(QMouseEvent* event) override;
+    void mouseReleaseEvent(QMouseEvent* event) override;
 
 private:
     bool uploadPendingFrame();
+    bool uploadPendingReference();
     void updateVertexBuffer();
+    void updateWipePosition(const QPoint& point);
     void failGpu(const QString& message, unsigned int error_code = 0);
     void failTextureDelivery(const QString& message, qint64 error_code);
     void releaseResources();
@@ -53,8 +65,11 @@ private:
     unsigned int vertex_array_ = 0;
     unsigned int vertex_buffer_ = 0;
     unsigned int texture_ = 0;
+    unsigned int reference_texture_ = 0;
     int texture_width_ = 0;
     int texture_height_ = 0;
+    int reference_width_ = 0;
+    int reference_height_ = 0;
     int video_width_ = 0;
     int video_height_ = 0;
     media::VideoFramePtr pending_frame_;
@@ -65,6 +80,13 @@ private:
     quint64 drawn_delivery_trace_id_ = 0;
     quint64 last_swapped_delivery_trace_id_ = 0;
     std::vector<std::uint8_t> packed_pixels_;
+    QImage reference_image_;
+    creative_suite::composition::FrameComparisonMode comparison_mode_ =
+        creative_suite::composition::FrameComparisonMode::Off;
+    float reference_fraction_ = 0.5F;
+    bool reference_pending_ = false;
+    bool reference_available_ = false;
+    bool dragging_wipe_ = false;
     bool pending_frame_valid_ = false;
     bool frame_available_ = false;
     bool grayscale_enabled_ = false;

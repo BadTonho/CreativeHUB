@@ -63,7 +63,8 @@ public:
     // The final argument simulates an unsignaled, unavailable acquisition in
     // native regression tests; production callers retain its default.
     PresentationResult presentFrame(QWindow*, const OpenGlTextureFramePtr&, bool grayscale,
-        std::array<float, 4> surround = {0, 0, 0, 1}, bool defer_acquisition_for_testing = false);
+        std::array<float, 4> surround = {0, 0, 0, 1}, bool defer_acquisition_for_testing = false,
+        FrameComparisonOptions comparison = {});
     CompletionStatus pollPresentation(const PresentationReceipt&, std::string& cause) noexcept;
     void releaseWindow(QWindow*) noexcept;
     std::uint64_t reservedBytes() const noexcept;

@@ -3,6 +3,9 @@
 #include "rendering/preview_performance_metrics.h"
 
 #include <QApplication>
+#include <QColor>
+#include <QLabel>
+#include <QMouseEvent>
 
 #include <cstdint>
 #include <cstdio>
@@ -92,6 +95,85 @@ int main(int argc, char* argv[]) {
         require(widget.isGrayscaleEnabled(), "Grayscale state was not enabled.");
         widget.resize(320, 240);
         application.processEvents();
+
+        widget.setGrayscaleEnabled(false);
+        widget.resize(400, 200);
+        widget.setFrame(makeFrame());
+        application.processEvents();
+        const auto baseline = widget.grab().toImage();
+        QImage reference(8, 4, QImage::Format_RGBA8888);
+        for (int y = 0; y < reference.height(); ++y) {
+            auto* pixels = reference.scanLine(y);
+            const QColor color = y < reference.height() / 2
+                ? QColor(15, 35, 220) : QColor(230, 190, 20);
+            for (int x = 0; x < reference.width(); ++x) {
+                pixels[x * 4] = static_cast<uchar>(color.red());
+                pixels[x * 4 + 1] = static_cast<uchar>(color.green());
+                pixels[x * 4 + 2] = static_cast<uchar>(color.blue());
+                pixels[x * 4 + 3] = 255;
+            }
+        }
+        widget.setComparisonReferenceImage(reference);
+        widget.setComparison(creative_suite::composition::FrameComparisonMode::Off, 0.5F);
+        application.processEvents();
+        require(widget.grab().toImage() == baseline,
+                "Off comparison changed the existing CPU Viewer output.");
+
+        widget.setComparison(creative_suite::composition::FrameComparisonMode::SplitScreen,
+            0.5F);
+        application.processEvents();
+        auto compared = widget.grab().toImage();
+        require(compared.pixelColor(100, 75).blue() > 200 &&
+                    compared.pixelColor(100, 125).red() > 200 &&
+                    compared.pixelColor(300, 75).red() > 200 &&
+                    compared.pixelColor(100, 20) != QColor(15, 35, 220),
+                "CPU split-screen comparison lost left/right order or source aspect ratio.");
+
+        widget.setComparison(creative_suite::composition::FrameComparisonMode::Wipe, 0.0F);
+        application.processEvents();
+        compared = widget.grab().toImage();
+        require(compared.pixelColor(80, 50).red() > 200 &&
+                    compared.pixelColor(80, 150).red() > 200 &&
+                    compared.pixelColor(320, 50).red() > 200,
+                "CPU wipe at zero percent must show only the current Viewer.");
+        widget.setComparison(creative_suite::composition::FrameComparisonMode::Wipe, 0.5F);
+        application.processEvents();
+        compared = widget.grab().toImage();
+        require(compared.pixelColor(80, 50).blue() > 200 &&
+                    compared.pixelColor(80, 150).red() > 200 &&
+                    compared.pixelColor(320, 100).red() > 200,
+                "CPU wipe at fifty percent did not split reference and current frame.");
+        widget.setComparison(creative_suite::composition::FrameComparisonMode::Wipe, 1.0F);
+        application.processEvents();
+        compared = widget.grab().toImage();
+        require(compared.pixelColor(80, 50).blue() > 200 &&
+                    compared.pixelColor(320, 150).red() > 200,
+                "CPU wipe at one hundred percent must show only the reference.");
+
+        widget.setComparison(creative_suite::composition::FrameComparisonMode::Wipe, 0.5F);
+        float dragged_fraction = -1.0F;
+        QObject::connect(&widget, &PreviewWidget::wipePositionDragged, &widget,
+            [&](float fraction) { dragged_fraction = fraction; });
+        auto* cpu_surface = widget.findChild<QLabel*>("previewCpuSurface");
+        require(cpu_surface != nullptr, "CPU comparison surface is missing.");
+        const auto global_press = QPointF(cpu_surface->mapToGlobal(QPoint(200, 100)));
+        const auto global_move = QPointF(cpu_surface->mapToGlobal(QPoint(300, 100)));
+        QMouseEvent press(QEvent::MouseButtonPress, QPointF(200, 100), global_press,
+            Qt::LeftButton, Qt::LeftButton, Qt::NoModifier,
+            QPointingDevice::primaryPointingDevice());
+        QMouseEvent move(QEvent::MouseMove, QPointF(300, 100), global_move,
+            Qt::NoButton, Qt::LeftButton, Qt::NoModifier,
+            QPointingDevice::primaryPointingDevice());
+        QMouseEvent release(QEvent::MouseButtonRelease, QPointF(300, 100), global_move,
+            Qt::LeftButton, Qt::NoButton, Qt::NoModifier,
+            QPointingDevice::primaryPointingDevice());
+        QApplication::sendEvent(cpu_surface, &press);
+        QApplication::sendEvent(cpu_surface, &move);
+        QApplication::sendEvent(cpu_surface, &release);
+        require(dragged_fraction > 0.74F && dragged_fraction < 0.76F,
+                "Dragging the CPU wipe divider did not report its normalized position.");
+        widget.setComparison(creative_suite::composition::FrameComparisonMode::Off, 0.5F);
+        widget.setComparisonReferenceImage({});
 
         media::VideoFrame invalid_frame;
         widget.setFrame(invalid_frame);

@@ -798,6 +798,40 @@ ColorWorkspace::ColorWorkspace(QWidget* parent) : QWidget(parent) {
     preview_container_->setObjectName("colorViewerContainer");
     auto* preview_layout = new QVBoxLayout(preview_container_);
     preview_layout->setContentsMargins(0, 0, 0, 0);
+    auto* comparison_bar = new QWidget(preview_container_);
+    comparison_bar->setObjectName("colorGalleryComparisonBar");
+    auto* comparison_layout = new QHBoxLayout(comparison_bar);
+    comparison_layout->setContentsMargins(2, 2, 2, 2);
+    comparison_layout->setSpacing(6);
+    comparison_layout->addWidget(new QLabel(
+        QCoreApplication::translate("ColorWorkspace", "Compare"), comparison_bar));
+    comparison_mode_ = new QComboBox(comparison_bar);
+    comparison_mode_->setObjectName("colorGalleryComparisonMode");
+    comparison_mode_->addItem(QCoreApplication::translate("ColorWorkspace", "Off"),
+        int(creative_suite::composition::FrameComparisonMode::Off));
+    comparison_mode_->addItem(QCoreApplication::translate("ColorWorkspace", "Split-screen"),
+        int(creative_suite::composition::FrameComparisonMode::SplitScreen));
+    comparison_mode_->addItem(QCoreApplication::translate("ColorWorkspace", "Wipe"),
+        int(creative_suite::composition::FrameComparisonMode::Wipe));
+    comparison_layout->addWidget(comparison_mode_);
+    comparison_wipe_slider_ = new QSlider(Qt::Horizontal, comparison_bar);
+    comparison_wipe_slider_->setObjectName("colorGalleryWipePosition");
+    comparison_wipe_slider_->setRange(0, 100);
+    comparison_wipe_slider_->setValue(50);
+    comparison_wipe_slider_->setAccessibleName(
+        QCoreApplication::translate("ColorWorkspace", "Wipe position"));
+    comparison_wipe_slider_->setToolTip(
+        QCoreApplication::translate("ColorWorkspace", "Wipe position"));
+    comparison_wipe_slider_->setFixedWidth(150);
+    comparison_wipe_slider_->setEnabled(false);
+    comparison_layout->addWidget(comparison_wipe_slider_);
+    comparison_reference_label_ = new QLabel(
+        QCoreApplication::translate("ColorWorkspace", "No Gallery reference selected"),
+        comparison_bar);
+    comparison_reference_label_->setObjectName("colorGalleryReferenceName");
+    comparison_reference_label_->setMinimumWidth(80);
+    comparison_layout->addWidget(comparison_reference_label_, 1);
+    preview_layout->addWidget(comparison_bar);
     upper->addWidget(preview_container_, 3);
     auto* node_panel = new QWidget(this);
     node_panel->setObjectName("colorNodesPanel");
@@ -957,6 +991,12 @@ ColorWorkspace::ColorWorkspace(QWidget* parent) : QWidget(parent) {
         if (item && remove_still_handler_)
             remove_still_handler_(item->data(Qt::UserRole).toString());
     });
+    connect(stills_, &QListWidget::currentRowChanged, this,
+        [this](int) { handleGallerySelectionChanged(); });
+    connect(comparison_mode_, qOverload<int>(&QComboBox::currentIndexChanged),
+        this, [this](int) { applyPreviewComparison(); });
+    connect(comparison_wipe_slider_, &QSlider::valueChanged, this,
+        [this](int) { applyPreviewComparison(); });
 
     auto* lower = new QHBoxLayout;
     controls_ = new QWidget(this);
@@ -1108,18 +1148,53 @@ ColorWorkspace::ColorWorkspace(QWidget* parent) : QWidget(parent) {
 void ColorWorkspace::setPreviewWidget(QWidget* preview) {
     if (preview_ == preview) return;
     preview_ = preview;
+    preview_widget_ = qobject_cast<PreviewWidget*>(preview_);
     if (preview_) preview_container_->layout()->addWidget(preview_);
+    if (preview_widget_ != nullptr) {
+        connect(preview_widget_, &PreviewWidget::wipePositionDragged, this,
+            [this](float fraction) {
+                const QSignalBlocker blocker(comparison_wipe_slider_);
+                comparison_wipe_slider_->setValue(int(std::lround(fraction * 100.0F)));
+                applyPreviewComparison();
+            });
+        connect(preview_widget_, &PreviewWidget::comparisonUnavailable, this,
+            [this](const QString&, qint64) {
+                const QSignalBlocker blocker(comparison_mode_);
+                comparison_mode_->setCurrentIndex(0);
+                comparison_mode_->setEnabled(false);
+                comparison_wipe_slider_->setEnabled(false);
+                comparison_reference_label_->setText(
+                    QCoreApplication::translate("ColorWorkspace", "Comparison unavailable"));
+                applyPreviewComparison();
+            });
+        preview_widget_->setComparisonReferenceImage(reference_image_);
+        applyPreviewComparison();
+    }
 }
 
 QWidget* ColorWorkspace::takePreviewWidget() {
     auto* result = preview_;
+    if (preview_widget_ != nullptr) {
+        preview_widget_->setComparison(creative_suite::composition::FrameComparisonMode::Off,
+            float(comparison_wipe_slider_->value()) / 100.0F);
+        disconnect(preview_widget_, &PreviewWidget::wipePositionDragged, this, nullptr);
+        disconnect(preview_widget_, &PreviewWidget::comparisonUnavailable, this, nullptr);
+    }
     if (result) preview_container_->layout()->removeWidget(result);
     preview_ = nullptr;
+    preview_widget_ = nullptr;
     return result;
 }
 
 void ColorWorkspace::setActive(bool active) {
     active_ = active;
+    if (!active_) {
+        if (preview_widget_ != nullptr)
+            preview_widget_->setComparison(creative_suite::composition::FrameComparisonMode::Off,
+                float(comparison_wipe_slider_->value()) / 100.0F);
+    } else {
+        applyPreviewComparison();
+    }
     ++waveform_generation_;
     if (active) waveform_timer_->start();
     else {
@@ -1295,27 +1370,158 @@ void ColorWorkspace::acceptColorInputFrame(quint64 request_id,
     refreshMattePreview();
 }
 
-void ColorWorkspace::setGalleryStills(std::vector<StillItem> stills) {
-    const auto selected_id = stills_->currentItem()
+void ColorWorkspace::setGalleryStills(std::vector<StillItem> stills,
+    quint64 project_generation) {
+    const bool project_changed = gallery_project_generation_ != project_generation;
+    const auto selected_id = !project_changed && stills_->currentItem()
         ? stills_->currentItem()->data(Qt::UserRole).toString() : QString{};
-    const QSignalBlocker blocker(stills_);
-    stills_->clear();
+    gallery_project_generation_ = project_generation;
     int selected_row = -1;
-    for (const auto& still : stills) {
-        auto* item = new QListWidgetItem(still.available
-            ? still.name
-            : QCoreApplication::translate("ColorWorkspace", "%1 (Unavailable)").arg(still.name),
-            stills_);
-        item->setData(Qt::UserRole, still.id);
-        item->setToolTip(still.available
-            ? QCoreApplication::translate("ColorWorkspace", "%1 · Frame %2").arg(still.source).arg(still.frame)
-            : QCoreApplication::translate("ColorWorkspace", "Still image unavailable · %1 · Frame %2").arg(still.source).arg(still.frame));
-        if (!still.thumbnail.isNull()) item->setIcon(QIcon(QPixmap::fromImage(still.thumbnail)));
-        if (!still.available) item->setForeground(palette().brush(QPalette::Disabled, QPalette::Text));
-        item->setSizeHint(QSize(128, 92));
-        if (still.id == selected_id) selected_row = stills_->count() - 1;
+    {
+        const QSignalBlocker blocker(stills_);
+        stills_->clear();
+        for (const auto& still : stills) {
+            auto* item = new QListWidgetItem(still.available
+                ? still.name
+                : QCoreApplication::translate("ColorWorkspace", "%1 (Unavailable)").arg(still.name),
+                stills_);
+            item->setData(Qt::UserRole, still.id);
+            item->setData(Qt::UserRole + 1, still.available);
+            item->setData(Qt::UserRole + 2, still.name);
+            item->setToolTip(still.available
+                ? QCoreApplication::translate("ColorWorkspace", "%1 · Frame %2").arg(still.source).arg(still.frame)
+                : QCoreApplication::translate("ColorWorkspace", "Still image unavailable · %1 · Frame %2").arg(still.source).arg(still.frame));
+            if (!still.thumbnail.isNull()) item->setIcon(QIcon(QPixmap::fromImage(still.thumbnail)));
+            if (!still.available) item->setForeground(palette().brush(QPalette::Disabled, QPalette::Text));
+            item->setSizeHint(QSize(128, 92));
+            if (still.id == selected_id) selected_row = stills_->count() - 1;
+        }
+        if (selected_row >= 0) stills_->setCurrentRow(selected_row);
     }
-    if (selected_row >= 0) stills_->setCurrentRow(selected_row);
+    if (project_changed) clearGalleryReference(true);
+    handleGallerySelectionChanged();
+}
+
+void ColorWorkspace::setGalleryReferenceRequestHandler(
+    std::function<void(quint64, const QString&)> handler) {
+    gallery_reference_request_handler_ = std::move(handler);
+}
+
+void ColorWorkspace::acceptGalleryReferenceImage(quint64 request_id,
+    const QString& still_id, QImage image) {
+    if (request_id == 0 || request_id != active_gallery_reference_request_id_ ||
+        still_id != reference_still_id_) return;
+    active_gallery_reference_request_id_ = 0;
+    if (image.isNull()) {
+        reference_image_ = {};
+        if (preview_widget_ != nullptr) preview_widget_->setComparisonReferenceImage({});
+        const QSignalBlocker blocker(comparison_mode_);
+        comparison_mode_->setCurrentIndex(0);
+        comparison_mode_->setEnabled(false);
+        comparison_wipe_slider_->setEnabled(false);
+        comparison_reference_label_->setText(
+            QCoreApplication::translate("ColorWorkspace", "Reference unavailable"));
+        applyPreviewComparison();
+        return;
+    }
+    reference_image_ = image.convertToFormat(QImage::Format_RGBA8888);
+    comparison_mode_->setEnabled(true);
+    comparison_reference_label_->setText(
+        QCoreApplication::translate("ColorWorkspace", "Reference: %1")
+            .arg(reference_still_name_));
+    if (preview_widget_ != nullptr)
+        preview_widget_->setComparisonReferenceImage(reference_image_);
+    applyPreviewComparison();
+}
+
+void ColorWorkspace::handleGallerySelectionChanged() {
+    const auto* item = stills_->currentItem();
+    if (item == nullptr) {
+        if (!reference_still_id_.isEmpty()) clearGalleryReference(true);
+        return;
+    }
+    const QString id = item->data(Qt::UserRole).toString();
+    const QString name = item->data(Qt::UserRole + 2).toString();
+    const bool available = item->data(Qt::UserRole + 1).toBool();
+    if (!available) {
+        active_gallery_reference_request_id_ = 0;
+        reference_still_id_ = id;
+        reference_still_name_ = name;
+        reference_image_ = {};
+        if (preview_widget_ != nullptr) {
+            preview_widget_->setComparisonReferenceImage({});
+            preview_widget_->setComparison(
+                creative_suite::composition::FrameComparisonMode::Off, 0.5F);
+        }
+        {
+            const QSignalBlocker blocker(comparison_mode_);
+            comparison_mode_->setCurrentIndex(0);
+        }
+        comparison_mode_->setEnabled(false);
+        comparison_wipe_slider_->setEnabled(false);
+        comparison_reference_label_->setText(
+            QCoreApplication::translate("ColorWorkspace", "Reference unavailable: %1").arg(name));
+        return;
+    }
+    if (id == reference_still_id_ && (!reference_image_.isNull() ||
+        active_gallery_reference_request_id_ != 0)) {
+        reference_still_name_ = name;
+        if (!reference_image_.isNull()) {
+            comparison_reference_label_->setText(
+                QCoreApplication::translate("ColorWorkspace", "Reference: %1").arg(name));
+            comparison_mode_->setEnabled(true);
+        }
+        return;
+    }
+    reference_still_id_ = id;
+    reference_still_name_ = name;
+    reference_image_ = {};
+    active_gallery_reference_request_id_ = next_gallery_reference_request_id_++;
+    if (next_gallery_reference_request_id_ == 0) next_gallery_reference_request_id_ = 1;
+    if (active_gallery_reference_request_id_ == 0)
+        active_gallery_reference_request_id_ = next_gallery_reference_request_id_++;
+    if (preview_widget_ != nullptr) preview_widget_->setComparisonReferenceImage({});
+    comparison_mode_->setEnabled(false);
+    comparison_wipe_slider_->setEnabled(false);
+    comparison_reference_label_->setText(
+        QCoreApplication::translate("ColorWorkspace", "Loading reference: %1").arg(name));
+    applyPreviewComparison();
+    if (gallery_reference_request_handler_) {
+        gallery_reference_request_handler_(active_gallery_reference_request_id_, id);
+    } else {
+        acceptGalleryReferenceImage(active_gallery_reference_request_id_, id, {});
+    }
+}
+
+void ColorWorkspace::clearGalleryReference(bool reset_mode) {
+    active_gallery_reference_request_id_ = 0;
+    reference_still_id_.clear();
+    reference_still_name_.clear();
+    reference_image_ = {};
+    if (preview_widget_ != nullptr) {
+        preview_widget_->setComparisonReferenceImage({});
+        preview_widget_->setComparison(creative_suite::composition::FrameComparisonMode::Off,
+            float(comparison_wipe_slider_->value()) / 100.0F);
+    }
+    if (reset_mode) {
+        const QSignalBlocker blocker(comparison_mode_);
+        comparison_mode_->setCurrentIndex(0);
+    }
+    comparison_mode_->setEnabled(false);
+    comparison_wipe_slider_->setEnabled(false);
+    comparison_reference_label_->setText(
+        QCoreApplication::translate("ColorWorkspace", "No Gallery reference selected"));
+}
+
+void ColorWorkspace::applyPreviewComparison() {
+    const auto mode = static_cast<creative_suite::composition::FrameComparisonMode>(
+        comparison_mode_->currentData().toInt());
+    const float fraction = float(comparison_wipe_slider_->value()) / 100.0F;
+    comparison_wipe_slider_->setEnabled(active_ && !reference_image_.isNull() &&
+        mode == creative_suite::composition::FrameComparisonMode::Wipe);
+    if (preview_widget_ == nullptr) return;
+    preview_widget_->setComparison(active_ && !reference_image_.isNull() ? mode :
+        creative_suite::composition::FrameComparisonMode::Off, fraction);
 }
 
 void ColorWorkspace::setCapturePending(bool pending) {

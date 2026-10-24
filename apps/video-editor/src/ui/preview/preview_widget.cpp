@@ -8,19 +8,36 @@
 #include <QImage>
 #include <QCoreApplication>
 #include <QLabel>
+#include <QMouseEvent>
+#include <QPainter>
 #include <QPaintEvent>
 #include <QPixmap>
 #include <QResizeEvent>
 #include <QStackedLayout>
 
 #include <algorithm>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <utility>
 
 class PreviewCpuSurface final : public QLabel {
 public:
     using QLabel::QLabel;
+
+    void setComparison(QImage live, QImage reference,
+        creative_suite::composition::FrameComparisonMode mode, float fraction) {
+        live_ = std::move(live);
+        reference_ = std::move(reference);
+        comparison_mode_ = mode;
+        reference_fraction_ = std::clamp(fraction, 0.0F, 1.0F);
+        update();
+    }
+
+    void setWipeDraggedHandler(std::function<void(float)> handler) {
+        wipe_dragged_handler_ = std::move(handler);
+    }
 
     void setDeliveryTraceId(quint64 trace_id) noexcept {
         if (delivery_trace_id_ != 0 && delivery_trace_id_ != trace_id) {
@@ -33,6 +50,36 @@ public:
 
 protected:
     void paintEvent(QPaintEvent* event) override {
+        if (comparison_mode_ != creative_suite::composition::FrameComparisonMode::Off &&
+            !live_.isNull() && !reference_.isNull()) {
+            QPainter painter(this);
+            painter.setRenderHint(QPainter::SmoothPixmapTransform);
+            painter.fillRect(rect(), QColor(28, 32, 40));
+            if (comparison_mode_ == creative_suite::composition::FrameComparisonMode::SplitScreen) {
+                const int split = width() / 2;
+                painter.drawImage(fitRect(reference_.size(), QRect(0, 0, split, height())), reference_);
+                painter.drawImage(fitRect(live_.size(), QRect(split, 0,
+                    width() - split, height())), live_);
+                painter.setPen(QPen(QColor(220, 228, 238, 190), 1));
+                painter.drawLine(split, 0, split, height());
+            } else {
+                const QRect live_rect = fitRect(live_.size(), rect());
+                painter.drawImage(live_rect, live_);
+                const QRect reference_rect = fitRect(reference_.size(), live_rect);
+                const int split = live_rect.left() + int(std::lround(
+                    double(live_rect.width()) * reference_fraction_));
+                painter.save();
+                painter.setClipRect(QRect(live_rect.left(), live_rect.top(),
+                    split - live_rect.left(), live_rect.height()));
+                painter.drawImage(reference_rect, reference_);
+                painter.restore();
+                if (reference_fraction_ > 0.0F && reference_fraction_ < 1.0F) {
+                    painter.setPen(QPen(QColor(235, 240, 248, 230), 2));
+                    painter.drawLine(split, live_rect.top(), split, live_rect.bottom());
+                }
+            }
+            return;
+        }
         QLabel::paintEvent(event);
         if (delivery_trace_id_ == 0) return;
         rendering::PreviewPerformanceMetrics::instance().recordFrameDeliveryStage(
@@ -41,8 +88,66 @@ protected:
         delivery_trace_id_ = 0;
     }
 
+    void mousePressEvent(QMouseEvent* event) override {
+        if (comparison_mode_ == creative_suite::composition::FrameComparisonMode::Wipe &&
+            !live_.isNull() && event->button() == Qt::LeftButton) {
+            const QRect image_rect = fitRect(live_.size(), rect());
+            const int split = image_rect.left() + int(std::lround(
+                double(image_rect.width()) * reference_fraction_));
+            if (std::abs(event->position().x() - split) <= 12.0) {
+                dragging_wipe_ = true;
+                updateWipePosition(event->position().toPoint());
+                event->accept();
+                return;
+            }
+        }
+        QLabel::mousePressEvent(event);
+    }
+
+    void mouseMoveEvent(QMouseEvent* event) override {
+        if (dragging_wipe_) {
+            updateWipePosition(event->position().toPoint());
+            event->accept();
+            return;
+        }
+        QLabel::mouseMoveEvent(event);
+    }
+
+    void mouseReleaseEvent(QMouseEvent* event) override {
+        if (dragging_wipe_ && event->button() == Qt::LeftButton) {
+            updateWipePosition(event->position().toPoint());
+            dragging_wipe_ = false;
+            event->accept();
+            return;
+        }
+        QLabel::mouseReleaseEvent(event);
+    }
+
 private:
+    static QRect fitRect(QSize source, QRect target) {
+        if (!source.isValid() || !target.isValid()) return {};
+        QSize fitted = source;
+        fitted.scale(target.size(), Qt::KeepAspectRatio);
+        return QRect(target.center().x() - fitted.width() / 2,
+            target.center().y() - fitted.height() / 2, fitted.width(), fitted.height());
+    }
+
+    void updateWipePosition(const QPoint& point) {
+        const QRect image_rect = fitRect(live_.size(), rect());
+        if (image_rect.width() <= 0) return;
+        const float fraction = std::clamp(float(point.x() - image_rect.left()) /
+            float(image_rect.width()), 0.0F, 1.0F);
+        if (wipe_dragged_handler_) wipe_dragged_handler_(fraction);
+    }
+
     quint64 delivery_trace_id_ = 0;
+    QImage live_;
+    QImage reference_;
+    creative_suite::composition::FrameComparisonMode comparison_mode_ =
+        creative_suite::composition::FrameComparisonMode::Off;
+    float reference_fraction_ = 0.5F;
+    bool dragging_wipe_ = false;
+    std::function<void(float)> wipe_dragged_handler_;
 };
 
 PreviewWidget::PreviewWidget(QWidget* parent)
@@ -54,6 +159,7 @@ PreviewWidget::PreviewWidget(QWidget* parent)
     stack_->setContentsMargins(0, 0, 0, 0);
 
     cpu_surface_ = new PreviewCpuSurface(this);
+    cpu_surface_->setObjectName("previewCpuSurface");
     cpu_surface_->setAlignment(Qt::AlignCenter);
     cpu_surface_->setMinimumSize(320, 180);
     cpu_surface_->setStyleSheet(
@@ -79,6 +185,37 @@ PreviewWidget::PreviewWidget(QWidget* parent)
             this, &PreviewWidget::gpuTextureDeliveryAvailabilityChanged);
         connect(gpu_surface_, &rendering::OpenGLPreviewSurface::gpuTextureFailure,
             this, &PreviewWidget::gpuFallbackRequested);
+    }
+
+    cpu_surface_->setWipeDraggedHandler([this](float fraction) {
+        setComparison(comparison_mode_, fraction);
+        emit wipePositionDragged(fraction);
+    });
+    if (gpu_surface_ != nullptr) {
+        connect(gpu_surface_, &rendering::OpenGLPreviewSurface::wipePositionDragged,
+            this, [this](float fraction) {
+                setComparison(comparison_mode_, fraction);
+                emit wipePositionDragged(fraction);
+            });
+        connect(gpu_surface_, &rendering::OpenGLPreviewSurface::comparisonUnavailable,
+            this, [this](const QString& cause, qint64 error_code) {
+                setComparison(creative_suite::composition::FrameComparisonMode::Off,
+                    reference_fraction_);
+                emit comparisonUnavailable(cause, error_code);
+            });
+    }
+    if (vulkan_surface_ != nullptr) {
+        connect(vulkan_surface_, &rendering::VulkanPreviewSurface::wipePositionDragged,
+            this, [this](float fraction) {
+                setComparison(comparison_mode_, fraction);
+                emit wipePositionDragged(fraction);
+            });
+        connect(vulkan_surface_, &rendering::VulkanPreviewSurface::comparisonUnavailable,
+            this, [this](const QString& cause, qint64 error_code) {
+                setComparison(creative_suite::composition::FrameComparisonMode::Off,
+                    reference_fraction_);
+                emit comparisonUnavailable(cause, error_code);
+            });
     }
 
     clearFrame(QCoreApplication::translate(
@@ -186,6 +323,8 @@ void PreviewWidget::clearFrame(const QString& message) {
     }
     if (cpu_surface_ != nullptr) {
         cpu_surface_->setDeliveryTraceId(0);
+        cpu_surface_->setComparison({}, {},
+            creative_suite::composition::FrameComparisonMode::Off, reference_fraction_);
         cpu_surface_->setPixmap({});
         cpu_surface_->setText(empty_message_);
     }
@@ -217,6 +356,22 @@ void PreviewWidget::setGrayscaleEnabled(bool enabled) {
         gpu_surface_->setGrayscaleEnabled(enabled);
         return;
     }
+    updateCpuPixmap();
+}
+
+void PreviewWidget::setComparisonReferenceImage(QImage image) {
+    reference_image_ = image.isNull() ? QImage{} : image.convertToFormat(QImage::Format_RGBA8888);
+    if (gpu_surface_) gpu_surface_->setComparisonReferenceImage(reference_image_);
+    if (vulkan_surface_) vulkan_surface_->setComparisonReferenceImage(reference_image_);
+    updateCpuPixmap();
+}
+
+void PreviewWidget::setComparison(
+    creative_suite::composition::FrameComparisonMode mode, float reference_fraction) {
+    comparison_mode_ = mode;
+    reference_fraction_ = std::clamp(reference_fraction, 0.0F, 1.0F);
+    if (gpu_surface_) gpu_surface_->setComparison(comparison_mode_, reference_fraction_);
+    if (vulkan_surface_) vulkan_surface_->setComparison(comparison_mode_, reference_fraction_);
     updateCpuPixmap();
 }
 
@@ -282,6 +437,28 @@ void PreviewWidget::updateCpuPixmap() {
         rendering::PreviewTiming::CpuSurface);
 
     cpu_surface_->setText({});
+    if (comparison_mode_ != creative_suite::composition::FrameComparisonMode::Off &&
+        !reference_image_.isNull()) {
+        auto reference = reference_image_;
+        if (grayscale_enabled_) {
+            reference = reference.convertToFormat(QImage::Format_RGBA8888);
+            for (int y = 0; y < reference.height(); ++y) {
+                auto* pixels = reference.scanLine(y);
+                for (int x = 0; x < reference.width(); ++x) {
+                    auto* pixel = pixels + x * 4;
+                    const auto luminance = static_cast<std::uint8_t>(std::clamp(
+                        0.299 * pixel[0] + 0.587 * pixel[1] + 0.114 * pixel[2],
+                        0.0, 255.0));
+                    pixel[0] = pixel[1] = pixel[2] = luminance;
+                }
+            }
+        }
+        cpu_surface_->setPixmap({});
+        cpu_surface_->setComparison(image, reference, comparison_mode_, reference_fraction_);
+        return;
+    }
+    cpu_surface_->setComparison({}, {}, creative_suite::composition::FrameComparisonMode::Off,
+        reference_fraction_);
     cpu_surface_->setPixmap(QPixmap::fromImage(
         image.scaled(available_size, Qt::KeepAspectRatio, Qt::SmoothTransformation)));
 }

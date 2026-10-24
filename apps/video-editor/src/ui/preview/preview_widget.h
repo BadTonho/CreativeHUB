@@ -34,10 +34,15 @@ public:
     void setGrayscaleEnabled(bool enabled);
     [[nodiscard]] bool isGrayscaleEnabled() const noexcept;
     [[nodiscard]] bool usesGpuPreview() const noexcept;
+    void setComparisonReferenceImage(QImage image);
+    void setComparison(creative_suite::composition::FrameComparisonMode mode,
+        float reference_fraction);
 
 signals:
     void gpuFallbackRequested(const QString& reason, qint64 error_code);
     void gpuTextureDeliveryAvailabilityChanged(bool available);
+    void wipePositionDragged(float reference_fraction);
+    void comparisonUnavailable(const QString& cause, qint64 error_code);
 
 private:
     void resizeEvent(QResizeEvent* event) override;
@@ -54,6 +59,10 @@ private:
     rendering::PreviewFramePayload current_payload_;
     quint64 delivery_epoch_ = 0;
     QImage frame_image_;
+    QImage reference_image_;
+    creative_suite::composition::FrameComparisonMode comparison_mode_ =
+        creative_suite::composition::FrameComparisonMode::Off;
+    float reference_fraction_ = 0.5F;
     QString empty_message_;
     bool grayscale_enabled_ = false;
     bool gpu_enabled_ = false;

@@ -7,6 +7,7 @@
 #include <creative_suite/effects/adjustment.h>
 
 #include <functional>
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <QImage>
@@ -113,6 +114,16 @@ private:
     std::shared_ptr<void> reservation_;
 };
 using OpenGlTextureFramePtr = std::shared_ptr<const OpenGlTextureFrame>;
+
+// Optional presentation-only comparison. The reference texture is sampled by
+// the presentation backend and never read back to CPU memory. `reference_fraction`
+// is the visible reference width for a wipe, in [0, 1].
+enum class FrameComparisonMode : std::uint8_t { Off, SplitScreen, Wipe };
+struct FrameComparisonOptions {
+    FrameComparisonMode mode = FrameComparisonMode::Off;
+    OpenGlTextureFramePtr reference;
+    float reference_fraction = 0.5F;
+};
 
 struct OpenGlTextureCompositionResult {
     OpenGlCompositionStatus status = OpenGlCompositionStatus::Failed;

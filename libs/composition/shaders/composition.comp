@@ -254,9 +254,14 @@ void main() {
             ivec2 local=pixel-(size-fitted)/2;
             if(all(greaterThanEqual(local,ivec2(0))) && all(lessThan(local,fitted)))
                 c=over(c,imageLoad(foreground_image,clamp(ivec2(REAL2(local)/scale),ivec2(0),fs-1)));
-        } else if(op==4) c.a=(c.a*imageLoad(mask_image,pixel).r+127u)/255u;
+        } else if(op==4) {
+            uvec4 mask=imageLoad(mask_image,pixel);
+            uint coverage=(mask.r*2126u+mask.g*7152u+mask.b*722u+5000u)/10000u;
+            c.a=(c.a*coverage+127u)/255u;
+        }
         else if(op==5) {
-            uint coverage=imageLoad(mask_image,pixel).r;
+            uvec4 mask=imageLoad(mask_image,pixel);
+            uint coverage=(mask.r*2126u+mask.g*7152u+mask.b*722u+5000u)/10000u;
             uvec4 fg=imageLoad(foreground_image,pixel);
             if(coverage==255u)c=fg;
             else if(coverage!=0u) {
@@ -272,7 +277,49 @@ void main() {
                 uint divisor=uint(p.control.y*2+1);c=(sum+uvec4(divisor/2u))/divisor;
             }
         } else if(op==9) {
+            ivec2 canvas=imageSize(background_image);
             vec4 display=vec4(c)/255.0;
+            if(p.control.y==1 || p.control.y==2) {
+                bool use_reference=p.control.y==1 ? pixel.x<canvas.x/2 : pixel.x<p.control.z;
+                if(use_reference) {
+                    ivec2 source_size=imageSize(foreground_image);
+                    int panel_left=0, panel_width=canvas.x;
+                    if(p.control.y==1)panel_width=max(1,canvas.x/2);
+                    float scale=min(float(panel_width)/float(source_size.x),
+                        float(canvas.y)/float(source_size.y));
+                    ivec2 fitted=max(ivec2(1),ivec2(floor(vec2(source_size)*scale+vec2(0.5))));
+                    if(p.control.y==1)panel_left=pixel.x<canvas.x/2?0:canvas.x/2;
+                    int fitted_left=panel_left+(panel_width-fitted.x)/2;
+                    int fitted_top=(canvas.y-fitted.y)/2;
+                    ivec2 local=pixel-ivec2(fitted_left,fitted_top);
+                    if(all(greaterThanEqual(local,ivec2(0))) &&
+                        all(lessThan(local,fitted))) {
+                        ivec2 source_pixel=clamp(ivec2(floor(vec2(local)/scale+vec2(0.5))),
+                            ivec2(0),source_size-1);
+                        display=vec4(imageLoad(foreground_image,source_pixel))/255.0;
+                    } else display=p.color;
+                } else if(p.control.y==1) {
+                    ivec2 source_size=imageSize(background_image);
+                    int panel_left=canvas.x/2, panel_width=max(1,canvas.x-panel_left);
+                    float scale=min(float(panel_width)/float(source_size.x),
+                        float(canvas.y)/float(source_size.y));
+                    ivec2 fitted=max(ivec2(1),ivec2(floor(vec2(source_size)*scale+vec2(0.5))));
+                    int fitted_left=panel_left+(panel_width-fitted.x)/2;
+                    int fitted_top=(canvas.y-fitted.y)/2;
+                    ivec2 local=pixel-ivec2(fitted_left,fitted_top);
+                    if(all(greaterThanEqual(local,ivec2(0))) &&
+                        all(lessThan(local,fitted))) {
+                        ivec2 source_pixel=clamp(ivec2(floor(vec2(local)/scale+vec2(0.5))),
+                            ivec2(0),source_size-1);
+                        display=vec4(imageLoad(background_image,source_pixel))/255.0;
+                    } else display=p.color;
+                }
+            }
+            if(p.control.y==2 && p.control.z>0 && p.control.z<canvas.x &&
+                abs(pixel.x-p.control.z)<=1)
+                display=vec4(0.92,0.94,0.98,1.0);
+            if(p.control.y==1 && abs(pixel.x-canvas.x/2)<=1)
+                display=vec4(0.78,0.82,0.88,1.0);
             if(p.control.w!=0)display.rgb=vec3(dot(display.rgb,vec3(0.2126,0.7152,0.0722)));
             imageStore(presentation_image,pixel,display);
         }

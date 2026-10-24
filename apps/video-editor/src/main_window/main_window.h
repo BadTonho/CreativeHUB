@@ -327,6 +327,7 @@ private:
     void captureColorStill();
     void handleColorStillCapture(const playback::PlaybackStillCaptureEvent& event);
     void encodeColorStill(PendingColorStillCapture capture, media::VideoFramePtr frame);
+    void requestColorGalleryReference(quint64 request_id, const QString& still_id);
     void renameColorStill(const QString& id, const QString& name);
     void removeColorStill(const QString& id);
     [[nodiscard]] bool hasSelectedMedia() const noexcept;

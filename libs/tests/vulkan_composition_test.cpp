@@ -30,10 +30,12 @@ media::RgbaFrame fixture(int w,int h,bool alpha=true) {
 }
 void parity(const media::RgbaFrame& a,const media::RgbaFrame& b,int tolerance=2,
             const char* context="Vulkan") {
+    static int parity_call = 0;
+    ++parity_call;
     require(a.width==b.width && a.height==b.height,"Vulkan output dimensions differ.");
     for(int y=0;y<a.height;++y)for(int x=0;x<a.width*4;++x){
         auto av=a.rgba_pixels[size_t(y)*a.stride+x],bv=b.rgba_pixels[size_t(y)*b.stride+x];
-        if(std::abs(int(av)-int(bv))>(x%4==3?0:tolerance))throw std::runtime_error(std::string(context)+" pixel mismatch at "+std::to_string(x/4)+","+std::to_string(y)+" channel "+std::to_string(x%4)+": "+std::to_string(av)+" vs "+std::to_string(bv));
+        if(std::abs(int(av)-int(bv))>(x%4==3?0:tolerance))throw std::runtime_error(std::string(context)+" parity call "+std::to_string(parity_call)+" pixel mismatch at "+std::to_string(x/4)+","+std::to_string(y)+" channel "+std::to_string(x%4)+": "+std::to_string(av)+" vs "+std::to_string(bv));
     }
 }
 void correctness(const std::shared_ptr<VulkanDevice>& device) {
@@ -200,6 +202,27 @@ void correctness(const std::shared_ptr<VulkanDevice>& device) {
     while(device->pollPresentation(receipt,cause)==VulkanDevice::CompletionStatus::Pending && std::chrono::steady_clock::now()<deadline)
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
     require(device->pollPresentation(receipt,cause)==VulkanDevice::CompletionStatus::Complete,cause);
+    const auto comparison_reference = gpu.composeTexture(19, 13, {{&b}});
+    require(bool(comparison_reference.frame), comparison_reference.cause);
+    for (const auto [mode, fraction] : std::array{
+            std::pair{FrameComparisonMode::SplitScreen, 0.5F},
+            std::pair{FrameComparisonMode::Wipe, 0.0F},
+            std::pair{FrameComparisonMode::Wipe, 0.5F},
+            std::pair{FrameComparisonMode::Wipe, 1.0F}}) {
+        const FrameComparisonOptions comparison{mode, comparison_reference.frame, fraction};
+        const auto compared = device->presentFrame(&window, texture.frame, false,
+            {0, 0, 0, 1}, false, comparison);
+        require(compared.status == VulkanDevice::PresentStatus::Submitted, compared.cause);
+        const auto compare_deadline = std::chrono::steady_clock::now() +
+            std::chrono::seconds(3);
+        auto compare_status = device->pollPresentation(compared.receipt, cause);
+        while (compare_status == VulkanDevice::CompletionStatus::Pending &&
+            std::chrono::steady_clock::now() < compare_deadline) {
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            compare_status = device->pollPresentation(compared.receipt, cause);
+        }
+        require(compare_status == VulkanDevice::CompletionStatus::Complete, cause);
+    }
     const auto submissions=device->diagnostics().submissions;
     for(int repeat=0;repeat<10;++repeat){
         auto deferred=device->presentFrame(&window,texture.frame,false,{0,0,0,1},true);

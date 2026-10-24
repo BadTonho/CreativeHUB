@@ -381,6 +381,88 @@ int main(int argc, char* argv[]) {
         require(image.pixelColor(image.width() / 2, 4).red() < 80,
                 "OpenGL did not preserve letterboxing for a mismatched aspect ratio.");
 
+        QImage reference(8, 4, QImage::Format_RGBA8888);
+        for (int y = 0; y < reference.height(); ++y) {
+            auto* pixels = reference.scanLine(y);
+            const QColor color = y < reference.height() / 2
+                ? QColor(15, 35, 220) : QColor(230, 190, 20);
+            for (int x = 0; x < reference.width(); ++x) {
+                pixels[x * 4] = static_cast<std::uint8_t>(color.red());
+                pixels[x * 4 + 1] = static_cast<std::uint8_t>(color.green());
+                pixels[x * 4 + 2] = static_cast<std::uint8_t>(color.blue());
+                pixels[x * 4 + 3] = 255;
+            }
+        }
+        const QImage open_gl_off_baseline = image;
+        widget.setComparisonReferenceImage(reference);
+        widget.setComparison(creative_suite::composition::FrameComparisonMode::Off, 0.5F);
+        require(waitFor([&] {
+            image = surface->grabFramebuffer();
+            return image == open_gl_off_baseline;
+        }), "OpenGL Off comparison changed the existing Viewer output.");
+
+        widget.setComparison(creative_suite::composition::FrameComparisonMode::SplitScreen,
+            0.5F);
+        const bool split_rendered = waitFor([&] {
+            image = surface->grabFramebuffer();
+            return !image.isNull() && colorIs(image.pixelColor(80, 150), 15, 35, 220) &&
+                colorIs(image.pixelColor(80, 210), 230, 190, 20) &&
+                colorIs(image.pixelColor(400, 180), 220, 120, 40);
+        });
+        if (!split_rendered && !image.isNull()) {
+            const auto left = image.pixelColor(80, 180);
+            const auto right = image.pixelColor(400, 180);
+            std::fprintf(stderr, "OpenGL split sample: left=%d,%d,%d right=%d,%d,%d size=%dx%d\n",
+                left.red(), left.green(), left.blue(), right.red(), right.green(), right.blue(),
+                image.width(), image.height());
+        }
+        require(split_rendered,
+                "OpenGL split-screen did not place the fitted reference left of the Viewer.");
+        require(image.pixelColor(80, 4).red() < 80,
+                "OpenGL split-screen stretched the reference aspect ratio.");
+
+        widget.setComparison(creative_suite::composition::FrameComparisonMode::Wipe, 0.0F);
+        require(waitFor([&] {
+            image = surface->grabFramebuffer();
+            return !image.isNull() && colorIs(image.pixelColor(80, 100), 220, 120, 40) &&
+                colorIs(image.pixelColor(400, 260), 220, 120, 40);
+        }), "OpenGL wipe at zero percent must show only the current Viewer.");
+        widget.setComparison(creative_suite::composition::FrameComparisonMode::Wipe, 0.5F);
+        require(waitFor([&] {
+            image = surface->grabFramebuffer();
+            return !image.isNull() && colorIs(image.pixelColor(80, 100), 15, 35, 220) &&
+                colorIs(image.pixelColor(80, 260), 230, 190, 20) &&
+                colorIs(image.pixelColor(400, 180), 220, 120, 40);
+        }), "OpenGL wipe at fifty percent did not split the reference and Viewer.");
+        widget.setComparison(creative_suite::composition::FrameComparisonMode::Wipe, 1.0F);
+        require(waitFor([&] {
+            image = surface->grabFramebuffer();
+            return !image.isNull() && colorIs(image.pixelColor(80, 100), 15, 35, 220) &&
+                colorIs(image.pixelColor(400, 260), 230, 190, 20);
+        }), "OpenGL wipe at one hundred percent must show only the reference.");
+        widget.setComparison(creative_suite::composition::FrameComparisonMode::Off, 0.5F);
+        widget.setComparisonReferenceImage({});
+
+        NativeProducer comparison_producer;
+        const auto direct_source = makeFrame(4, 2, 0, 220, 120, 40);
+        const auto direct_payload = comparison_producer.compose(direct_source, 4, 2);
+        require(direct_payload.gpu && direct_payload.gpu->bottomLeftOrigin(),
+                "OpenGL comparison fixture did not use a bottom-left GPU texture.");
+        widget.setFrame(direct_payload);
+        require(waitForSurfaceColor(surface, 220, 120, 40, image),
+                "OpenGL direct texture fixture did not render.");
+        widget.setComparisonReferenceImage(reference);
+        widget.setComparison(creative_suite::composition::FrameComparisonMode::SplitScreen,
+            0.5F);
+        require(waitFor([&] {
+            image = surface->grabFramebuffer();
+            return !image.isNull() && colorIs(image.pixelColor(80, 150), 15, 35, 220) &&
+                colorIs(image.pixelColor(80, 210), 230, 190, 20) &&
+                colorIs(image.pixelColor(400, 180), 220, 120, 40);
+        }), "OpenGL comparison inverted a top-left Gallery still beside a GPU Viewer frame.");
+        widget.setComparison(creative_suite::composition::FrameComparisonMode::Off, 0.5F);
+        widget.setComparisonReferenceImage({});
+
         widget.setGrayscaleEnabled(true);
         require(waitFor([&] {
             image = surface->grabFramebuffer();

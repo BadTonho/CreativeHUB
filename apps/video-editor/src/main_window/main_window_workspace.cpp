@@ -26,6 +26,7 @@
 #include <QEvent>
 #include <QCoreApplication>
 #include <QImage>
+#include <QImageReader>
 #include <QDockWidget>
 #include <QFileDialog>
 #include <QFileInfo>
@@ -65,6 +66,7 @@
 #include <QUuid>
 #include <QTreeWidget>
 #include <QTreeWidgetItem>
+#include <QThreadPool>
 
 #include <algorithm>
 #include <cmath>
@@ -446,6 +448,16 @@ void MainWindow::createWorkspace() {
                 ? QCoreApplication::translate("MainWindow", "Direct GPU preview unavailable; using RGBA delivery.")
                 : QCoreApplication::translate("MainWindow", "GPU preview unavailable; using CPU preview."), 5000);
         });
+    connect(preview_widget_, &PreviewWidget::comparisonUnavailable, this,
+        [this](const QString& reason, qint64 error_code) {
+            logging::Logger::instance().log(
+                error_code != 0 ? logging::Level::Error : logging::Level::Warning,
+                "color-gallery", "prepare_comparison_reference",
+                reason.toUtf8().toStdString(),
+                {{"error_code", std::to_string(error_code)}});
+            statusBar()->showMessage(QCoreApplication::translate(
+                "MainWindow", "Gallery comparison is unavailable; the Viewer remains unchanged."), 5000);
+        });
 
     bins_dock_ = createDock(
         "Bins",
@@ -751,6 +763,10 @@ void MainWindow::createWorkspace() {
         color_workspace_->setRemoveStillHandler([this](const QString& id) {
             removeColorStill(id);
         });
+        color_workspace_->setGalleryReferenceRequestHandler(
+            [this](quint64 request_id, const QString& id) {
+                requestColorGalleryReference(request_id, id);
+            });
         color_workspace_->setClipSelectedHandler([this](timeline::ClipId id) {
             if (const auto location = timeline_model_.locateClip(id)) {
                 activateTimelineClipAt(location->track_index, location->clip_index,
@@ -935,22 +951,33 @@ void MainWindow::refreshColorSelection() {
                 source = QString::fromStdString(source_clip.source_path.filename().string());
             }
         }
-        QImage image;
-        if (still.image_png && !still.image_png->empty()) {
-            image.loadFromData(still.image_png->data(),
-                static_cast<int>(still.image_png->size()), "PNG");
+        QImage thumbnail;
+        if (!still.image_unavailable && still.image_png && !still.image_png->empty() &&
+            still.image_png->size() <= static_cast<std::size_t>(std::numeric_limits<int>::max())) {
+            QByteArray encoded(reinterpret_cast<const char*>(still.image_png->data()),
+                static_cast<qsizetype>(still.image_png->size()));
+            QBuffer buffer(&encoded);
+            if (buffer.open(QIODevice::ReadOnly)) {
+                QImageReader reader(&buffer, "PNG");
+                const QSize source_size = reader.size();
+                if (source_size.isValid()) {
+                    reader.setScaledSize(source_size.scaled(QSize(112, 63),
+                        Qt::KeepAspectRatio));
+                    thumbnail = reader.read();
+                }
+            }
         }
-        const bool available = !still.image_unavailable && !image.isNull();
+        const bool available = !still.image_unavailable && !thumbnail.isNull();
         stills.push_back({
             QString::fromUtf8(still.id.data(), static_cast<qsizetype>(still.id.size())),
             QString::fromUtf8(still.name.data(), static_cast<qsizetype>(still.name.size())),
             source,
             static_cast<qint64>(still.timeline_frame),
-            image.isNull() ? QImage{} : image.scaled(112, 63, Qt::KeepAspectRatio,
-                                                      Qt::FastTransformation),
+            std::move(thumbnail),
             available});
     }
-    color_workspace_->setGalleryStills(std::move(stills));
+    color_workspace_->setGalleryStills(std::move(stills),
+        static_cast<quint64>(project_generation_));
 }
 
 void MainWindow::captureColorStill() {
@@ -981,6 +1008,64 @@ void MainWindow::captureColorStill() {
         pending_color_still_capture_.reset();
         color_workspace_->setCapturePending(false);
     }
+}
+
+void MainWindow::requestColorGalleryReference(
+    quint64 request_id, const QString& still_id) {
+    const auto id_utf8 = still_id.toUtf8();
+    const std::string id(id_utf8.constData(), static_cast<std::size_t>(id_utf8.size()));
+    const auto& stills = editor_session_.colorGalleryStills();
+    const auto found = std::find_if(stills.begin(), stills.end(), [&id](const auto& still) {
+        return still.id == id;
+    });
+    if (found == stills.end() || found->image_unavailable || !found->image_png ||
+        found->image_png->empty()) {
+        if (color_workspace_ != nullptr)
+            color_workspace_->acceptGalleryReferenceImage(request_id, still_id, {});
+        return;
+    }
+    if (found->image_png->size() > static_cast<std::size_t>(std::numeric_limits<int>::max())) {
+        logging::Logger::instance().log(logging::Level::Error,
+            "color-gallery", "decode_comparison_reference",
+            "The Color Gallery PNG exceeds the supported in-memory image size.",
+            {{"still_id", id}, {"encoded_bytes", std::to_string(found->image_png->size())}});
+        if (color_workspace_ != nullptr)
+            color_workspace_->acceptGalleryReferenceImage(request_id, still_id, {});
+        return;
+    }
+    const auto bytes = found->image_png;
+    const auto generation = project_generation_;
+    const QPointer<MainWindow> target(this);
+    QThreadPool::globalInstance()->start([target, request_id, still_id,
+        generation, bytes] {
+        QByteArray encoded(reinterpret_cast<const char*>(bytes->data()),
+            static_cast<qsizetype>(bytes->size()));
+        QBuffer buffer(&encoded);
+        QImage image;
+        QString failure;
+        if (!buffer.open(QIODevice::ReadOnly)) {
+            failure = QStringLiteral("The Gallery PNG buffer could not be opened.");
+        } else {
+            QImageReader reader(&buffer, "PNG");
+            image = reader.read();
+            if (image.isNull()) failure = reader.errorString();
+        }
+        if (!target) return;
+        QMetaObject::invokeMethod(target, [target, request_id, still_id,
+            generation, image = std::move(image), failure = std::move(failure)]() mutable {
+            if (!target || target->project_generation_ != generation ||
+                target->color_workspace_ == nullptr) return;
+            if (image.isNull()) {
+                logging::Logger::instance().log(logging::Level::Error,
+                    "color-gallery", "decode_comparison_reference",
+                    failure.isEmpty() ? "The selected Gallery still could not be decoded."
+                                      : failure.toUtf8().toStdString(),
+                    {{"still_id", still_id.toUtf8().toStdString()}});
+            }
+            target->color_workspace_->acceptGalleryReferenceImage(
+                request_id, still_id, std::move(image));
+        }, Qt::QueuedConnection);
+    });
 }
 
 void MainWindow::handleColorStillCapture(

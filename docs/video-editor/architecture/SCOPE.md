@@ -4,9 +4,11 @@ The Color workspace provides a project-persisted correction graph with Input,
 effect, Parallel Mixer and Output nodes. Its preview/export evaluation follows
 the graph connections. Edit can select its effect nodes and edit parameters or
 enabled state; graph structure and layout are edited in Color. A project-owned
-Gallery stores full-canvas stills with provenance. Fusion remains a separate,
-unchanged workspace. Gallery albums, tags, comparison views, calibrated scopes
-and advanced color management remain outside the current stage. See the
+Gallery stores full-canvas stills with provenance. A selected still can be used
+as a temporary split-screen or wipe reference in the Color Viewer; this state
+is not saved with the project. Fusion remains a separate, unchanged workspace.
+Gallery albums, tags, named-grade comparisons, calibrated scopes and advanced
+color management remain outside the current stage. See the
 [Color Workspace Roadmap](../COLOR_WORKSPACE_ROADMAP.md).
 
 Curves qualifier refinement and the Inspector Matte/Highlight preview are

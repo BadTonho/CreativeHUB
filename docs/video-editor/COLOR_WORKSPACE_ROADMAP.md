@@ -1,6 +1,6 @@
 # Color Workspace Roadmap
 
-Status: **The project-owned Color graph, Curves, CPU/OpenGL/Vulkan qualifier matte refinement, selected-node input preview, Gallery capture and organization, Wheels/Bars/Log Primary Grade, four scopes, shared Edit controls, reusable grades, and per-clip grade versions are implemented. CSP v39 persists curves, qualifier refinements, and named graph snapshots. Refined serial GPU compositions use bounded R8 intermediates and fall back to CPU when allocation or processing fails; branched graphs continue through the CPU evaluator. The Inspector matte preview evaluates the selected Curves node's actual input asynchronously and does not change the Viewer. General graph action controls remain hidden; Curves is created and managed from the canvas context menu. Native visual interaction and platform acceptance remain pending.**
+Status: **The project-owned Color graph, Curves, CPU/OpenGL/Vulkan qualifier matte refinement, selected-node input preview, Gallery capture and organization, transient Gallery still comparison in split-screen and wipe modes, Wheels/Bars/Log Primary Grade, four scopes, shared Edit controls, reusable grades, and per-clip grade versions are implemented. CSP v39 persists curves, qualifier refinements, and named graph snapshots. Refined serial GPU compositions use bounded R8 intermediates and fall back to CPU when allocation or processing fails; branched graphs continue through the CPU evaluator. The Inspector matte preview evaluates the selected Curves node's actual input asynchronously and does not change the Viewer. General graph action controls remain hidden; Curves is created and managed from the canvas context menu. Native visual interaction and platform acceptance remain pending.**
 
 This document records the current implementation, the functional areas expected
 from a complete color workspace, and a staged order for developing them. The
@@ -38,15 +38,20 @@ The page keeps the shared Viewer, visual-clip strip, RGB Waveform/RGB Parade,
 Vectorscope, RGB Histogram, and project Gallery. Still capture records the composed Viewer frame after
 corrections at canvas resolution, with clip and timeline-frame provenance.
 Stills are named, renamed, and removed in capture order; their PNGs remain in
-the <project>.csp.gallery/ sidecar. Gallery selection does not change the
-Viewer or Timeline. The separate Grade Versions panel saves, applies, renames,
+the <project>.csp.gallery/ sidecar. Selecting a still loads it asynchronously
+as an optional, temporary Viewer reference. Split-screen shows the reference on
+the left and the current Viewer on the right; Wipe uses a normalized vertical
+divider with a slider and drag interaction. Off remains the default. Leaving
+Color hides the comparison visually and returning restores the page's temporary
+mode and reference. Selection and comparison do not change the clip, Viewer
+source, Timeline, project dirty state, or saved project data. The separate Grade Versions panel saves, applies, renames,
 and removes named graph snapshots for the active clip. The clip context menu
 copies the current graph and applies it to another clip; this clipboard is
 temporary and clears when a project is opened or created. Applying a grade does
 not transfer the source clip's saved versions. Clip splits and Duplicate
 Adjustment copy their saved versions. All grade and version actions share
-Timeline Undo/Redo. Albums, tags, still-based references, and comparison views
-are not included.
+Timeline Undo/Redo. Albums, tags, and direct comparison between named grade
+versions are not included.
 
 The currently available built-in effect set is Grayscale, Brightness,
 Contrast, Saturation, and Primary Grade. Primary Grade provides Wheels and Bars
@@ -231,9 +236,10 @@ and restoration. Keep large image assets outside the main CSP document.
    management contract.
 3. **Improve reference and grade reuse (partially implemented).** Copy/apply
    and named per-clip graph versions are implemented with shared history and
-   project persistence. Gallery reference display and wipe/split-screen
-   comparisons remain future work. Add group corrections only with a clear
-   grade ordering model.
+   project persistence. Transient Gallery references with split-screen and wipe
+   presentation are implemented across CPU, OpenGL, and Vulkan. Direct
+   comparison between named grade versions remains future work. Add group
+   corrections only with a clear grade ordering model.
 4. **Add secondary grading (partially implemented).** Curves, targeted
    selection, qualifier refinement, GPU R8 filters, and selected-node input
     preview are implemented. Add windows, tracking, and their keyframes.

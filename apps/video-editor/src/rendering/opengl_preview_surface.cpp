@@ -6,11 +6,15 @@
 #include <QOpenGLFunctions_3_2_Core>
 #include <QOpenGLShaderProgram>
 #include <QOpenGLVersionFunctionsFactory>
+#include <QMouseEvent>
 #include <QShowEvent>
 #include <QSurfaceFormat>
 #include <QTimer>
+#include <QVector2D>
+#include <QVector4D>
 
 #include <algorithm>
+#include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <limits>
@@ -19,6 +23,7 @@
 #include <vector>
 
 namespace rendering {
+using creative_suite::composition::FrameComparisonMode;
 namespace {
 
 constexpr const char* kVertexShader = R"(#version 150 core
@@ -34,13 +39,55 @@ void main() {
 
 constexpr const char* kFragmentShader = R"(#version 150 core
 uniform sampler2D u_texture;
+uniform sampler2D u_reference;
 uniform bool u_grayscale;
+uniform int u_comparison_mode;
+uniform float u_reference_fraction;
+uniform bool u_source_flip_y;
+uniform vec2 u_video_size;
+uniform vec2 u_reference_size;
+uniform vec4 u_surround;
 
 in vec2 v_texcoord;
 out vec4 frag_color;
 
+vec4 sample_reference(vec2 canvas_uv) {
+    float scale=min(u_video_size.x/u_reference_size.x,u_video_size.y/u_reference_size.y);
+    vec2 fitted=u_reference_size*scale;
+    vec2 offset=(u_video_size-fitted)*0.5;
+    vec2 point=canvas_uv*u_video_size;
+    if(any(lessThan(point,offset)) || any(greaterThanEqual(point,offset+fitted)))
+        return u_surround;
+    return texture(u_reference,(point-offset)/fitted);
+}
+
 void main() {
-    vec4 color = texture(u_texture, v_texcoord);
+    vec2 canvas_uv=vec2(v_texcoord.x,u_source_flip_y?1.0-v_texcoord.y:v_texcoord.y);
+    vec4 color=texture(u_texture,v_texcoord);
+    if(u_comparison_mode==1) {
+        bool left_panel=canvas_uv.x<0.5;
+        float panel_left=left_panel?0.0:floor(u_video_size.x*0.5);
+        float panel_width=left_panel?floor(u_video_size.x*0.5):u_video_size.x-panel_left;
+        vec2 source_size=left_panel?u_reference_size:u_video_size;
+        float scale=min(panel_width/source_size.x,u_video_size.y/source_size.y);
+        vec2 fitted=source_size*scale;
+        vec2 offset=vec2(panel_left+(panel_width-fitted.x)*0.5,
+            (u_video_size.y-fitted.y)*0.5);
+        vec2 point=canvas_uv*u_video_size;
+        if(any(lessThan(point,offset)) || any(greaterThanEqual(point,offset+fitted)))
+            color=u_surround;
+        else {
+            vec2 source_uv=(point-offset)/fitted;
+            color=left_panel?texture(u_reference,source_uv):texture(u_texture,
+                vec2(source_uv.x,u_source_flip_y?1.0-source_uv.y:source_uv.y));
+        }
+        if(abs(canvas_uv.x-0.5)<1.5*fwidth(canvas_uv.x))color=vec4(0.78,0.82,0.88,1.0);
+    } else if(u_comparison_mode==2 && canvas_uv.x<u_reference_fraction) {
+        color=sample_reference(canvas_uv);
+    }
+    if(u_comparison_mode==2 && u_reference_fraction>0.0 && u_reference_fraction<1.0 &&
+        abs(canvas_uv.x-u_reference_fraction)<1.5*fwidth(canvas_uv.x))
+        color=vec4(0.92,0.94,0.98,1.0);
     if (u_grayscale) {
         float luminance = dot(color.rgb, vec3(0.299, 0.587, 0.114));
         color = vec4(vec3(luminance), color.a);
@@ -71,6 +118,7 @@ OpenGLPreviewSurface::OpenGLPreviewSurface(QWidget* parent)
     format.setSwapBehavior(QSurfaceFormat::DoubleBuffer);
     setFormat(format);
     setUpdateBehavior(QOpenGLWidget::NoPartialUpdate);
+    setMouseTracking(true);
     setAutoFillBackground(false);
     setStyleSheet("background-color: #1c2028;");
     connect(this, &QOpenGLWidget::frameSwapped, this, [this]() {
@@ -180,6 +228,19 @@ void OpenGLPreviewSurface::setGrayscaleEnabled(bool enabled) {
     update();
 }
 
+void OpenGLPreviewSurface::setComparisonReferenceImage(QImage image) {
+    reference_image_ = image.isNull() ? QImage{} : image.convertToFormat(QImage::Format_RGBA8888);
+    reference_pending_ = true;
+    reference_available_ = false;
+    update();
+}
+
+void OpenGLPreviewSurface::setComparison(FrameComparisonMode mode, float reference_fraction) {
+    comparison_mode_ = mode;
+    reference_fraction_ = std::clamp(reference_fraction, 0.0F, 1.0F);
+    update();
+}
+
 void OpenGLPreviewSurface::initializeGL() {
     if (context() == nullptr) {
         failGpu("OpenGL context creation failed.");
@@ -247,6 +308,7 @@ void OpenGLPreviewSurface::paintGL() {
     if (texture_delivery_failed_ && !pending_frame_) return;
 
     if (pending_frame_valid_ && !uploadPendingFrame()) return;
+    if (!uploadPendingReference()) return;
     if (!frame_available_ || shader_program_ == nullptr) {
         functions_->glClear(GL_COLOR_BUFFER_BIT);
         return;
@@ -267,14 +329,31 @@ void OpenGLPreviewSurface::paintGL() {
 
     shader_program_->bind();
     shader_program_->setUniformValue("u_texture", 0);
+    shader_program_->setUniformValue("u_reference", 1);
     shader_program_->setUniformValue("u_grayscale", grayscale_enabled_);
+    const auto active_mode = reference_available_ ? comparison_mode_ : FrameComparisonMode::Off;
+    shader_program_->setUniformValue("u_comparison_mode", int(active_mode));
+    shader_program_->setUniformValue("u_reference_fraction", reference_fraction_);
+    shader_program_->setUniformValue("u_source_flip_y",
+        current_gpu_frame_ && current_gpu_frame_->bottomLeftOrigin());
+    shader_program_->setUniformValue("u_video_size",
+        QVector2D(float(video_width_), float(video_height_)));
+    shader_program_->setUniformValue("u_reference_size",
+        QVector2D(float(reference_width_), float(reference_height_)));
+    shader_program_->setUniformValue("u_surround", QVector4D(0.1098F, 0.1255F, 0.1569F, 1.0F));
 
     functions_->glActiveTexture(GL_TEXTURE0);
     functions_->glBindTexture(GL_TEXTURE_2D, current_gpu_frame_ ? current_gpu_frame_->texture() : texture_);
+    functions_->glActiveTexture(GL_TEXTURE1);
+    functions_->glBindTexture(GL_TEXTURE_2D, reference_available_ ? reference_texture_ : texture_);
+    functions_->glActiveTexture(GL_TEXTURE0);
     functions_->glBindVertexArray(vertex_array_);
     functions_->glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
     functions_->glBindVertexArray(0);
     functions_->glBindTexture(GL_TEXTURE_2D, 0);
+    functions_->glActiveTexture(GL_TEXTURE1);
+    functions_->glBindTexture(GL_TEXTURE_2D, 0);
+    functions_->glActiveTexture(GL_TEXTURE0);
     shader_program_->release();
     if (current_gpu_frame_) {
         PreviewPerformanceScope sync_timing(metrics, PreviewTiming::GpuConsumerFenceSubmission);
@@ -295,10 +374,106 @@ void OpenGLPreviewSurface::paintGL() {
     }
 }
 
+bool OpenGLPreviewSurface::uploadPendingReference() {
+    if (!reference_pending_ || functions_ == nullptr || !initialized_) return true;
+    reference_pending_ = false;
+    if (reference_image_.isNull()) {
+        if (reference_texture_ != 0) functions_->glDeleteTextures(1, &reference_texture_);
+        reference_texture_ = 0;
+        reference_width_ = reference_height_ = 0;
+        reference_available_ = false;
+        return true;
+    }
+    if (reference_texture_ == 0) functions_->glGenTextures(1, &reference_texture_);
+    if (reference_texture_ == 0) {
+        emit comparisonUnavailable(QStringLiteral("OpenGL could not allocate the comparison texture."), -1);
+        return true;
+    }
+    const QImage image = reference_image_.convertToFormat(QImage::Format_RGBA8888);
+    functions_->glBindTexture(GL_TEXTURE_2D, reference_texture_);
+    functions_->glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+    functions_->glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
+    functions_->glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, image.width(), image.height(), 0,
+        GL_RGBA, GL_UNSIGNED_BYTE, image.constBits());
+    functions_->glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    functions_->glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    functions_->glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    functions_->glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    const auto error = functions_->glGetError();
+    functions_->glBindTexture(GL_TEXTURE_2D, 0);
+    if (error != GL_NO_ERROR) {
+        reference_available_ = false;
+        emit comparisonUnavailable(QStringLiteral("OpenGL comparison image upload failed."), error);
+        return true;
+    }
+    reference_width_ = image.width();
+    reference_height_ = image.height();
+    reference_available_ = true;
+    update();
+    return true;
+}
+
 void OpenGLPreviewSurface::resizeGL(int width, int height) {
     if (functions_ == nullptr || gpu_failed_) return;
     functions_->glViewport(0, 0, width, height);
     updateVertexBuffer();
+}
+
+void OpenGLPreviewSurface::mousePressEvent(QMouseEvent* event) {
+    if (comparison_mode_ == FrameComparisonMode::Wipe && reference_available_ &&
+        event->button() == Qt::LeftButton && video_width_ > 0 && video_height_ > 0) {
+        const float video_aspect = float(video_width_) / float(video_height_);
+        const float widget_aspect = height() > 0 ? float(width()) / float(height()) : video_aspect;
+        float half_width = 1.0F, half_height = 1.0F;
+        if (widget_aspect > video_aspect) half_width = video_aspect / widget_aspect;
+        else if (widget_aspect > 0.0F) half_height = widget_aspect / video_aspect;
+        const float left = (float(width()) - half_width * float(width())) * 0.5F;
+        const float fitted_width = half_width * float(width());
+        const float divider = left + fitted_width * reference_fraction_;
+        const float top = (float(height()) - half_height * float(height())) * 0.5F;
+        if (event->position().y() >= top &&
+            event->position().y() <= top + half_height * float(height()) &&
+            std::abs(float(event->position().x()) - divider) <= 12.0F) {
+            dragging_wipe_ = true;
+            updateWipePosition(event->position().toPoint());
+            event->accept();
+            return;
+        }
+    }
+    QOpenGLWidget::mousePressEvent(event);
+}
+
+void OpenGLPreviewSurface::mouseMoveEvent(QMouseEvent* event) {
+    if (dragging_wipe_) {
+        updateWipePosition(event->position().toPoint());
+        event->accept();
+        return;
+    }
+    QOpenGLWidget::mouseMoveEvent(event);
+}
+
+void OpenGLPreviewSurface::mouseReleaseEvent(QMouseEvent* event) {
+    if (dragging_wipe_ && event->button() == Qt::LeftButton) {
+        updateWipePosition(event->position().toPoint());
+        dragging_wipe_ = false;
+        event->accept();
+        return;
+    }
+    QOpenGLWidget::mouseReleaseEvent(event);
+}
+
+void OpenGLPreviewSurface::updateWipePosition(const QPoint& point) {
+    if (video_width_ <= 0 || video_height_ <= 0 || width() <= 0 || height() <= 0) return;
+    const float video_aspect = float(video_width_) / float(video_height_);
+    const float widget_aspect = float(width()) / float(height());
+    float half_width = 1.0F, half_height = 1.0F;
+    if (widget_aspect > video_aspect) half_width = video_aspect / widget_aspect;
+    else half_height = widget_aspect / video_aspect;
+    const float left = (float(width()) - half_width * float(width())) * 0.5F;
+    const float fitted_width = half_width * float(width());
+    if (fitted_width <= 0.0F) return;
+    emit wipePositionDragged(std::clamp((float(point.x()) - left) / fitted_width,
+        0.0F, 1.0F));
 }
 
 void OpenGLPreviewSurface::showEvent(QShowEvent* event) {
@@ -528,11 +703,14 @@ void OpenGLPreviewSurface::releaseResources() {
 
     makeCurrent();
     if (texture_ != 0) functions_->glDeleteTextures(1, &texture_);
+    if (reference_texture_ != 0) functions_->glDeleteTextures(1, &reference_texture_);
     if (vertex_buffer_ != 0) functions_->glDeleteBuffers(1, &vertex_buffer_);
     if (vertex_array_ != 0) functions_->glDeleteVertexArrays(1, &vertex_array_);
     texture_ = 0;
+    reference_texture_ = 0;
     vertex_buffer_ = 0;
     vertex_array_ = 0;
+    reference_width_ = reference_height_ = 0;
     shader_program_.reset();
     initialized_ = false;
     functions_ = nullptr;

@@ -7,7 +7,13 @@
 #include <QExposeEvent>
 #include <QPlatformSurfaceEvent>
 #include <QLabel>
+#include <QMouseEvent>
+#include <QRectF>
 #include <QStackedLayout>
+#include <algorithm>
+#include <cmath>
+#include <cstring>
+#include <cstdint>
 #include <functional>
 #include <QTimer>
 
@@ -28,6 +34,7 @@ public:
     VulkanPreviewSurface::Diagnostics stats;
     bool grayscale=false;
     std::function<void(const QString&)> failure;
+    std::function<void(float)> wipe_dragged;
     const c::GpuTextureFramePtr& snapshotFrame() const {return schedule_.lastSubmitted().image;}
     void setFrame(c::GpuTextureFramePtr image,quint64 trace,quint64 epoch) {
         drop(schedule_.replace({std::move(image),trace,epoch}),PreviewFrameDeliveryDropReason::PreviewOverwritten);
@@ -48,6 +55,11 @@ public:
         if(grayscale==enabled)return;
         grayscale=enabled;schedule_.invalidate();requestScheduledUpdate();
     }
+    void setComparison(c::FrameComparisonOptions value) {
+        comparison_=std::move(value);
+        schedule_.invalidate();
+        requestScheduledUpdate();
+    }
     void suspend(bool value) {
         suspended_=value;schedule_.setSuspended(value);
         if(value){poll_.stop();update_pending_=false;}
@@ -57,7 +69,8 @@ public:
         update_pending_=false;
         if(halted_ || !isExposed() || !schedule_.ready())return;
         const auto trace=schedule_.pendingTrace();
-        auto result=device_->presentFrame(this,schedule_.candidate().image,grayscale,{0.1098F,0.1255F,0.1569F,1.0F});
+        auto result=device_->presentFrame(this,schedule_.candidate().image,grayscale,
+            {0.1098F,0.1255F,0.1569F,1.0F},false,comparison_);
         if(result.status==c::VulkanDevice::PresentStatus::Deferred){
             ++stats.deferred;
             // Zero extent is resumed only by expose/resize, not a retry timer.
@@ -82,6 +95,21 @@ protected:
         }
         return QWindow::event(event);
     }
+    void mousePressEvent(QMouseEvent* event) override {
+        if (comparison_.mode==c::FrameComparisonMode::Wipe && event->button()==Qt::LeftButton &&
+            beginWipeDrag(event->position().toPoint())) {event->accept();return;}
+        QWindow::mousePressEvent(event);
+    }
+    void mouseMoveEvent(QMouseEvent* event) override {
+        if (dragging_wipe_) {updateWipeDrag(event->position().toPoint());event->accept();return;}
+        QWindow::mouseMoveEvent(event);
+    }
+    void mouseReleaseEvent(QMouseEvent* event) override {
+        if (dragging_wipe_ && event->button()==Qt::LeftButton) {
+            updateWipeDrag(event->position().toPoint());dragging_wipe_=false;event->accept();return;
+        }
+        QWindow::mouseReleaseEvent(event);
+    }
     void exposeEvent(QExposeEvent*) override {
         update_pending_=false;
         if(!isExposed()){poll_.stop();return;}
@@ -92,6 +120,26 @@ protected:
         visual_size_=size();visual_scale_=devicePixelRatio();schedule_.invalidate();requestScheduledUpdate();
     }
 private:
+    QRectF fittedFrameRect() const {
+        auto frame=schedule_.ready()?schedule_.candidate().image:schedule_.lastSubmitted().image;
+        if(!frame || frame->width()<=0 || frame->height()<=0 || width()<=0 || height()<=0)return {};
+        const double scale=std::min(double(width())/frame->width(),double(height())/frame->height());
+        const QSizeF size(frame->width()*scale,frame->height()*scale);
+        return QRectF((width()-size.width())/2.0,(height()-size.height())/2.0,size.width(),size.height());
+    }
+    bool beginWipeDrag(const QPoint& point) {
+        const auto frame_rect=fittedFrameRect();
+        if(frame_rect.isEmpty())return false;
+        const double divider=frame_rect.left()+frame_rect.width()*comparison_.reference_fraction;
+        if(std::abs(point.x()-divider)>12.0)return false;
+        dragging_wipe_=true;updateWipeDrag(point);return true;
+    }
+    void updateWipeDrag(const QPoint& point) {
+        const auto frame_rect=fittedFrameRect();
+        if(frame_rect.width()<=0 || !wipe_dragged)return;
+        const float fraction=float((point.x()-frame_rect.left())/frame_rect.width());
+        wipe_dragged(std::clamp(fraction,0.0F,1.0F));
+    }
     void drop(quint64 trace,PreviewFrameDeliveryDropReason reason) {
         if(!trace)return;++stats.dropped;
         PreviewPerformanceMetrics::instance().recordFrameDeliveryDrop(trace,reason);
@@ -122,6 +170,8 @@ private:
     qreal visual_scale_=0;
     quint64 epoch_=0;
     bool update_pending_=false,suspended_=false,halted_=false;
+    bool dragging_wipe_=false;
+    c::FrameComparisonOptions comparison_;
 };
 VulkanPreviewSurface::VulkanPreviewSurface(QWidget* parent):QWidget(parent),device_(c::sessionVulkanDevice()) {
     stack_=new QStackedLayout(this);stack_->setContentsMargins(0,0,0,0);
@@ -134,8 +184,9 @@ VulkanPreviewSurface::VulkanPreviewSurface(QWidget* parent):QWidget(parent),devi
         logging::Logger::instance().log(logging::Level::Error,"preview","vulkan_present",cause.toStdString());
         PreviewPerformanceMetrics::instance().recordGpuFailure();emit gpuFailure(cause,-1);
     };
+    window_->wipe_dragged=[this](float fraction){emit wipePositionDragged(fraction);};
 }
-VulkanPreviewSurface::~VulkanPreviewSurface(){if(window_){window_->failure={};window_->clear();}delete container_;window_=nullptr;}
+VulkanPreviewSurface::~VulkanPreviewSurface(){if(window_){window_->failure={};window_->wipe_dragged={};window_->clear();}delete container_;window_=nullptr;}
 VulkanPreviewSurface::Diagnostics VulkanPreviewSurface::diagnostics() const noexcept {return window_?window_->stats:Diagnostics{};}
 quint64 VulkanPreviewSurface::lastCompletedDeliveryTraceId() const noexcept {return window_?window_->completed:0;}
 quint64 VulkanPreviewSurface::lastQueuedDeliveryTraceId() const noexcept {return window_?window_->queued:0;}
@@ -162,6 +213,41 @@ void VulkanPreviewSurface::setFrame(const PreviewFramePayload& payload,quint64 t
     if(!suspended_)stack_->setCurrentWidget(container_);
 }
 void VulkanPreviewSurface::setGrayscaleEnabled(bool enabled){if(window_)window_->setGrayscale(enabled);}
+void VulkanPreviewSurface::setComparisonReferenceImage(QImage image) {
+    reference_frame_.reset();
+    if (image.isNull()) {
+        if (window_) window_->setComparison({});
+        return;
+    }
+    if (!available()) {
+        emit comparisonUnavailable(QStringLiteral("The Vulkan comparison surface is unavailable."), 0);
+        return;
+    }
+    image=image.convertToFormat(QImage::Format_RGBA8888);
+    media::VideoFrame rgba;
+    rgba.width=image.width();rgba.height=image.height();rgba.stride=rgba.width*4;
+    rgba.rgba_pixels.resize(static_cast<std::size_t>(rgba.stride)*rgba.height);
+    for(int y=0;y<rgba.height;++y)
+        std::memcpy(rgba.rgba_pixels.data()+static_cast<std::size_t>(y)*rgba.stride,
+            image.constScanLine(y),static_cast<std::size_t>(rgba.stride));
+    c::VulkanFrameCompositor upload(device_);
+    auto result=upload.tryUpload(rgba);
+    if(result.status!=c::OpenGlCompositionStatus::Complete || !result.frame) {
+        const auto cause=QString::fromStdString(result.cause.empty()
+            ? "The Vulkan comparison texture could not be uploaded." : result.cause);
+        emit comparisonUnavailable(cause,result.error_code);
+        if(window_)window_->setComparison({});
+        return;
+    }
+    reference_frame_=std::move(result.frame);
+    setComparison(comparison_mode_,reference_fraction_);
+}
+void VulkanPreviewSurface::setComparison(c::FrameComparisonMode mode,float fraction) {
+    comparison_mode_=mode;
+    reference_fraction_=std::clamp(fraction,0.0F,1.0F);
+    if(!reference_frame_)comparison_mode_=c::FrameComparisonMode::Off;
+    if(window_)window_->setComparison({comparison_mode_,reference_frame_,reference_fraction_});
+}
 void VulkanPreviewSurface::suspendForTransition(bool suspend) {
     if(!window_ || suspended_==suspend)return;
     suspended_=suspend;window_->suspend(suspend);
