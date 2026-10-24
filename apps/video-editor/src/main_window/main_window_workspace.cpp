@@ -748,6 +748,49 @@ void MainWindow::createWorkspace() {
                 refreshColorSelection();
             }
         });
+        color_workspace_->setCopyGradeHandler([this](timeline::ClipId id) {
+            const auto location = timeline_model_.locateClip(id);
+            if (!location) return;
+            const auto& clip = timeline_model_.tracks()[location->track_index]
+                .clips[location->clip_index];
+            if (!timeline::supportsClipEffects(clip.kind)) return;
+            copied_color_grade_ = timeline::colorGraphForClip(clip);
+            color_workspace_->setCanApplyCopiedGrade(true);
+        });
+        color_workspace_->setApplyGradeHandler([this](timeline::ClipId id) {
+            if (!copied_color_grade_) return;
+            try {
+                const auto result = timeline_command_service_.execute(
+                    application::SetClipColorGraphCommand{id, *copied_color_grade_});
+                if (!result.changed()) return;
+                applyTimelineEditResult(result, false);
+                updateTimelineState();
+                refreshPlaybackComposition();
+            } catch (const std::exception& error) {
+                logging::Logger::instance().log(logging::Level::Error,
+                    "color", "apply_copied_grade", error.what(),
+                    {{"clip_id", std::to_string(id)}});
+                statusBar()->showMessage(QCoreApplication::translate(
+                    "MainWindow", "Could not apply the copied color grade."));
+            }
+        });
+        color_workspace_->setGradeVersionsChangedHandler([this](timeline::ClipId id,
+            std::vector<timeline::ColorGradeVersion> versions) {
+            try {
+                const auto result = timeline_command_service_.execute(
+                    application::SetClipColorGradeVersionsCommand{id,
+                        std::move(versions)});
+                if (!result.changed()) return;
+                applyTimelineEditResult(result, false);
+                updateTimelineState();
+            } catch (const std::exception& error) {
+                logging::Logger::instance().log(logging::Level::Error,
+                    "color", "set_grade_versions", error.what(),
+                    {{"clip_id", std::to_string(id)}});
+                statusBar()->showMessage(QCoreApplication::translate(
+                    "MainWindow", "Could not update grade versions."));
+            }
+        });
         color_workspace_->setEffectsChangedHandler([this](timeline::ClipId id,
             color::Graph graph) {
             try {
@@ -844,7 +887,8 @@ void MainWindow::refreshColorSelection() {
                 }
             }
             ordered.push_back({clip.timeline_start_frame, track_index,
-                {clip.clip_id, std::move(name), std::move(thumbnail)}});
+                {clip.clip_id, std::move(name), std::move(thumbnail),
+                    clip.color_grade_versions}});
         }
     }
     std::sort(ordered.begin(), ordered.end(), [](const OrderedClip& a, const OrderedClip& b) {
@@ -864,6 +908,7 @@ void MainWindow::refreshColorSelection() {
             }
         }
     }
+    color_workspace_->setCanApplyCopiedGrade(copied_color_grade_.has_value());
     color_workspace_->setClips(std::move(clips), selected_id, std::move(graph));
 
     std::vector<ui::ColorWorkspace::StillItem> stills;

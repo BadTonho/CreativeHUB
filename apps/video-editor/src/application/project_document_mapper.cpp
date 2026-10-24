@@ -57,6 +57,7 @@ project::ProjectDocument ProjectDocumentMapper::toDocument(
             project_clip.effects = clip.effects;
             project_clip.color_graph = clip.color_graph.value_or(
                 color::fromEffectStack(clip.effects));
+            project_clip.color_grade_versions = clip.color_grade_versions;
             project_clip.node_graph = clip.node_graph;
             project_clip.composition_input_offset_frames = clip.composition_input_offset_frames;
             project_clip.transform = clip.transform;

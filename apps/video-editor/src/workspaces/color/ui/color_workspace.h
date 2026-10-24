@@ -27,6 +27,7 @@ public:
         timeline::ClipId id = 0;
         QString name;
         QImage thumbnail;
+        std::vector<timeline::ColorGradeVersion> grade_versions;
     };
     struct StillItem {
         QString id;
@@ -46,6 +47,11 @@ public:
     void setClipSelectedHandler(std::function<void(timeline::ClipId)> handler);
     void setEffectsChangedHandler(std::function<void(timeline::ClipId,
         color::Graph)> handler);
+    void setCopyGradeHandler(std::function<void(timeline::ClipId)> handler);
+    void setApplyGradeHandler(std::function<void(timeline::ClipId)> handler);
+    void setGradeVersionsChangedHandler(std::function<void(timeline::ClipId,
+        std::vector<timeline::ColorGradeVersion>)> handler);
+    void setCanApplyCopiedGrade(bool available);
     void setGradeEditBatchHandlers(std::function<void()> started,
         std::function<void()> finished);
     void setPlaybackHandler(std::function<void(playback::PlaybackCommand)> handler);
@@ -69,12 +75,22 @@ private:
     void renderScopeFrame(rendering::PreviewFramePayload identity,
         playback::VideoFramePtr frame, quint64 request_id);
     void renameSelectedStill();
+    void saveGradeVersion();
+    void applySelectedGradeVersion();
+    void renameSelectedGradeVersion();
+    void removeSelectedGradeVersion();
 
     QWidget* preview_container_ = nullptr;
     QWidget* preview_ = nullptr;
     QListWidget* clips_ = nullptr;
     QListWidget* stills_ = nullptr;
     QPushButton* capture_still_button_ = nullptr;
+    QWidget* grade_versions_panel_ = nullptr;
+    QListWidget* grade_versions_ = nullptr;
+    QPushButton* save_grade_version_button_ = nullptr;
+    QPushButton* apply_grade_version_button_ = nullptr;
+    QPushButton* rename_grade_version_button_ = nullptr;
+    QPushButton* remove_grade_version_button_ = nullptr;
     ColorNodeCanvas* nodes_ = nullptr;
     QComboBox* node_kind_ = nullptr;
     QPushButton* add_branch_button_ = nullptr;
@@ -86,10 +102,15 @@ private:
     QTimer* waveform_timer_ = nullptr;
     timeline::ClipId selected_clip_ = 0;
     color::Graph graph_ = color::makePassthroughGraph();
+    std::vector<timeline::ColorGradeVersion> selected_grade_versions_;
     std::optional<color::NodeId> selected_node_;
     std::function<void(timeline::ClipId)> clip_selected_handler_;
     std::function<void(timeline::ClipId,
         color::Graph)> effects_changed_handler_;
+    std::function<void(timeline::ClipId)> copy_grade_handler_;
+    std::function<void(timeline::ClipId)> apply_grade_handler_;
+    std::function<void(timeline::ClipId,
+        std::vector<timeline::ColorGradeVersion>)> grade_versions_changed_handler_;
     std::function<void()> grade_edit_started_handler_;
     std::function<void()> grade_edit_finished_handler_;
     std::function<void(playback::PlaybackCommand)> playback_handler_;
@@ -98,6 +119,7 @@ private:
     std::function<void(const QString&, const QString&)> rename_still_handler_;
     std::function<void(const QString&)> remove_still_handler_;
     bool active_ = false;
+    bool can_apply_copied_grade_ = false;
     bool waveform_pending_ = false;
     unsigned int waveform_generation_ = 0;
     quint64 next_scope_request_id_ = 1;

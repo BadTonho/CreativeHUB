@@ -419,18 +419,22 @@ int main(int argc, char** argv) {
             auto branch_effect = creative_suite::effects::makeDefaultInstance("video.saturation");
             require(creative_suite::effects::setParameterValue(branch_effect, "amount", 125.0) &&
                         color::addParallelBranch(branch_graph, effect_nodes.back(), branch_effect),
-                    "Could not prepare the v36 parallel Color graph fixture.");
+                    "Could not prepare the v37 parallel Color graph fixture.");
             graded_clip.color_graph = branch_graph;
             graded_clip.effects = color::effectInstancesInOrder(branch_graph);
-            const auto grade_path = directory / "primary-grade-v36.csp";
+            graded_clip.color_grade_versions.push_back({
+                "grade-version-1", "Version 1", branch_graph});
+            const auto grade_path = directory / "primary-grade-v37.csp";
             project::save(grade_path, graded);
             const auto restored = project::load(grade_path);
             require(restored.timeline_tracks.front().clips.front().color_graph == branch_graph &&
+                        restored.timeline_tracks.front().clips.front().color_grade_versions ==
+                            graded_clip.color_grade_versions &&
                         restored.color_gallery_stills == graded.color_gallery_stills &&
                         std::any_of(restored.timeline_tracks.front().clips.front().effects.begin(),
                             restored.timeline_tracks.front().clips.front().effects.end(),
                             [&](const auto& effect) { return effect == grade; }),
-                    "CSP v36 must preserve the correction graph, connections and expanded effect values.");
+                    "CSP v37 must preserve the correction graph, named snapshots and effect values.");
             std::ifstream grade_file(grade_path, std::ios::binary);
             const std::string grade_text{
                 std::istreambuf_iterator<char>(grade_file),
@@ -438,6 +442,19 @@ int main(int argc, char** argv) {
             auto pre_log_grade = QJsonDocument::fromJson(
                 QByteArray(grade_text.data(), static_cast<qsizetype>(grade_text.size()))).object();
             pre_log_grade.insert("version", 35);
+            {
+                auto timeline = pre_log_grade.value("timeline").toObject();
+                auto tracks = timeline.value("tracks").toArray();
+                auto track = tracks.first().toObject();
+                auto clips = track.value("clips").toArray();
+                auto clip = clips.first().toObject();
+                clip.remove("color_grade_versions");
+                clips[0] = clip;
+                track.insert("clips", clips);
+                tracks[0] = track;
+                timeline.insert("tracks", tracks);
+                pre_log_grade.insert("timeline", timeline);
+            }
             auto disabled_pre_log_grade = grade;
             disabled_pre_log_grade.enabled = false;
             require(writeExpandedPrimaryGradeToFirstGraph(pre_log_grade, disabled_pre_log_grade),
@@ -463,7 +480,31 @@ int main(int argc, char** argv) {
                             "red_gain") == 135.0 &&
                         creative_suite::effects::parameterValue(*migrated_v35_grade,
                             "gamma_blue") == 125.0,
-                    "CSP v35 must migrate its expanded Primary Grade values and initialize Log neutrally.");
+                    "CSP v35 must migrate expanded Primary Grade values and initialize Log neutrally.");
+            auto pre_versions = QJsonDocument::fromJson(
+                QByteArray(grade_text.data(), static_cast<qsizetype>(grade_text.size()))).object();
+            pre_versions.insert("version", 36);
+            {
+                auto timeline = pre_versions.value("timeline").toObject();
+                auto tracks = timeline.value("tracks").toArray();
+                auto track = tracks.first().toObject();
+                auto clips = track.value("clips").toArray();
+                auto clip = clips.first().toObject();
+                clip.remove("color_grade_versions");
+                clips[0] = clip;
+                track.insert("clips", clips);
+                tracks[0] = track;
+                timeline.insert("tracks", tracks);
+                pre_versions.insert("timeline", timeline);
+            }
+            const auto pre_versions_path = directory / "primary-grade-v36.csp";
+            writeText(pre_versions_path,
+                QJsonDocument(pre_versions).toJson().toStdString());
+            const auto migrated_v36 = project::load(pre_versions_path);
+            require(migrated_v36.timeline_tracks.front().clips.front()
+                        .color_grade_versions.empty() &&
+                    migrated_v36.timeline_tracks.front().clips.front().color_graph == branch_graph,
+                "CSP v36 must retain its Color graph and open with empty grade versions.");
             auto legacy_grade = QJsonDocument::fromJson(
                 QByteArray(grade_text.data(), static_cast<qsizetype>(grade_text.size()))).object();
             legacy_grade.insert("version", 31);
@@ -571,7 +612,7 @@ int main(int argc, char** argv) {
         require(saved_json.find("\"track_id\": 1") != std::string::npos &&
                     saved_json.find("\"clip_id\": 1") != std::string::npos,
                 "Stable track and clip identifiers were not written to the project.");
-        require(saved_json.find("\"version\": 36") != std::string::npos &&
+        require(saved_json.find("\"version\": 37") != std::string::npos &&
                     saved_json.find("\"render_start_time_us\": 1234567") != std::string::npos &&
                     saved_json.find("\"frame_rate\"") != std::string::npos &&
                     saved_json.find("\"numerator\": 30000") != std::string::npos &&
@@ -596,7 +637,7 @@ int main(int argc, char** argv) {
                     saved_json.find("image_editor_variant") != std::string::npos &&
                     saved_json.find("motion_link") != std::string::npos &&
                     saved_json.find("render-é final.mp4") != std::string::npos,
-                "Timeline timing, Fusion animation, and linked publication time were not written to the version 29 project.");
+                "Timeline timing, Fusion animation, and linked publication time were not written to the version 37 project.");
 
         auto legacy_v24_json = QJsonDocument::fromJson(QByteArray::fromStdString(saved_json)).object();
         legacy_v24_json.insert("version", 24);
@@ -1416,7 +1457,7 @@ int main(int argc, char** argv) {
 
         writeText(
             project_path,
-            R"({"format":"creative-suite.main-editor","version":37,"media":[],"timeline":{"clips":[]}})");
+            R"({"format":"creative-suite.main-editor","version":38,"media":[],"timeline":{"clips":[]}})");
         try {
             static_cast<void>(project::load(project_path));
             throw std::runtime_error("CSP v37 was accepted by the v36 reader.");

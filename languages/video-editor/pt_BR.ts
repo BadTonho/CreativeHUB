@@ -194,6 +194,54 @@
         <translation>Galeria</translation>
     </message>
     <message>
+        <source>Grade Versions</source>
+        <translation>Versões de correção</translation>
+    </message>
+    <message>
+        <source>Save Version</source>
+        <translation>Salvar versão</translation>
+    </message>
+    <message>
+        <source>Apply Version</source>
+        <translation>Aplicar versão</translation>
+    </message>
+    <message>
+        <source>Rename Version</source>
+        <translation>Renomear versão</translation>
+    </message>
+    <message>
+        <source>Remove Version</source>
+        <translation>Remover versão</translation>
+    </message>
+    <message>
+        <source>Copy Grade</source>
+        <translation>Copiar correção</translation>
+    </message>
+    <message>
+        <source>Apply Grade</source>
+        <translation>Aplicar correção</translation>
+    </message>
+    <message>
+        <source>Version %1</source>
+        <translation>Versão %1</translation>
+    </message>
+    <message>
+        <source>Save Grade Version</source>
+        <translation>Salvar versão da correção</translation>
+    </message>
+    <message>
+        <source>Rename Grade Version</source>
+        <translation>Renomear versão da correção</translation>
+    </message>
+    <message>
+        <source>Invalid Grade Version Name</source>
+        <translation>Nome de versão inválido</translation>
+    </message>
+    <message>
+        <source>Version names must be non-empty and unique for this clip.</source>
+        <translation>Os nomes das versões devem ser preenchidos e exclusivos neste clipe.</translation>
+    </message>
+    <message>
         <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="136"/>
         <source>Add Effect</source>
         <translation>Adicionar efeito</translation>
@@ -1212,6 +1260,14 @@
         <location filename="../../apps/video-editor/src/main_window/main_window_workspace.cpp" line="974"/>
         <source>Could not save the Color Gallery still.</source>
         <translation>Não foi possível salvar o still da Galeria de cor.</translation>
+    </message>
+    <message>
+        <source>Could not apply the copied color grade.</source>
+        <translation>Não foi possível aplicar a correção de cor copiada.</translation>
+    </message>
+    <message>
+        <source>Could not update grade versions.</source>
+        <translation>Não foi possível atualizar as versões da correção.</translation>
     </message>
     <message>
         <location filename="../../apps/video-editor/src/main_window/main_window.cpp" line="51"/>

@@ -71,6 +71,10 @@ int main(int argc, char* argv[]) {
     }
     if (QCoreApplication::translate("ColorWorkspace", "RGB Parade") !=
             QStringLiteral("Parada RGB") ||
+        QCoreApplication::translate("ColorWorkspace", "Grade Versions") !=
+            QStringLiteral("Versões de correção") ||
+        QCoreApplication::translate("ColorWorkspace", "Copy Grade") !=
+            QStringLiteral("Copiar correção") ||
         QCoreApplication::translate("ColorWorkspace", "Offset") !=
             QStringLiteral("Deslocamento") ||
         ::effects::translateCatalogLabel(QStringLiteral("Lift red")) !=

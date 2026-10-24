@@ -154,8 +154,10 @@ Color evaluator. Disabled instances pass their input through; active instances
 retain graph-defined order. Filter parameters, enabled states, connections,
 mixer weights and positions are Timeline project data; caches and temporary
 preview state are not added by this library. The Video Editor persists graphs
-in CSP v36 as described in [PROJECT.md](PROJECT.md). Versions 1–35 migrate
-ordered effect stacks into serial graphs.
+and named per-clip snapshots in CSP v37 as described in [PROJECT.md](PROJECT.md).
+Versions 1–36 migrate ordered effect stacks into serial graphs and start with
+no saved grade versions. Copy/apply transfers only the current graph; saved
+versions remain owned by their clip.
 
 `applyColorAdjustment()` is a fused processing entry point for Color
 Adjustment. It applies normalized RGB offset, contrast around the configured

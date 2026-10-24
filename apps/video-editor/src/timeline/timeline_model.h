@@ -82,6 +82,33 @@ struct AudioGainKeyframe {
     friend bool operator==(const AudioGainKeyframe&, const AudioGainKeyframe&) = default;
 };
 
+struct ColorGradeVersion {
+    std::string id;
+    std::string name;
+    color::Graph graph;
+
+    friend bool operator==(const ColorGradeVersion&, const ColorGradeVersion&) = default;
+};
+
+[[nodiscard]] inline bool validColorGradeVersions(
+    const std::vector<ColorGradeVersion>& versions) {
+    for (std::size_t index = 0; index < versions.size(); ++index) {
+        const auto& version = versions[index];
+        if (version.id.empty() ||
+            version.name.find_first_not_of(" \t\r\n") == std::string::npos ||
+            !color::validate(version.graph)) {
+            return false;
+        }
+        for (std::size_t previous = 0; previous < index; ++previous) {
+            if (versions[previous].id == version.id ||
+                versions[previous].name == version.name) {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
 [[nodiscard]] inline double evaluateAudioGainEnvelope(
     const std::vector<AudioGainKeyframe>& keyframes,
     double local_frame) noexcept {
@@ -120,6 +147,7 @@ struct TimelineClip {
     // Canonical Color correction graph. `effects` is a compatibility projection
     // used by existing Edit controls and linear GPU effect paths.
     std::optional<color::Graph> color_graph;
+    std::vector<ColorGradeVersion> color_grade_versions;
     std::optional<fusion::nodes::NodeGraph> node_graph;
     ClipId clip_id = 0;
     TrackId track_id = 0;
@@ -284,6 +312,7 @@ enum class TextParameterResult { Changed, InvalidIndex, InvalidValue, NoChange }
 enum class EffectMutationResult { Changed, InvalidIndex, InvalidValue, IncompatibleClip, NoChange };
 enum class NodeGraphMutationResult { Changed, InvalidIndex, InvalidValue, IncompatibleClip, NoChange };
 enum class ColorGraphMutationResult { Changed, InvalidIndex, InvalidValue, IncompatibleClip, NoChange };
+enum class ColorGradeVersionsMutationResult { Changed, InvalidIndex, InvalidValue, IncompatibleClip, NoChange };
 enum class TransitionMutationResult {
     Added,
     Updated,
@@ -436,6 +465,10 @@ public:
         std::size_t track_index,
         std::size_t clip_index,
         color::Graph graph);
+    ColorGradeVersionsMutationResult setClipColorGradeVersions(
+        std::size_t track_index,
+        std::size_t clip_index,
+        std::vector<ColorGradeVersion> versions);
     NodeGraphMutationResult setClipNodeGraph(
         std::size_t track_index,
         std::size_t clip_index,

@@ -397,6 +397,17 @@ void save(const std::filesystem::path& project_path, const ProjectDocument& docu
                 const auto graph = clip.color_graph.value_or(
                     color::fromEffectStack(clip.effects));
                 item.insert("color_graph", colorGraphJson(graph));
+                QJsonArray grade_versions;
+                for (const auto& version : clip.color_grade_versions) {
+                    QJsonObject grade_version;
+                    grade_version.insert("id", QString::fromUtf8(
+                        version.id.data(), static_cast<qsizetype>(version.id.size())));
+                    grade_version.insert("name", QString::fromUtf8(
+                        version.name.data(), static_cast<qsizetype>(version.name.size())));
+                    grade_version.insert("graph", colorGraphJson(version.graph));
+                    grade_versions.append(grade_version);
+                }
+                item.insert("color_grade_versions", grade_versions);
             }
             if (clip.node_graph.has_value())
                 item.insert("node_graph", nodeGraphJson(project_path, *clip.node_graph));

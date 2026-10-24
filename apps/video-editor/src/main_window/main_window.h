@@ -432,6 +432,7 @@ private:
     std::array<std::vector<QAction*>, 5> workspace_menu_actions_;
     std::optional<application::TimelineCommandService::EditBatchId> audio_gain_batch_id_;
     std::optional<application::TimelineCommandService::EditBatchId> color_grade_edit_batch_id_;
+    std::optional<color::Graph> copied_color_grade_;
     std::unique_ptr<settings::ShortcutManager> shortcut_manager_;
     application::EditorSession editor_session_;
     std::unique_ptr<playback::PlaybackController> playback_controller_;

@@ -46,7 +46,8 @@ its selected nodes' parameters and enabled state. Functions provides drag-only
 generator/Text/transition entries in Edit and creates Fusion nodes while Fusion
 is active.
 
-`ClipKind::Adjustment` owns identity, duration, its Color correction graph and transform curves,
+`ClipKind::Adjustment` owns identity, duration, its Color correction graph,
+named grade versions, and transform curves,
 without source media, audio, text, external links or Fusion graphs. It affects
 strictly lower video tracks; moving a track changes that scope. Multiple
 adjustments apply from the bottom of the stack upward. Audio tracks, any

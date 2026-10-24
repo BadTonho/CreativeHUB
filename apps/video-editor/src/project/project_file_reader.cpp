@@ -247,6 +247,36 @@ color::Graph parseColorGraph(const QJsonValue& value,
     return graph;
 }
 
+std::vector<timeline::ColorGradeVersion> parseColorGradeVersions(
+    const QJsonValue& value,
+    const std::filesystem::path& project_path,
+    int version) {
+    if (!value.isArray())
+        throwJson(ProjectErrorCode::InvalidValue, project_path,
+                  "Project JSON contains an invalid Color grade versions list.");
+    std::vector<timeline::ColorGradeVersion> result;
+    for (const auto& version_value : value.toArray()) {
+        if (!version_value.isObject())
+            throwJson(ProjectErrorCode::InvalidValue, project_path,
+                      "Project JSON contains an invalid Color grade version.");
+        const auto object = version_value.toObject();
+        if (!object.value("id").isString() || !object.value("name").isString() ||
+            !object.value("graph").isObject())
+            throwJson(ProjectErrorCode::MissingField, project_path,
+                      "A Color grade version is missing its identity, name, or graph.");
+        const auto id = object.value("id").toString().toUtf8();
+        const auto name = object.value("name").toString().toUtf8();
+        result.push_back({
+            std::string(id.constData(), static_cast<std::size_t>(id.size())),
+            std::string(name.constData(), static_cast<std::size_t>(name.size())),
+            parseColorGraph(object.value("graph"), project_path, version)});
+    }
+    if (!timeline::validColorGradeVersions(result))
+        throwJson(ProjectErrorCode::InvalidValue, project_path,
+                  "Project JSON contains invalid or duplicate Color grade versions.");
+    return result;
+}
+
 
 
 media::MediaKind parseMediaKind(
@@ -1303,10 +1333,21 @@ ProjectDocument detail::load(const std::filesystem::path& project_path) {
                     } else {
                         clip.color_graph = color::fromEffectStack(clip.effects);
                     }
+                    if (version >= color_grade_versions_format_version) {
+                        if (!clip_object.contains("color_grade_versions"))
+                            throwJson(ProjectErrorCode::MissingField, project_path,
+                                      "A version 37 visual clip is missing its Color grade versions.");
+                        clip.color_grade_versions = parseColorGradeVersions(
+                            clip_object.value("color_grade_versions"), project_path, version);
+                    }
                 } else if (version >= color_graph_format_version &&
                            clip_object.contains("color_graph")) {
                     throwJson(ProjectErrorCode::InvalidValue, project_path,
                               "A Color correction graph is not valid on this clip kind.");
+                } else if (version >= color_grade_versions_format_version &&
+                           clip_object.contains("color_grade_versions")) {
+                    throwJson(ProjectErrorCode::InvalidValue, project_path,
+                              "Color grade versions are not valid on this clip kind.");
                 }
                 if (version >= node_graph_format_version &&
                     clip_object.contains("node_graph")) {

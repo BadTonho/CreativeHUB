@@ -26,6 +26,14 @@ project-owned list; selecting a still does not replace the Viewer. GPU
 readback and reduced-quality full-canvas capture run through the playback
 worker. Missing sidecar PNGs display as unavailable items.
 
+Grade Versions is a separate panel for the selected clip. Save Version stores
+the current graph snapshot; Apply Version, Rename Version, and Remove Version
+operate on the selected snapshot. The clip-strip context menu offers Copy Grade
+and Apply Grade. The in-memory Color clipboard holds only the current graph and
+is cleared when a project is opened or created. Applying a graph or managing a
+saved version is one shared Timeline Undo/Redo action. Graph application does
+not copy the source clip's saved versions.
+
 ## Workspace Effects catalog
 
 Effects Toolbox, list and Favorites follow the active workspace. Fusion-only nodes appear under Fusion and Fusion > Masks; Background stays under Video > Generators and Text under Text. Fusion node creation remains owned by Fusion. Color corrections are created and connected in the Color canvas; the Edit catalog does not create correction nodes. Grid remains in the Fusion Node Editor toolbar. See [the catalog contract](EFFECTS.md#workspace-catalog).
@@ -852,7 +860,7 @@ playback clock unchanged. Timeline playback is coordinated by the active
 composition and does not require a Media Browser item to remain selected;
 text-only compositions can also advance through their valid frame range.
 Confirmed text/style edits are Timeline Undo/Redo entries and are persisted by
-the current `.csp` version 36 format. Linked video-audio clips can be
+the current `.csp` version 37 format. Linked video-audio clips can be
 unlinked from the Timeline clip context menu; after unlinking, audio remains
 externalized on its Audio track. Right-clicking a video or image clip offers
 **Open in Fusion** and opens the selected clip's node graph. A video with linked
@@ -883,7 +891,12 @@ temporary multi-selection. Each category reports how many selected clips are
 compatible. A category starts checked when at least one target supports it;
 applying it skips incompatible targets. Categories cover Color corrections,
 transform and animation, audio gain and mute, audio volume envelope,
-and text content/style. For linked video/audio clips, audio attributes are read
+and text content/style. Color's dedicated Copy Grade and Apply Grade actions
+copy only the current correction graph between clips. Per-clip Grade Versions
+store named graph snapshots and are separate from Gallery stills and Edit's
+attribute clipboard. Saved versions persist in CSP v37; versions through v36
+load with an empty list. Splitting or duplicating an Adjustment clip copies
+the versions along with its current graph. For linked video/audio clips, audio attributes are read
 from and applied to the audio companion while the reciprocal link is preserved.
 Keyframes keep their local frame offsets; when a destination is shorter, the
 curve is clipped at its end while preserving the evaluated endpoint, and longer

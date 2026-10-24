@@ -43,6 +43,7 @@ project::ProjectDocument document() {
     static_cast<void>(color::addParallelBranch(graph, nodes.front(), branch));
     adjustment.color_graph = graph;
     adjustment.effects = color::effectInstancesInOrder(graph);
+    adjustment.color_grade_versions.push_back({"recovery-version", "Recovery", graph});
     result.timeline_tracks.back().clips.push_back(std::move(adjustment));
     result.color_gallery_stills.push_back({"recovery-still", "Still 1", 1, 12,
         "recovery-still.png",
@@ -82,6 +83,10 @@ int main(int argc, char* argv[]) {
         require(project::load(snapshots.front().path).timeline_tracks.front().clips.front()
                     .color_graph == original.timeline_tracks.front().clips.front().color_graph,
                 "An autosave recovery snapshot did not retain Color graph topology.");
+        require(project::load(snapshots.front().path).timeline_tracks.front().clips.front()
+                    .color_grade_versions ==
+                        original.timeline_tracks.front().clips.front().color_grade_versions,
+                "An autosave recovery snapshot did not retain named Color grade versions.");
         auto snapshot_gallery = snapshots.front().path;
         snapshot_gallery += ".gallery";
         require(std::filesystem::exists(snapshot_gallery / "recovery-still.png"),

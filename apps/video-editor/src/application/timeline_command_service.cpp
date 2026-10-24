@@ -1178,6 +1178,7 @@ TimelineEditResult TimelineCommandService::execute(const DuplicateAdjustmentClip
     auto& duplicate = snapshot.tracks[copied->track_index].clips[copied->clip_index];
     duplicate.color_graph = timeline::colorGraphForClip(original);
     duplicate.effects = color::effectInstancesInOrder(*duplicate.color_graph);
+    duplicate.color_grade_versions = original.color_grade_versions;
     duplicate.transform = original.transform;
     duplicate.keyframes = original.keyframes;
     staged_timeline.restore(std::move(snapshot));
@@ -1294,6 +1295,7 @@ TimelineEditResult TimelineCommandService::execute(const DuplicateFusionComposit
     duplicate.effects = color::effectInstancesInOrder(*duplicate.color_graph);
     duplicate.transform = original.transform;
     duplicate.keyframes = original.keyframes;
+    duplicate.color_grade_versions = original.color_grade_versions;
     duplicate.node_graph = original.node_graph;
     duplicate.composition_input_offset_frames = original.composition_input_offset_frames;
     staged_timeline.restore(std::move(snapshot));
@@ -1597,6 +1599,27 @@ TimelineEditResult TimelineCommandService::execute(
         session_.timeline_.tracks()[location->track_index].track_id};
     output.affected_clip_ids = {command.clip_id};
     output.invalidate_playback = true;
+    return output;
+}
+
+TimelineEditResult TimelineCommandService::execute(
+    const SetClipColorGradeVersionsCommand& command) {
+    const auto location = session_.timeline_.locateClip(command.clip_id);
+    if (!location) return result(EditStatus::Rejected, EditReason::InvalidTarget);
+    const auto before = session_.captureEditState();
+    const auto mutation = session_.timeline_.setClipColorGradeVersions(
+        location->track_index, location->clip_index, command.versions);
+    if (mutation == timeline::ColorGradeVersionsMutationResult::NoChange)
+        return result(EditStatus::NoChange);
+    if (mutation != timeline::ColorGradeVersionsMutationResult::Changed)
+        return result(EditStatus::Rejected,
+            mutation == timeline::ColorGradeVersionsMutationResult::InvalidValue
+                ? EditReason::InvalidValue : EditReason::InvalidTarget);
+    recordSuccessfulEdit(before);
+    auto output = result(EditStatus::Applied);
+    output.affected_track_ids = {
+        session_.timeline_.tracks()[location->track_index].track_id};
+    output.affected_clip_ids = {command.clip_id};
     return output;
 }
 

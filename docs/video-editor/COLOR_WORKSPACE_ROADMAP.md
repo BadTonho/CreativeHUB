@@ -1,6 +1,6 @@
 # Color Workspace Roadmap
 
-Status: **The project-owned Color graph, Gallery capture and organization, Wheels/Bars/Log Primary Grade, RGB Waveform/RGB Parade/Vectorscope/RGB Histogram scopes, and shared Edit controls are implemented. CSP v36 persists independent Log controls. Graph action controls remain hidden. Native visual interaction and platform acceptance remain pending.**
+Status: **The project-owned Color graph, Gallery capture and organization, Wheels/Bars/Log Primary Grade, four scopes, shared Edit controls, reusable grades, and per-clip grade versions are implemented. CSP v37 persists named graph snapshots. Graph action controls remain hidden. Native visual interaction and platform acceptance remain pending.**
 
 This document records the current implementation, the functional areas expected
 from a complete color workspace, and a staged order for developing them. The
@@ -36,8 +36,14 @@ Vectorscope, RGB Histogram, and project Gallery. Still capture records the compo
 corrections at canvas resolution, with clip and timeline-frame provenance.
 Stills are named, renamed, and removed in capture order; their PNGs remain in
 the <project>.csp.gallery/ sidecar. Gallery selection does not change the
-Viewer or Timeline. Albums, tags, saved grades, and comparison views are not
-included.
+Viewer or Timeline. The separate Grade Versions panel saves, applies, renames,
+and removes named graph snapshots for the active clip. The clip context menu
+copies the current graph and applies it to another clip; this clipboard is
+temporary and clears when a project is opened or created. Applying a grade does
+not transfer the source clip's saved versions. Clip splits and Duplicate
+Adjustment copy their saved versions. All grade and version actions share
+Timeline Undo/Redo. Albums, tags, still-based references, and comparison views
+are not included.
 
 The currently available built-in effect set is Grayscale, Brightness,
 Contrast, Saturation, and Primary Grade. Primary Grade provides Wheels and Bars
@@ -119,9 +125,8 @@ design.
 - Support serial and parallel processing, shared upstream work, and weighted
   branch mixing. Consider layer mixing, channel split/combine, and explicit
   matte/alpha routing when a concrete workflow requires them.
-- Support reusable grades, copying and applying grades between clips, and
-  saved grade versions. Use Gallery stills as references without changing the
-  active Viewer or timeline selection.
+- Use Gallery stills as references without changing the active Viewer or
+  timeline selection.
 - Consider clip groups and group-level corrections, with clear ordering
   relative to per-clip corrections. Persist versions and group relationships
   in the project format.
@@ -173,9 +178,12 @@ canvas positions. CSP versions 1 through 34 migrate their existing ordered
 effect stacks into serial graphs; clips without effects receive Input → Output.
 The v35 Primary Grade schema stores per-channel Lift, Gamma, Gain and Offset,
 plus contrast, pivot, saturation, temperature and tint. v36 adds nine
-per-channel Log values, neutral in projects through v35. A legacy six-parameter
-Primary Grade maps its brightness value to equal RGB Offsets and preserves its
-other values.
+per-channel Log values, neutral in projects through v35. v37 stores each clip's
+named Color graph snapshots, including nodes, effects, state, connections,
+mixer weights and positions. Projects through v36 open with no grade versions.
+A legacy six-parameter Primary Grade maps its brightness value to equal RGB
+Offsets and preserves its other values. Save As, autosave, recovery and Hub
+backup preserve versions in the project JSON; the Gallery sidecar is unchanged.
 Gallery metadata remains the v33 color_gallery array and its lossless PNGs
 remain in the project sidecar. Save As, autosave, recovery, and Hub backup keep
 the graph and Gallery sidecar together. A missing still image remains an
@@ -194,9 +202,11 @@ and restoration. Keep large image assets outside the main CSP document.
    Vectorscope, and RGB Histogram use normalized RGB and Rec. 709-derived
    scopes; calibrated IRE, HDR, and display-managed modes await a color
    management contract.
-3. **Improve reference and grade reuse.** Add copy/apply and saved versions,
-   then Gallery reference display and practical wipe/split-screen comparisons.
-   Add group corrections only with a clear grade ordering model.
+3. **Improve reference and grade reuse (partially implemented).** Copy/apply
+   and named per-clip graph versions are implemented with shared history and
+   project persistence. Gallery reference display and wipe/split-screen
+   comparisons remain future work. Add group corrections only with a clear
+   grade ordering model.
 4. **Add secondary grading.** Implement curves and targeted selection, then
    qualifiers, matte refinement, windows, tracking, and their keyframes.
 5. **Establish color management and source support.** Define project and
@@ -215,8 +225,9 @@ include regression coverage for its observable behavior and persistence.
 Regression code covers graph validation and cycles, connection changes,
 normalized mixing, CPU/OpenGL/Vulkan evaluation, Color canvas, Wheels/Bars
 synchronization, Log tonal response, Edit parameter and enabled-state editing,
-shared Undo/Redo, Preview and offline export, CSP v36 persistence and v1-v35
-migration, autosave and recovery, all four scopes and GPU readback, and Hub
-backup/restoration with Gallery PNG sidecars. Native visual and platform
+copy/apply between clips, saved-version actions and shared Undo/Redo, split and
+duplicate propagation, Preview and offline export, CSP v37 persistence and
+v1-v36 migration, autosave and recovery, all four scopes and GPU readback, and
+Hub backup/restoration with Gallery PNG sidecars. Native visual and platform
 acceptance remain pending.
 

@@ -234,6 +234,12 @@ void validateDocument(const ProjectDocument& document,
             throwJson(ProjectErrorCode::InvalidValue, project_path,
                       "Project JSON contains an invalid Color correction graph for this clip.");
         }
+        if (!timeline::validColorGradeVersions(clip.color_grade_versions) ||
+            (!clip.color_grade_versions.empty() &&
+             !timeline::supportsClipEffects(clip.kind))) {
+            throwJson(ProjectErrorCode::InvalidValue, project_path,
+                      "Project JSON contains invalid Color grade versions for this clip.");
+        }
         if (clip.node_graph.has_value() &&
             (!timeline::supportsNodeGraph(clip.kind) ||
              !fusion::nodes::validate(*clip.node_graph) ||

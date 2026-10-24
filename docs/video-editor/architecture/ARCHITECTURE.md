@@ -1,6 +1,6 @@
 # Application Architecture
 
-[Composition interchange](../../COMPOSITION_INTERCHANGE.md) uses a shared format/presentation library with application-owned converters and worker-backed UI commands. Native CSP schema is v36: v33 added Color Gallery metadata and PNG sidecars, v34 stores the Color correction graph, v35 expanded Primary Grade, and v36 adds independent Log controls. Primary Grade was introduced in v32 and Gaussian Blur in v31. Blur transfers through cscomp v3.
+[Composition interchange](../../COMPOSITION_INTERCHANGE.md) uses a shared format/presentation library with application-owned converters and worker-backed UI commands. Native CSP schema is v37: v33 added Color Gallery metadata and PNG sidecars, v34 stores the Color correction graph, v35 expanded Primary Grade, v36 adds independent Log controls, and v37 stores named per-clip Color graph snapshots. Primary Grade was introduced in v32 and Gaussian Blur in v31. Blur transfers through cscomp v3.
 
 Color owns a graph model and evaluator separate from Fusion. The render order
 is Fusion graph evaluation, Color graph evaluation, then clip transform and
@@ -61,13 +61,16 @@ under `docs/video-editor/architecture/` so each document can remain focused and 
 
 The Color workspace owns a per-clip correction graph with Input, effect,
 Parallel Mixer and Output nodes. Its connections define processing, and the
-graph is saved in CSP v36. Serial graphs use the existing GPU effect pipeline
+graph and its named per-clip versions are saved in CSP v37. Serial graphs use the existing GPU effect pipeline
 when available; branched graphs use Color's CPU RGBA evaluator after Fusion.
 Edit Inspector edits the same effect nodes' parameters and enabled state, while
 Color owns topology and layout. Primary Grade offers Wheels and Bars views over
 shared Lift/Gamma/Gain/Offset values plus independent Log tonal controls. The
 page includes Waveform, Parade, Vectorscope, and RGB Histogram scopes. Both
-workspaces use shared Timeline history.
+workspaces use shared Timeline history. The Color clip menu copies and applies
+the current graph; its temporary clipboard clears on project replacement.
+Applying a version changes only the current graph, while splitting or
+duplicating an Adjustment clip carries the clip's version snapshots.
 Color's viewer and clip selection are shared with Edit; its panels are created
 on first entry and the prior native dock layout is restored on exit. See the
 [Color Workspace Roadmap](../COLOR_WORKSPACE_ROADMAP.md).

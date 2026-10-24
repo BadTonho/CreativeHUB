@@ -1,17 +1,26 @@
 # Regression Testing
 
-## Color correction graph, Primary Grade, scopes and CSP v36
+## Color correction graph, Primary Grade, scopes and CSP v37
 
 | Behavior | Verification |
 | --- | --- |
 | Lazy Color page, shared Viewer, clip strip, graph canvas, four scope modes and empty state, Edit dock restoration | `creative-suite-main-editor-color-workspace-integration`, `creative-suite-main-editor-color-workspace`, `creative-suite-main-editor-workspace-page-switch` |
 | Graph connection validity, cycle rejection, branch weights/mixing, layout, node add/remove and effect state/parameter edits | `creative-suite-main-editor-color-graph`, `creative-suite-main-editor-color-workspace`, `creative-suite-main-editor-timeline-command-service`, `creative-suite-main-editor-color-workspace-integration` |
 | Graph edits in shared Undo/Redo, clip duplication/split and project reopen | `creative-suite-main-editor-adjustment`, `creative-suite-main-editor-project`, Edit controller, `creative-suite-main-editor-color-workspace-integration` |
+| Copy/apply complete graphs between clips; preserve target versions; save/apply/rename/remove named versions; reject empty/duplicate names; undo and redo each action | `creative-suite-main-editor-color-workspace`, `creative-suite-main-editor-timeline-command-service`, `creative-suite-main-editor-project` |
+| Split and duplicate propagate a clip's named versions; copied grade application transfers graph data without source versions | `creative-suite-main-editor-timeline-command-service`, `creative-suite-main-editor-adjustment` |
 | Primary Grade neutral output, parameter limits, Log tonal response, alpha, and shared CPU/OpenGL/Vulkan math | `creative-suite-effects-primary-grade`, `creative-suite-composition-opengl-color`, `creative-suite-composition-vulkan-color`, `creative-suite-main-editor-color-graph`, `creative-suite-main-editor-gpu-color` and `creative-suite-main-editor-vulkan-color` CPU/GPU PlaybackWorker Preview, adjustment composition and lossless export, plus the broader composition and GPU Timeline suites |
 | Wheels/Bars parameter synchronization, Log controls, one shared history batch per drag, and Color/Edit values | `creative-suite-main-editor-color-workspace`, `creative-suite-main-editor-color-workspace-integration`, `creative-suite-main-editor-timeline-command-service` |
 | Scope GPU readback status, FIFO order, bounded staging and collection errors; stale GPU frames are rejected by request identity | `creative-suite-composition-opengl-color`, `creative-suite-composition-vulkan-color`, `creative-suite-main-editor-color-workspace-integration` |
 | CPU/GPU full-canvas still capture, stale revision/no-frame handling, source clip/frame provenance, Gallery rename/remove | `creative-suite-main-editor-playback-worker-errors`, `creative-suite-main-editor-color-workspace`, MainWindow integration |
-| CSP v36 save/reopen, v35 neutral Log migration, v34 and v33 legacy Primary Grade migration, earlier versions, v37 rejection, autosave/recovery and Hub backup/restoration with Gallery sidecars | `creative-suite-main-editor-project`, `creative-suite-main-editor-autosave`, `hub-backup-format-test`, `hub-backup-manager-test` |
+| CSP v37 save/reopen, v36 empty-version migration, v35 neutral Log migration, earlier versions, v38 rejection, autosave/recovery and Hub backup/restoration with Gallery sidecars | `creative-suite-main-editor-project`, `creative-suite-main-editor-autosave`, `hub-backup-format-test`, `hub-backup-manager-test` |
+
+On 2026-10-23, six focused Windows Release checks passed: Color workspace
+integration, Color workspace actions, project persistence, autosave/recovery,
+timeline command history and translation catalog. The separate Hub backup
+format check passed. The backup manager test could not complete because the
+environment denied writing its settings fixture under %LOCALAPPDATA%/qttest.
+No manual visual check was performed.
 
 The automated checks cover the model, pixel paths, persistence and backup
 contracts. Manual Release check: open a project with a visible frame and create a
@@ -27,9 +36,15 @@ Switch among RGB Waveform, RGB Parade, Vectorscope, and RGB Histogram; inspect
 the 0–100% grid and separate R/G/B regions where applicable while scrubbing, and
 confirm the scopes track the current corrected frame without the Preview border
 or letterbox. Select a gap or a clip without a decoded frame and confirm the
-empty state. Save/reopen and restore a Hub backup with Gallery stills. This
-manual visual check is documented and remains pending; it is not run as part of
-the current implementation pass.
+empty state. Open a project with two visual clips, use the Color clip context
+menu to Copy Grade on one clip and Apply Grade on the other, then confirm one
+Undo restores the target's prior graph and Redo reapplies the copied graph.
+On the Grade Versions panel, save the current graph, rename the snapshot, apply
+it after changing the current graph, and remove it; confirm each operation is
+one shared Undo/Redo step. Save/reopen and restore a Hub backup with Gallery
+stills and a named grade version. Confirm a v36 project opens with no saved
+versions. This manual visual check is documented and remains pending; it is not
+run as part of the current implementation pass.
 
 Windows Release verification on 2026-10-23: the focused Primary Grade CPU,
 OpenGL and Vulkan tests, Color UI and dedicated MainWindow Color integration,
@@ -155,7 +170,7 @@ interop acceptance remain pending. This prototype does not expose a UI control.
 | Effects/Favorites/Functions availability, search/Add/Enter/MIME, selection and typed cable insertion/refusal | `creative-suite-main-editor-effects-panel`, `creative-suite-main-editor-shortcut-manager`, `creative-suite-main-editor-fusion-workspace`, `creative-suite-blur-interchange` |
 | Ordered Color/Blur stages, masks, text/media profiles, source windows, GPU/CPU recovery, history, duplication, cuts/trims/FPS, v1–v3/v31/v8 and recovery | `creative-suite-blur-interchange`, `creative-suite-composition-interchange`, `creative-suite-mask-interchange` |
 | Complete Preview/export frames before encoding, existing graphs and direct/GPU export | `creative-suite-main-editor-fusion-composition`, `creative-suite-main-editor-gpu-timeline`, `creative-suite-main-editor-render-export`, `creative-suite-main-editor-gpu-export` |
-| Real-reader CSP v36 backup/restoration with Color graph, expanded Primary Grade and Log values, Gallery sidecar, Blur and external Inputs; future37/9 | `hub-backup-format-test`, `hub-backup-manager-test` |
+| Real-reader CSP v37 backup/restoration with Color graph, named grade versions, expanded Primary Grade and Log values, Gallery sidecar, Blur and external Inputs; future38/9 | `hub-backup-format-test`, `hub-backup-manager-test` |
 
 See [Gaussian Blur](../features/GAUSSIAN_BLUR.md) for reproducible pending manual
 checks. Windows automation does not establish macOS/Linux or driver acceptance.
@@ -299,7 +314,7 @@ pending separately from automated offscreen checks.
 | Edit/Fusion RGBA synchronization, multiple-node selection, node removal, ordinary video/image graphs, canceled dialogs and real video/audio/collision drops | `creative-suite-main-editor-background-generator` |
 | Dirty state, color Undo to saved baseline and cancellation in the real application | `creative-suite-main-editor-main-window` |
 | Pre-encoding Preview/export parity for the white preset and colored/transparent backgrounds over lower tracks | `creative-suite-main-editor-fusion-composition` |
-| Named compositions, graph masks/generators/inputs and signed offsets across backup/restoration; future v37 rejection | `hub-backup-format-test`, `hub-backup-manager-test` |
+| Named compositions, graph masks/generators/inputs and signed offsets across backup/restoration; future v38 rejection | `hub-backup-format-test`, `hub-backup-manager-test` |
 
 The generator drag test sends actual Qt drag/drop events directly, without
 showing the standalone TimelineWidget. In this Windows/offscreen fixture,
@@ -384,7 +399,7 @@ Background/Text/Merge parity through the native graph backend and requires that
 GPU work actually occurred. The main-window test checks insertion/effects dirty
 state, save and undo to the saved baseline. `hub-backup-format-test` preserves
 generator data, graph input paths and signed offsets through relocated restore;
-`hub-backup-manager-test` rejects future v37. Existing graph, timeline, playback,
+`hub-backup-manager-test` rejects future v38. Existing graph, timeline, playback,
 project, autosave, Inspector, adjustment and export gates remain relevant.
 
 CSP v27 also round-trips optional cubic Bezier easing for clip/node curves;

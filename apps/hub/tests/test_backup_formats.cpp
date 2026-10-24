@@ -423,14 +423,16 @@ void testVideoDocuments(const QString& root) {
     color_document.timeline_tracks.front().clips.front().color_graph = color_graph;
     color_document.timeline_tracks.front().clips.front().effects =
         color::effectInstancesInOrder(color_graph);
+    color_document.timeline_tracks.front().clips.front().color_grade_versions.push_back({
+        "hub-grade-version-1", "Version 1", color_graph});
     color_document.color_gallery_stills.push_back({"hub-still", "Still 1",
         color_document.timeline_tracks.front().clips.front().clip_id, 10,
         "hub-still.png",
         std::make_shared<const std::vector<std::uint8_t>>(
             std::vector<std::uint8_t>{137, 80, 78, 71, 13, 10, 26, 10}), false});
-    const auto color_path = QDir(QFileInfo(assets).absolutePath()).filePath("color-v36.csp");
+    const auto color_path = QDir(QFileInfo(assets).absolutePath()).filePath("color-v37.csp");
     project::save(fsPath(color_path), color_document);
-    const auto color_snapshot = backup(QDir(root).filePath("video-color-v36"), color_path);
+    const auto color_snapshot = backup(QDir(root).filePath("video-color-v37"), color_path);
     CS_TEST_CHECK(project::load(fsPath(color_snapshot.vault)) == color_document);
     CS_TEST_CHECK(project::load(fsPath(color_snapshot.restored)) == color_document);
     CS_TEST_CHECK(QFileInfo::exists(color_snapshot.vault + QStringLiteral(".gallery/hub-still.png")));
@@ -438,7 +440,7 @@ void testVideoDocuments(const QString& root) {
     auto future_video = QJsonDocument::fromJson(readBytes(color_path)).object();
     future_video.insert("version", project::current_format_version + 1);
     const auto future_video_path = QDir(QFileInfo(assets).absolutePath())
-        .filePath("video-future-v37.csp");
+        .filePath("video-future-v38.csp");
     writeBytes(future_video_path, QJsonDocument(future_video).toJson());
     creative_suite::hub::BackupManager future_video_manager(
         QDir(root).filePath("video-future-vault"));

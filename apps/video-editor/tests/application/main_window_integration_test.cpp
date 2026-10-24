@@ -353,6 +353,74 @@ public:
                 window.timeline_model_.tracks()[location->track_index]
                     .clips[location->clip_index].effects.front(), "red_gain") == 130,
                 "Edit Inspector must write the same grade used by Color.");
+
+        controller->handleTimelineEffectDrop("video.background", track_id, 180);
+        window.updateTimelineState();
+        window.refreshColorSelection();
+        const auto target_clip_id = window.timeline_model_.tracks().front().clips.back().clip_id;
+        require(target_clip_id != clip_id,
+                "Color grade copy coverage needs a second visual clip.");
+        location = window.timeline_model_.locateClip(clip_id);
+        require(location.has_value(), "The source clip disappeared before grade copy.");
+        const auto source_graph = timeline::colorGraphForClip(
+            window.timeline_model_.tracks()[location->track_index].clips[location->clip_index]);
+        const auto versions_result = window.timeline_command_service_.execute(
+            application::SetClipColorGradeVersionsCommand{clip_id,
+                {{"integration-version", "Source Snapshot", source_graph}}});
+        require(versions_result.changed(),
+                "The source clip could not receive a saved Color grade version.");
+        window.updateTimelineState();
+        clips = window.color_workspace_->findChild<QListWidget*>("colorClipStrip");
+        require(clips && clips->count() == 2,
+                "Color must list both clips for grade copy.");
+        const auto invoke_clip_menu_action = [clips](int row, int action_index) {
+            auto* item = clips->item(row);
+            require(item != nullptr, "Color clip context-menu target is missing.");
+            const auto position = clips->visualItemRect(item).center();
+            QTimer::singleShot(0, [action_index] {
+                for (auto* widget : QApplication::topLevelWidgets()) {
+                    if (auto* menu = qobject_cast<QMenu*>(widget);
+                        menu != nullptr && menu->isVisible()) {
+                        if (menu->actions().size() > action_index)
+                            menu->actions()[action_index]->trigger();
+                        menu->close();
+                        return;
+                    }
+                }
+            });
+            require(QMetaObject::invokeMethod(clips, "customContextMenuRequested",
+                        Qt::DirectConnection, Q_ARG(QPoint, position)),
+                    "Color clip context menu did not open.");
+        };
+        invoke_clip_menu_action(0, 0);
+        require(window.copied_color_grade_.has_value() &&
+                    *window.copied_color_grade_ == source_graph,
+                "Copy Grade must retain the complete source graph.");
+        invoke_clip_menu_action(1, 1);
+        auto target_location = window.timeline_model_.locateClip(target_clip_id);
+        require(target_location &&
+                    timeline::colorGraphForClip(window.timeline_model_.tracks()
+                        [target_location->track_index].clips[target_location->clip_index]) ==
+                        source_graph &&
+                    window.timeline_model_.tracks()[target_location->track_index]
+                        .clips[target_location->clip_index].color_grade_versions.empty() &&
+                    controller->undo().changed(),
+                "Apply Grade must copy only the graph and create one shared history edit.");
+        target_location = window.timeline_model_.locateClip(target_clip_id);
+        require(target_location &&
+                    !window.timeline_model_.tracks()[target_location->track_index]
+                        .clips[target_location->clip_index].color_graph.has_value() &&
+                    controller->redo().changed(),
+                "Undo/Redo must restore and reapply a copied Color grade.");
+        target_location = window.timeline_model_.locateClip(target_clip_id);
+        require(target_location &&
+                    timeline::colorGraphForClip(window.timeline_model_.tracks()
+                        [target_location->track_index].clips[target_location->clip_index]) ==
+                        source_graph,
+                "Redo did not restore the copied Color graph.");
+        window.clearProjectState(1920, 1080, timeline::FrameRate{30, 1});
+        require(!window.copied_color_grade_.has_value(),
+                "Creating a project must clear the temporary Color grade clipboard.");
     }
 
     static void runAudioWorkspaceOnly() {

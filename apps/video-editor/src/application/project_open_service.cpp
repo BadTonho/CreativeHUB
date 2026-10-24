@@ -687,6 +687,7 @@ ProjectOpenResult ProjectOpenService::prepare(
                     adjustment.effects = project_clip.effects;
                     adjustment.color_graph = project_clip.color_graph.value_or(
                         color::fromEffectStack(project_clip.effects));
+                    adjustment.color_grade_versions = project_clip.color_grade_versions;
                     adjustment.node_graph = project_clip.node_graph;
                     adjustment.composition_input_offset_frames = project_clip.composition_input_offset_frames;
                     next_clip_id = std::max(next_clip_id, project_clip.clip_id + 1);
@@ -724,6 +725,10 @@ ProjectOpenResult ProjectOpenService::prepare(
                     text_clip.transform = project_clip.transform;
                     text_clip.keyframes = project_clip.keyframes;
                     text_clip.kind = timeline::ClipKind::Text;
+                    text_clip.effects = project_clip.effects;
+                    text_clip.color_graph = project_clip.color_graph.value_or(
+                        color::fromEffectStack(project_clip.effects));
+                    text_clip.color_grade_versions = project_clip.color_grade_versions;
                     text_clip.text = project_clip.text;
                     snapshot.tracks.back().clips.push_back(std::move(text_clip));
                     continue;
@@ -839,6 +844,7 @@ ProjectOpenResult ProjectOpenService::prepare(
                 clip.effects = project_clip.effects;
                 clip.color_graph = project_clip.color_graph.value_or(
                     color::fromEffectStack(project_clip.effects));
+                clip.color_grade_versions = project_clip.color_grade_versions;
                 clip.node_graph = project_clip.node_graph;
                 clip.clip_id = project_clip.clip_id;
                 clip.track_id = track_id;

@@ -9,6 +9,8 @@
 #include <QInputDialog>
 #include <QLabel>
 #include <QListWidget>
+#include <QMenu>
+#include <QMessageBox>
 #include <QMouseEvent>
 #include <QMetaObject>
 #include <QPushButton>
@@ -22,6 +24,7 @@
 #include <array>
 #include <cstdio>
 #include <stdexcept>
+#include <vector>
 
 namespace {
 void require(bool condition, const char* message) {
@@ -191,6 +194,101 @@ int main(int argc, char** argv) {
         auto* clip_strip = workspace.findChild<QListWidget*>("colorClipStrip");
         require(clip_strip && !clip_strip->item(0)->icon().isNull(),
                 "Color clip strip must display available media thumbnails.");
+        int copied_grade_clip = 0;
+        int applied_grade_clip = 0;
+        workspace.setCopyGradeHandler([&](timeline::ClipId id) {
+            copied_grade_clip = static_cast<int>(id);
+        });
+        workspace.setApplyGradeHandler([&](timeline::ClipId id) {
+            applied_grade_clip = static_cast<int>(id);
+        });
+        workspace.setCanApplyCopiedGrade(true);
+        QTimer::singleShot(0, [] {
+            for (auto* widget : QApplication::topLevelWidgets()) {
+                if (auto* menu = qobject_cast<QMenu*>(widget);
+                    menu != nullptr && menu->isVisible()) {
+                    if (!menu->actions().empty()) menu->actions().front()->trigger();
+                    menu->close();
+                    return;
+                }
+            }
+        });
+        require(QMetaObject::invokeMethod(clip_strip, "customContextMenuRequested",
+                    Qt::DirectConnection, Q_ARG(QPoint, QPoint(8, 8))) &&
+                copied_grade_clip == 7,
+                "The Color clip menu must expose Copy Grade for the chosen clip.");
+        QTimer::singleShot(0, [] {
+            for (auto* widget : QApplication::topLevelWidgets()) {
+                if (auto* menu = qobject_cast<QMenu*>(widget);
+                    menu != nullptr && menu->isVisible()) {
+                    if (menu->actions().size() > 1) menu->actions()[1]->trigger();
+                    menu->close();
+                    return;
+                }
+            }
+        });
+        require(QMetaObject::invokeMethod(clip_strip, "customContextMenuRequested",
+                    Qt::DirectConnection, Q_ARG(QPoint, QPoint(8, 8))) &&
+                applied_grade_clip == 7,
+                "The Color clip menu must expose Apply Grade for the chosen clip.");
+
+        const std::vector<creative_suite::effects::EffectInstance> version_effects{
+            creative_suite::effects::makeDefaultInstance("video.brightness")};
+        auto version_graph = color::fromEffectStack(version_effects);
+        std::vector<timeline::ColorGradeVersion> grade_versions{
+            {"version-1", "Original", version_graph}};
+        workspace.setGradeVersionsChangedHandler([&](timeline::ClipId id,
+            std::vector<timeline::ColorGradeVersion> updated) {
+            require(id == 7, "Grade version actions must keep their clip identity.");
+            grade_versions = std::move(updated);
+            workspace.setClips({{7, QStringLiteral("Shot A"), thumbnail, grade_versions}},
+                7, graph);
+        });
+        workspace.setClips({{7, QStringLiteral("Shot A"), thumbnail, grade_versions}},
+            7, graph);
+        auto* versions_list = workspace.findChild<QListWidget*>("colorGradeVersions");
+        auto* save_version = workspace.findChild<QPushButton*>("colorSaveGradeVersionButton");
+        auto* apply_version = workspace.findChild<QPushButton*>("colorApplyGradeVersionButton");
+        auto* rename_version = workspace.findChild<QPushButton*>("colorRenameGradeVersionButton");
+        auto* remove_version = workspace.findChild<QPushButton*>("colorRemoveGradeVersionButton");
+        require(versions_list && versions_list->count() == 1 && save_version &&
+                    apply_version && rename_version && remove_version,
+                "The independent Grade Versions panel and actions must be available.");
+        versions_list->setCurrentRow(0);
+        apply_version->click();
+        require(graph == version_graph,
+                "Applying a saved grade version must restore its complete graph snapshot.");
+        QTimer::singleShot(0, [] {
+            for (auto* widget : QApplication::topLevelWidgets()) {
+                if (auto* dialog = qobject_cast<QInputDialog*>(widget)) {
+                    dialog->setTextValue(QStringLiteral("Renamed"));
+                    dialog->accept();
+                }
+            }
+        });
+        rename_version->click();
+        require(grade_versions.size() == 1 && grade_versions.front().id == "version-1" &&
+                    grade_versions.front().name == "Renamed",
+                "Renaming a saved grade must preserve its stable identity.");
+        QTimer::singleShot(0, [] {
+            for (auto* widget : QApplication::topLevelWidgets()) {
+                if (auto* dialog = qobject_cast<QInputDialog*>(widget)) {
+                    dialog->setTextValue(QStringLiteral("Second"));
+                    dialog->accept();
+                }
+            }
+        });
+        save_version->click();
+        require(grade_versions.size() == 2 && grade_versions.back().name == "Second" &&
+                    grade_versions.back().graph == graph,
+                "Saving a grade version must store a graph snapshot under its chosen name.");
+        versions_list->setCurrentRow(0);
+        remove_version->click();
+        require(grade_versions.size() == 1 && grade_versions.front().name == "Second",
+                "Removing a grade version must target only the selected snapshot.");
+        versions_list->setCurrentRow(0);
+        remove_version->click();
+        require(grade_versions.empty(), "All saved grade versions must be removable.");
         workspace.setGalleryStills({{"still-a", QStringLiteral("Still 1"),
             QStringLiteral("Shot A"), 42, thumbnail, true}});
         int capture_requests = 0;

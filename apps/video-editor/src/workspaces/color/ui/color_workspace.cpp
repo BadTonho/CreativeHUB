@@ -15,6 +15,7 @@
 #include <QLabel>
 #include <QListWidget>
 #include <QMetaObject>
+#include <QMenu>
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPainterPath>
@@ -23,12 +24,14 @@
 #include <QPushButton>
 #include <QInputDialog>
 #include <QLineEdit>
+#include <QMessageBox>
 #include <QScrollArea>
 #include <QSignalBlocker>
 #include <QSlider>
 #include <QThreadPool>
 #include <QTimer>
 #include <QVBoxLayout>
+#include <QUuid>
 
 #include <algorithm>
 #include <array>
@@ -694,7 +697,60 @@ ColorWorkspace::ColorWorkspace(QWidget* parent) : QWidget(parent) {
     stills_->setIconSize(QSize(112, 63));
     stills_->setFixedHeight(106);
     gallery_layout->addWidget(stills_);
-    root->addWidget(gallery_panel);
+    auto* gallery_versions_row = new QHBoxLayout;
+    gallery_versions_row->addWidget(gallery_panel, 3);
+    grade_versions_panel_ = new QWidget(this);
+    grade_versions_panel_->setObjectName("colorGradeVersionsPanel");
+    auto* grade_versions_layout = new QVBoxLayout(grade_versions_panel_);
+    grade_versions_layout->setContentsMargins(0, 0, 0, 0);
+    auto* grade_versions_header = new QHBoxLayout;
+    grade_versions_header->addWidget(new QLabel(
+        QCoreApplication::translate("ColorWorkspace", "Grade Versions"),
+        grade_versions_panel_));
+    grade_versions_header->addStretch();
+    save_grade_version_button_ = new QPushButton(
+        QCoreApplication::translate("ColorWorkspace", "Save Version"),
+        grade_versions_panel_);
+    save_grade_version_button_->setObjectName("colorSaveGradeVersionButton");
+    grade_versions_header->addWidget(save_grade_version_button_);
+    grade_versions_layout->addLayout(grade_versions_header);
+    grade_versions_ = new QListWidget(grade_versions_panel_);
+    grade_versions_->setObjectName("colorGradeVersions");
+    grade_versions_->setFixedHeight(74);
+    grade_versions_layout->addWidget(grade_versions_);
+    auto* grade_version_actions = new QHBoxLayout;
+    apply_grade_version_button_ = new QPushButton(
+        QCoreApplication::translate("ColorWorkspace", "Apply Version"),
+        grade_versions_panel_);
+    apply_grade_version_button_->setObjectName("colorApplyGradeVersionButton");
+    rename_grade_version_button_ = new QPushButton(
+        QCoreApplication::translate("ColorWorkspace", "Rename Version"),
+        grade_versions_panel_);
+    rename_grade_version_button_->setObjectName("colorRenameGradeVersionButton");
+    remove_grade_version_button_ = new QPushButton(
+        QCoreApplication::translate("ColorWorkspace", "Remove Version"),
+        grade_versions_panel_);
+    remove_grade_version_button_->setObjectName("colorRemoveGradeVersionButton");
+    grade_version_actions->addWidget(apply_grade_version_button_);
+    grade_version_actions->addWidget(rename_grade_version_button_);
+    grade_version_actions->addWidget(remove_grade_version_button_);
+    grade_versions_layout->addLayout(grade_version_actions);
+    gallery_versions_row->addWidget(grade_versions_panel_, 2);
+    root->addLayout(gallery_versions_row);
+    connect(save_grade_version_button_, &QPushButton::clicked,
+        this, [this] { saveGradeVersion(); });
+    connect(apply_grade_version_button_, &QPushButton::clicked,
+        this, [this] { applySelectedGradeVersion(); });
+    connect(rename_grade_version_button_, &QPushButton::clicked,
+        this, [this] { renameSelectedGradeVersion(); });
+    connect(remove_grade_version_button_, &QPushButton::clicked,
+        this, [this] { removeSelectedGradeVersion(); });
+    connect(grade_versions_, &QListWidget::currentRowChanged, this, [this](int row) {
+        const bool selected = row >= 0;
+        apply_grade_version_button_->setEnabled(selected);
+        rename_grade_version_button_->setEnabled(selected);
+        remove_grade_version_button_->setEnabled(selected);
+    });
     connect(capture_still_button_, &QPushButton::clicked, this, [this] {
         if (capture_still_handler_) capture_still_handler_();
     });
@@ -755,6 +811,28 @@ ColorWorkspace::ColorWorkspace(QWidget* parent) : QWidget(parent) {
         if (row < 0 || !clip_selected_handler_) return;
         clip_selected_handler_(clips_->item(row)->data(Qt::UserRole).toULongLong());
     });
+    clips_->setContextMenuPolicy(Qt::CustomContextMenu);
+    connect(clips_, &QListWidget::customContextMenuRequested, this,
+        [this](const QPoint& position) {
+            auto* item = clips_->itemAt(position);
+            if (item == nullptr) return;
+            const auto clip_id = item->data(Qt::UserRole).toULongLong();
+            if (clips_->currentItem() != item && clip_selected_handler_)
+                clip_selected_handler_(clip_id);
+            QMenu menu(clips_);
+            auto* copy_grade = menu.addAction(
+                QCoreApplication::translate("ColorWorkspace", "Copy Grade"));
+            auto* apply_grade = menu.addAction(
+                QCoreApplication::translate("ColorWorkspace", "Apply Grade"));
+            apply_grade->setEnabled(can_apply_copied_grade_);
+            connect(copy_grade, &QAction::triggered, this, [this, clip_id] {
+                if (copy_grade_handler_) copy_grade_handler_(clip_id);
+            });
+            connect(apply_grade, &QAction::triggered, this, [this, clip_id] {
+                if (apply_grade_handler_) apply_grade_handler_(clip_id);
+            });
+            menu.exec(clips_->viewport()->mapToGlobal(position));
+        });
     connect(primary_grade_mode_, qOverload<int>(&QComboBox::currentIndexChanged),
         this, [this] { refreshControls(); });
     nodes_->setGraphChangedHandler([this](color::Graph graph) {
@@ -851,8 +929,11 @@ void ColorWorkspace::setActive(bool active) {
 void ColorWorkspace::setClips(std::vector<ClipItem> clips, timeline::ClipId selected,
     color::Graph graph) {
     const auto old_selected = selected_node_;
+    const auto old_version_id = selected_clip_ == selected && grade_versions_->currentItem()
+        ? grade_versions_->currentItem()->data(Qt::UserRole).toString() : QString{};
     selected_clip_ = selected;
     graph_ = color::validate(graph) ? std::move(graph) : color::makePassthroughGraph();
+    selected_grade_versions_.clear();
     {
         const QSignalBlocker blocker(clips_);
         clips_->clear();
@@ -862,10 +943,33 @@ void ColorWorkspace::setClips(std::vector<ClipItem> clips, timeline::ClipId sele
             if (!clip.thumbnail.isNull()) item->setIcon(QIcon(QPixmap::fromImage(clip.thumbnail)));
             item->setSizeHint(QSize(128, 96));
             item->setData(Qt::UserRole, QVariant::fromValue<qulonglong>(clip.id));
-            if (clip.id == selected) selected_row = clips_->count() - 1;
+            if (clip.id == selected) {
+                selected_row = clips_->count() - 1;
+                selected_grade_versions_ = clip.grade_versions;
+            }
         }
         clips_->setCurrentRow(selected_row);
     }
+    {
+        const QSignalBlocker blocker(grade_versions_);
+        grade_versions_->clear();
+        int selected_row = -1;
+        for (const auto& version : selected_grade_versions_) {
+            auto* item = new QListWidgetItem(
+                QString::fromUtf8(version.name.data(),
+                    static_cast<qsizetype>(version.name.size())), grade_versions_);
+            item->setData(Qt::UserRole, QString::fromUtf8(version.id.data(),
+                static_cast<qsizetype>(version.id.size())));
+            if (item->data(Qt::UserRole).toString() == old_version_id)
+                selected_row = grade_versions_->count() - 1;
+        }
+        if (selected_row >= 0) grade_versions_->setCurrentRow(selected_row);
+    }
+    save_grade_version_button_->setEnabled(selected_clip_ != 0 && color::validate(graph_));
+    const bool has_version = grade_versions_->currentRow() >= 0;
+    apply_grade_version_button_->setEnabled(has_version);
+    rename_grade_version_button_->setEnabled(has_version);
+    remove_grade_version_button_->setEnabled(has_version);
     refreshNodes(old_selected);
 }
 
@@ -876,6 +980,23 @@ void ColorWorkspace::setClipSelectedHandler(std::function<void(timeline::ClipId)
 void ColorWorkspace::setEffectsChangedHandler(std::function<void(timeline::ClipId,
     color::Graph)> handler) {
     effects_changed_handler_ = std::move(handler);
+}
+
+void ColorWorkspace::setCopyGradeHandler(std::function<void(timeline::ClipId)> handler) {
+    copy_grade_handler_ = std::move(handler);
+}
+
+void ColorWorkspace::setApplyGradeHandler(std::function<void(timeline::ClipId)> handler) {
+    apply_grade_handler_ = std::move(handler);
+}
+
+void ColorWorkspace::setGradeVersionsChangedHandler(std::function<void(timeline::ClipId,
+    std::vector<timeline::ColorGradeVersion>)> handler) {
+    grade_versions_changed_handler_ = std::move(handler);
+}
+
+void ColorWorkspace::setCanApplyCopiedGrade(bool available) {
+    can_apply_copied_grade_ = available;
 }
 
 void ColorWorkspace::setGradeEditBatchHandlers(std::function<void()> started,
@@ -961,6 +1082,104 @@ void ColorWorkspace::renameSelectedStill() {
         QLineEdit::Normal, item->text(), &accepted).trimmed();
     if (accepted && !name.isEmpty())
         rename_still_handler_(item->data(Qt::UserRole).toString(), name);
+}
+
+void ColorWorkspace::saveGradeVersion() {
+    if (selected_clip_ == 0 || !grade_versions_changed_handler_ ||
+        !color::validate(graph_)) return;
+    const auto name_exists = [this](const QString& candidate) {
+        const auto utf8 = candidate.toUtf8().toStdString();
+        return std::any_of(selected_grade_versions_.begin(), selected_grade_versions_.end(),
+            [&utf8](const timeline::ColorGradeVersion& version) {
+                return version.name == utf8;
+            });
+    };
+    std::size_t next_number = 1;
+    QString default_name;
+    do {
+        default_name = QCoreApplication::translate("ColorWorkspace", "Version %1")
+            .arg(static_cast<qulonglong>(next_number++));
+    } while (name_exists(default_name));
+    bool accepted = false;
+    const auto name = QInputDialog::getText(this,
+        QCoreApplication::translate("ColorWorkspace", "Save Grade Version"),
+        QCoreApplication::translate("ColorWorkspace", "Name"),
+        QLineEdit::Normal, default_name, &accepted).trimmed();
+    if (!accepted) return;
+    if (name.isEmpty() || name_exists(name)) {
+        QMessageBox::warning(this,
+            QCoreApplication::translate("ColorWorkspace", "Invalid Grade Version Name"),
+            QCoreApplication::translate("ColorWorkspace",
+                "Version names must be non-empty and unique for this clip."));
+        return;
+    }
+    auto versions = selected_grade_versions_;
+    const auto id = QUuid::createUuid().toString(QUuid::WithoutBraces).toUtf8();
+    versions.push_back({
+        std::string(id.constData(), static_cast<std::size_t>(id.size())),
+        name.toUtf8().toStdString(), graph_});
+    grade_versions_changed_handler_(selected_clip_, std::move(versions));
+}
+
+void ColorWorkspace::applySelectedGradeVersion() {
+    const auto* item = grade_versions_->currentItem();
+    if (!item || selected_clip_ == 0 || !effects_changed_handler_) return;
+    const auto id = item->data(Qt::UserRole).toString().toUtf8().toStdString();
+    const auto version = std::find_if(selected_grade_versions_.begin(),
+        selected_grade_versions_.end(), [&id](const timeline::ColorGradeVersion& entry) {
+            return entry.id == id;
+        });
+    if (version != selected_grade_versions_.end())
+        effects_changed_handler_(selected_clip_, version->graph);
+}
+
+void ColorWorkspace::renameSelectedGradeVersion() {
+    const auto* item = grade_versions_->currentItem();
+    if (!item || selected_clip_ == 0 || !grade_versions_changed_handler_) return;
+    const auto id = item->data(Qt::UserRole).toString().toUtf8().toStdString();
+    const auto current = std::find_if(selected_grade_versions_.begin(),
+        selected_grade_versions_.end(), [&id](const timeline::ColorGradeVersion& entry) {
+            return entry.id == id;
+        });
+    if (current == selected_grade_versions_.end()) return;
+    bool accepted = false;
+    const auto name = QInputDialog::getText(this,
+        QCoreApplication::translate("ColorWorkspace", "Rename Grade Version"),
+        QCoreApplication::translate("ColorWorkspace", "Name"), QLineEdit::Normal,
+        QString::fromUtf8(current->name.data(),
+            static_cast<qsizetype>(current->name.size())), &accepted).trimmed();
+    if (!accepted) return;
+    const auto utf8_name = name.toUtf8().toStdString();
+    const bool duplicate = std::any_of(selected_grade_versions_.begin(),
+        selected_grade_versions_.end(), [&id, &utf8_name](
+            const timeline::ColorGradeVersion& entry) {
+                return entry.id != id && entry.name == utf8_name;
+            });
+    if (name.isEmpty() || duplicate) {
+        QMessageBox::warning(this,
+            QCoreApplication::translate("ColorWorkspace", "Invalid Grade Version Name"),
+            QCoreApplication::translate("ColorWorkspace",
+                "Version names must be non-empty and unique for this clip."));
+        return;
+    }
+    auto versions = selected_grade_versions_;
+    const auto updated = std::find_if(versions.begin(), versions.end(),
+        [&id](const timeline::ColorGradeVersion& entry) { return entry.id == id; });
+    if (updated != versions.end()) updated->name = utf8_name;
+    grade_versions_changed_handler_(selected_clip_, std::move(versions));
+}
+
+void ColorWorkspace::removeSelectedGradeVersion() {
+    const auto* item = grade_versions_->currentItem();
+    if (!item || selected_clip_ == 0 || !grade_versions_changed_handler_) return;
+    const auto id = item->data(Qt::UserRole).toString().toUtf8().toStdString();
+    auto versions = selected_grade_versions_;
+    const auto old_size = versions.size();
+    std::erase_if(versions, [&id](const timeline::ColorGradeVersion& entry) {
+        return entry.id == id;
+    });
+    if (versions.size() != old_size)
+        grade_versions_changed_handler_(selected_clip_, std::move(versions));
 }
 
 void ColorWorkspace::refreshNodes(std::optional<color::NodeId> selected) {

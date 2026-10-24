@@ -3266,6 +3266,23 @@ ColorGraphMutationResult TimelineModel::setClipColorGraph(
     return ColorGraphMutationResult::Changed;
 }
 
+ColorGradeVersionsMutationResult TimelineModel::setClipColorGradeVersions(
+    std::size_t track_index, std::size_t clip_index,
+    std::vector<ColorGradeVersion> versions) {
+    auto* track = trackAt(track_index);
+    if (track == nullptr || clip_index >= track->clips.size())
+        return ColorGradeVersionsMutationResult::InvalidIndex;
+    auto& clip = track->clips[clip_index];
+    if (!supportsClipEffects(clip.kind))
+        return ColorGradeVersionsMutationResult::IncompatibleClip;
+    if (!validColorGradeVersions(versions))
+        return ColorGradeVersionsMutationResult::InvalidValue;
+    if (clip.color_grade_versions == versions)
+        return ColorGradeVersionsMutationResult::NoChange;
+    clip.color_grade_versions = std::move(versions);
+    return ColorGradeVersionsMutationResult::Changed;
+}
+
 NodeGraphMutationResult TimelineModel::setClipNodeGraph(
     std::size_t track_index,
     std::size_t clip_index,

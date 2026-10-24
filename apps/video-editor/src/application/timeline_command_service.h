@@ -189,6 +189,10 @@ struct SetClipColorGraphCommand {
     timeline::ClipId clip_id = 0;
     color::Graph graph;
 };
+struct SetClipColorGradeVersionsCommand {
+    timeline::ClipId clip_id = 0;
+    std::vector<timeline::ColorGradeVersion> versions;
+};
 struct SetClipNodeGraphCommand {
     timeline::ClipId clip_id = 0;
     std::optional<fusion::nodes::NodeGraph> graph;
@@ -260,6 +264,8 @@ public:
         const SetClipAudioGainKeyframesCommand& command);
     [[nodiscard]] TimelineEditResult execute(const SetClipEffectsCommand& command);
     [[nodiscard]] TimelineEditResult execute(const SetClipColorGraphCommand& command);
+    [[nodiscard]] TimelineEditResult execute(
+        const SetClipColorGradeVersionsCommand& command);
     [[nodiscard]] TimelineEditResult execute(const SetClipNodeGraphCommand& command);
     [[nodiscard]] TimelineEditResult execute(const ApplyClipAttributesCommand& command);
     [[nodiscard]] TimelineEditResult execute(

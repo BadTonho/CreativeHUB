@@ -1,13 +1,15 @@
 # Hub Regression Testing
 
-## Video Editor CSP v36 Color, Gallery and Primary Grade backup
+## Video Editor CSP v37 Color grades, versions and Gallery backup
 
-`hub-backup-format-test` saves a real CSP v36 document with a branched Color
-graph, expanded Primary Grade and Log values, and a Gallery PNG sidecar, then uses the Video Editor reader to compare
+`hub-backup-format-test` saves a real CSP v37 document with a branched Color
+graph, expanded Primary Grade and Log values, a named graph version, and a Gallery PNG sidecar, then uses the Video Editor reader to compare
 the vault snapshot and relocated restore with the producer document. Its version
 loop covers the older supported CSP schemas. `hub-backup-manager-test` rejects
-future v37. Focused Release regression execution and native Hub restore/reopen
-acceptance are tracked separately below.
+future v38. The Windows Release `hub-backup-format-test` passed on 2026-10-23.
+`hub-backup-manager-test` did not complete because the environment denied
+writing its backup settings fixture under %LOCALAPPDATA%/qttest; native Hub
+restore/reopen acceptance remains pending.
 
 Current backup gates save Motion v18 and reject v19. Version-specific sections
 below retain the records and evidence from earlier deliveries.
@@ -26,7 +28,7 @@ Gaussian Blur backup coverage uses a real CSP v31 producer/reader with
 fractional radius, disabled state, shared mask and external Input paths in
 `hub-backup-format-test`. `hub-backup-manager-test` rejects CSP34/Motion19.
 
-Composition interchange persistence is covered at the backup boundary by `hub-backup-format-test` (CSP v31/Motion v18 Glow, Drop Shadow, Trim Paths and Bezier paths/keys, matte bindings, blend mode, Scale Y/link/affine binding, Anchor, hierarchy and presentation records, shared masks/stage associations and path rebasing) and `hub-backup-manager-test` (future v37/v19 rejection). See [interchange](../../COMPOSITION_INTERCHANGE.md) for producer/consumer and pending manual checks.
+Composition interchange persistence is covered at the backup boundary by `hub-backup-format-test` (CSP v31/Motion v18 Glow, Drop Shadow, Trim Paths and Bezier paths/keys, matte bindings, blend mode, Scale Y/link/affine binding, Anchor, hierarchy and presentation records, shared masks/stage associations and path rebasing) and `hub-backup-manager-test` (future v38/v19 rejection). See [interchange](../../COMPOSITION_INTERCHANGE.md) for producer/consumer and pending manual checks.
 
 ## Motion v13 blend-mode backup coverage
 

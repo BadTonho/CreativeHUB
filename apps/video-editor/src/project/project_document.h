@@ -15,7 +15,8 @@
 
 namespace project {
 
-inline constexpr int current_format_version = 36;
+inline constexpr int current_format_version = 37;
+inline constexpr int color_grade_versions_format_version = 37;
 inline constexpr int color_graph_format_version = 34;
 inline constexpr int color_gallery_format_version = 33;
 inline constexpr int primary_grade_format_version = 32;
@@ -69,6 +70,7 @@ struct ProjectClip {
     std::vector<timeline::AudioGainKeyframe> audio_gain_keyframes;
     std::vector<creative_suite::effects::EffectInstance> effects;
     std::optional<color::Graph> color_graph;
+    std::vector<timeline::ColorGradeVersion> color_grade_versions;
     std::optional<fusion::nodes::NodeGraph> node_graph;
     timeline::Transform2D transform;
     timeline::TransformKeyframes keyframes;
@@ -114,7 +116,8 @@ struct ProjectClip {
                      right.source_start_time_us, right.source_duration_time_us,
                      right.linked_clip_id, right.audio_extracted,
                      right.audio_companion_pending, right.composition_input_offset_frames,
-                     right.display_name) && left_graph == right_graph;
+                     right.display_name) && left_graph == right_graph &&
+            left.color_grade_versions == right.color_grade_versions;
     }
 };
 

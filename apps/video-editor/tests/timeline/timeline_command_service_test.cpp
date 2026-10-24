@@ -10,6 +10,7 @@
 #include <stdexcept>
 #include <string>
 #include <unordered_set>
+#include <vector>
 
 namespace {
 
@@ -777,6 +778,177 @@ void runVisualEffectCommands() {
     require(location.has_value() && session.timeline().tracks()[location->track_index]
                 .clips[location->clip_index].node_graph == graph,
             "Redo did not restore the applied Fusion graph.");
+}
+
+void runColorGradeVersionCommands() {
+    application::EditorSession session;
+    application::TimelineCommandService service(session);
+    const auto track_id = session.timeline().tracks().front().track_id;
+    const auto source_path = std::filesystem::temp_directory_path() /
+        "service-color-grade-source.mkv";
+    const auto target_path = std::filesystem::temp_directory_path() /
+        "service-color-grade-target.mkv";
+    addMedia(session, source_path);
+    addMedia(session, target_path);
+    const auto source = service.execute(application::AddMediaClipCommand{
+        source_path, track_id, 0});
+    const auto target = service.execute(application::AddMediaClipCommand{
+        target_path, track_id, 120});
+    require(source.changed() && target.changed(),
+        "Could not create Color grade source and target clips.");
+    const auto source_id = source.affected_clip_ids.front();
+    const auto target_id = target.affected_clip_ids.front();
+
+    auto primary = creative_suite::effects::makeDefaultInstance("video.primary_grade");
+    auto grayscale = creative_suite::effects::makeDefaultInstance("video.grayscale");
+    const std::vector<creative_suite::effects::EffectInstance> source_effects{
+        primary, grayscale};
+    auto source_graph = color::fromEffectStack(source_effects);
+    const auto source_effect_nodes = color::effectNodesInOrder(source_graph);
+    require(source_effect_nodes.size() == 2 &&
+            color::setEffectEnabled(source_graph, source_effect_nodes.back(), false) &&
+            color::addParallelBranch(source_graph, source_effect_nodes.front(),
+                creative_suite::effects::makeDefaultInstance("video.saturation")) &&
+            color::validate(source_graph),
+        "Could not prepare a branched Color graph with a disabled effect.");
+    require(service.execute(application::SetClipColorGraphCommand{
+        source_id, source_graph}).changed(),
+        "The source clip could not receive its Color correction graph.");
+    const auto source_location = session.timeline().locateClip(source_id);
+    const auto target_location = session.timeline().locateClip(target_id);
+    require(source_location && target_location,
+        "Color grade clips could not be resolved by stable identity.");
+    const auto source_versions = std::vector<timeline::ColorGradeVersion>{
+        {"source-version", "Source Version", source_graph}};
+    const auto target_versions = std::vector<timeline::ColorGradeVersion>{
+        {"target-version", "Target Version", color::makePassthroughGraph()}};
+    require(service.execute(application::SetClipColorGradeVersionsCommand{
+                source_id, source_versions}).changed() &&
+            service.execute(application::SetClipColorGradeVersionsCommand{
+                target_id, target_versions}).changed(),
+        "Color grade versions could not be saved on their clips.");
+
+    auto saved_versions = source_versions;
+    saved_versions.push_back({"source-version-2", "Second Version", source_graph});
+    const auto save_history = service.undoCount();
+    require(service.execute(application::SetClipColorGradeVersionsCommand{
+                source_id, saved_versions}).changed() &&
+            service.undoCount() == save_history + 1 && service.undo().changed() &&
+            session.timeline().tracks()[source_location->track_index]
+                .clips[source_location->clip_index].color_grade_versions == source_versions &&
+            service.redo().changed() &&
+            session.timeline().tracks()[source_location->track_index]
+                .clips[source_location->clip_index].color_grade_versions == saved_versions,
+        "Saving a Color grade version must be one undoable clip edit.");
+    auto renamed_versions = saved_versions;
+    renamed_versions.back().name = "Renamed Version";
+    require(service.execute(application::SetClipColorGradeVersionsCommand{
+                source_id, renamed_versions}).changed() && service.undo().changed() &&
+            session.timeline().tracks()[source_location->track_index]
+                .clips[source_location->clip_index].color_grade_versions == saved_versions &&
+            service.redo().changed() &&
+            session.timeline().tracks()[source_location->track_index]
+                .clips[source_location->clip_index].color_grade_versions == renamed_versions,
+        "Renaming a Color grade version must preserve its identity and shared history.");
+
+    const auto version_history = service.undoCount();
+    require(service.execute(application::SetClipColorGradeVersionsCommand{
+                source_id, source_versions}).changed() &&
+            service.undoCount() == version_history + 1 &&
+            session.timeline().tracks()[source_location->track_index]
+                .clips[source_location->clip_index].color_grade_versions == source_versions &&
+            service.undo().changed() &&
+            session.timeline().tracks()[source_location->track_index]
+                .clips[source_location->clip_index].color_grade_versions == renamed_versions &&
+            service.redo().changed() &&
+            session.timeline().tracks()[source_location->track_index]
+                .clips[source_location->clip_index].color_grade_versions == source_versions,
+        "Removing a saved Color grade version must be one undoable edit.");
+
+    const auto invalid_name_history = service.undoCount();
+    const auto blank_name = service.execute(application::SetClipColorGradeVersionsCommand{
+        source_id, {{"blank", " \t", source_graph}}});
+    const auto duplicate_name = service.execute(application::SetClipColorGradeVersionsCommand{
+        source_id, {{"one", "Duplicate", source_graph}, {"two", "Duplicate", source_graph}}});
+    require(blank_name.status == application::EditStatus::Rejected &&
+            duplicate_name.status == application::EditStatus::Rejected &&
+            service.undoCount() == invalid_name_history,
+        "Empty and duplicate Color grade version names must be rejected without history edits.");
+
+    const auto target_before = session.timeline().tracks()[target_location->track_index]
+        .clips[target_location->clip_index];
+    const auto apply_history = service.undoCount();
+    const auto applied = service.execute(application::SetClipColorGraphCommand{
+        target_id, source_graph});
+    const auto target_after_location = session.timeline().locateClip(target_id);
+    require(applied.changed() && applied.invalidate_playback &&
+            service.undoCount() == apply_history + 1 && target_after_location &&
+            session.timeline().tracks()[target_after_location->track_index]
+                .clips[target_after_location->clip_index].color_graph == source_graph &&
+            session.timeline().tracks()[target_after_location->track_index]
+                .clips[target_after_location->clip_index].color_grade_versions == target_versions,
+        "Applying a copied Color graph must replace only the target graph in one edit.");
+    require(service.undo().changed(), "Applying a copied Color graph could not be undone.");
+    auto target_location_after_undo = session.timeline().locateClip(target_id);
+    require(target_location_after_undo &&
+            session.timeline().tracks()[target_location_after_undo->track_index]
+                .clips[target_location_after_undo->clip_index] == target_before &&
+            service.redo().changed(),
+        "Undo/Redo did not restore the target clip around a copied graph application.");
+
+    const auto split = service.execute(application::SplitClipCommand{source_id, 60});
+    require(split.changed() && split.selection.active_clip_id,
+        "A clip with Color grade versions could not be split.");
+    const auto right_location = session.timeline().locateClip(*split.selection.active_clip_id);
+    require(right_location &&
+            session.timeline().tracks()[right_location->track_index]
+                .clips[right_location->clip_index].color_grade_versions == source_versions &&
+            session.timeline().tracks()[right_location->track_index]
+                .clips[right_location->clip_index].color_graph == source_graph,
+        "Splitting a clip must copy its named versions and current Color graph.");
+
+    const auto new_track = service.execute(application::AddTrackCommand{"V2"});
+    require(new_track.changed() && !new_track.affected_track_ids.empty(),
+        "Could not create an isolated track for adjustment duplication coverage.");
+    const auto adjustment = service.execute(application::AddAdjustmentClipCommand{
+        new_track.affected_track_ids.front(), 0, 60});
+    require(adjustment.changed() && !adjustment.affected_clip_ids.empty() &&
+            service.execute(application::SetClipColorGradeVersionsCommand{
+                adjustment.affected_clip_ids.front(), source_versions}).changed(),
+        "Could not prepare an adjustment clip with saved Color grade versions.");
+    const auto duplicated = service.execute(application::DuplicateAdjustmentClipCommand{
+        adjustment.affected_clip_ids.front()});
+    const auto duplicate_location = duplicated.affected_clip_ids.empty()
+        ? std::optional<timeline::ClipLocation>{}
+        : session.timeline().locateClip(duplicated.affected_clip_ids.front());
+    require(duplicated.changed() && duplicate_location &&
+            session.timeline().tracks()[duplicate_location->track_index]
+                .clips[duplicate_location->clip_index].color_grade_versions == source_versions,
+        "Duplicating an adjustment clip must copy its named Color grade versions.");
+
+    application::EditorSession fusion_session;
+    application::TimelineCommandService fusion_service(fusion_session);
+    const auto fusion_track = fusion_session.timeline().tracks().front().track_id;
+    const auto fusion_clip = fusion_service.execute(
+        application::AddFusionCompositionCommand{fusion_track, 0, 60});
+    require(fusion_clip.changed() && !fusion_clip.affected_clip_ids.empty(),
+        "Could not create a Fusion composition for Color version duplication coverage.");
+    const auto fusion_clip_id = fusion_clip.affected_clip_ids.front();
+    const std::vector<timeline::ColorGradeVersion> fusion_versions{
+        {"fusion-version", "Fusion Source Version", source_graph}};
+    require(fusion_service.execute(application::SetClipColorGradeVersionsCommand{
+                fusion_clip_id, fusion_versions}).changed(),
+        "Could not save Color versions on a Fusion composition clip.");
+    const auto duplicate_fusion = fusion_service.execute(
+        application::DuplicateFusionCompositionCommand{fusion_clip_id});
+    const auto duplicate_fusion_location = duplicate_fusion.affected_clip_ids.empty()
+        ? std::optional<timeline::ClipLocation>{}
+        : fusion_session.timeline().locateClip(duplicate_fusion.affected_clip_ids.front());
+    require(duplicate_fusion.changed() && duplicate_fusion_location &&
+            fusion_session.timeline().tracks()[duplicate_fusion_location->track_index]
+                .clips[duplicate_fusion_location->clip_index].color_grade_versions ==
+                fusion_versions,
+        "Duplicating a Fusion composition must copy its Color grade versions.");
 }
 
 void runReconnectTimingCommand() {
@@ -1691,6 +1863,7 @@ int main() {
         runEmptyTrackGroupDropCommands();
         run();
         runVisualEffectCommands();
+        runColorGradeVersionCommands();
         runInspectorAndTrackCommands();
         runReconnectTimingCommand();
         runAutomaticAudioTrackCommand();

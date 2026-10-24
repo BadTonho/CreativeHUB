@@ -552,7 +552,11 @@ void MainWindow::clearProjectState(
     restored_autosave_.reset();
     ++project_generation_;
     pending_color_still_capture_.reset();
-    if (color_workspace_ != nullptr) color_workspace_->setCapturePending(false);
+    copied_color_grade_.reset();
+    if (color_workspace_ != nullptr) {
+        color_workspace_->setCapturePending(false);
+        color_workspace_->setCanApplyCopiedGrade(false);
+    }
     clearActiveTimelineSelection();
     playback_frame_index_ = 0;
     if (editUi().timeline != nullptr) {
@@ -925,7 +929,11 @@ void MainWindow::applyLoadedProject(application::PreparedProject prepared) {
     restored_autosave_.reset();
     ++project_generation_;
     pending_color_still_capture_.reset();
-    if (color_workspace_ != nullptr) color_workspace_->setCapturePending(false);
+    copied_color_grade_.reset();
+    if (color_workspace_ != nullptr) {
+        color_workspace_->setCapturePending(false);
+        color_workspace_->setCanApplyCopiedGrade(false);
+    }
     clearActiveTimelineSelection();
     playback_frame_index_ = 0;
     if (editUi().timeline != nullptr) {
