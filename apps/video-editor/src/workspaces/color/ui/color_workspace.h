@@ -63,6 +63,8 @@ public:
     void setColorInputFrameRequestHandler(std::function<void(quint64,
         timeline::ClipId, color::NodeId, qint64, quint64, quint64, quint64,
         color::Graph)> handler);
+    void setGradeComparisonRequestHandler(
+        std::function<void(std::optional<playback::PlaybackColorGradeComparisonRequest>)> handler);
     void acceptScopeFrame(quint64 request_id, playback::VideoFramePtr frame,
         qint64 timeline_frame, quint64 composition_revision,
         quint64 playback_generation);
@@ -70,6 +72,9 @@ public:
         color::NodeId node_id, playback::VideoFramePtr frame, qint64 timeline_frame,
         quint64 delivery_epoch, quint64 composition_revision,
         quint64 playback_generation);
+    void acceptGradeComparisonFrame(quint64 request_id, quint64 project_generation,
+        timeline::ClipId clip_id, const std::string& version_id,
+        rendering::PreviewFramePayload frame);
     void setGalleryStills(std::vector<StillItem> stills, quint64 project_generation = 0);
     void setGalleryReferenceRequestHandler(
         std::function<void(quint64, const QString&)> handler);
@@ -94,6 +99,8 @@ private:
     void handleGallerySelectionChanged();
     void clearGalleryReference(bool reset_mode);
     void applyPreviewComparison();
+    void compareSelectedGradeVersion();
+    void clearGradeComparisonReference(bool reset_mode);
     void saveGradeVersion();
     void applySelectedGradeVersion();
     void renameSelectedGradeVersion();
@@ -112,6 +119,7 @@ private:
     QListWidget* grade_versions_ = nullptr;
     QPushButton* save_grade_version_button_ = nullptr;
     QPushButton* apply_grade_version_button_ = nullptr;
+    QPushButton* compare_grade_version_button_ = nullptr;
     QPushButton* rename_grade_version_button_ = nullptr;
     QPushButton* remove_grade_version_button_ = nullptr;
     ColorNodeCanvas* nodes_ = nullptr;
@@ -144,6 +152,8 @@ private:
     std::function<void(quint64, qint64, quint64, quint64)> scope_frame_request_handler_;
     std::function<void(quint64, timeline::ClipId, color::NodeId, qint64,
         quint64, quint64, quint64, color::Graph)> color_input_frame_request_handler_;
+    std::function<void(std::optional<playback::PlaybackColorGradeComparisonRequest>)>
+        grade_comparison_request_handler_;
     std::function<void()> capture_still_handler_;
     std::function<void(const QString&, const QString&)> rename_still_handler_;
     std::function<void(const QString&)> remove_still_handler_;
@@ -154,6 +164,12 @@ private:
     quint64 gallery_project_generation_ = 0;
     quint64 next_gallery_reference_request_id_ = 1;
     quint64 active_gallery_reference_request_id_ = 0;
+    enum class ReferenceSource { None, Gallery, GradeVersion };
+    ReferenceSource reference_source_ = ReferenceSource::None;
+    std::optional<playback::PlaybackColorGradeComparisonRequest> grade_comparison_reference_;
+    rendering::PreviewFramePayload latest_grade_comparison_frame_;
+    quint64 next_grade_comparison_request_id_ = 1;
+    bool grade_comparison_request_active_ = false;
     bool active_ = false;
     bool can_apply_copied_grade_ = false;
     bool waveform_pending_ = false;

@@ -6,9 +6,13 @@ the graph connections. Edit can select its effect nodes and edit parameters or
 enabled state; graph structure and layout are edited in Color. A project-owned
 Gallery stores full-canvas stills with provenance. A selected still can be used
 as a temporary split-screen or wipe reference in the Color Viewer; this state
-is not saved with the project. Fusion remains a separate, unchanged workspace.
-Gallery albums, tags, named-grade comparisons, calibrated scopes and advanced
-color management remain outside the current stage. See the
+is not saved with the project. A saved grade version can also be compared with
+the current full Viewer by temporarily substituting that clip's graph during
+composition; it does not apply the version or change project history. Gallery
+stills and saved versions are mutually exclusive references. Comparing two
+saved versions directly, Gallery albums, tags, calibrated scopes and advanced
+color management remain outside the current stage. Fusion remains a separate,
+unchanged workspace. See the
 [Color Workspace Roadmap](../COLOR_WORKSPACE_ROADMAP.md).
 
 Curves qualifier refinement and the Inspector Matte/Highlight preview are

@@ -126,6 +126,14 @@ struct PlaybackColorInputFrameEvent {
     quint64 playback_generation = 0;
 };
 
+struct PlaybackColorGradeComparisonFrameEvent {
+    quint64 request_id = 0;
+    quint64 project_generation = 0;
+    timeline::ClipId clip_id = 0;
+    std::string version_id;
+    rendering::PreviewFramePayload frame;
+};
+
 struct FusionNodePreviewTarget {
     timeline::ClipId clip_id = 0;
     fusion::nodes::NodeId node_id = 0;
@@ -146,7 +154,8 @@ using PlaybackControllerEvent = std::variant<
     PlaybackDeliveryEpochEvent,
     PlaybackStillCaptureEvent,
     PlaybackScopeFrameEvent,
-    PlaybackColorInputFrameEvent>;
+    PlaybackColorInputFrameEvent,
+    PlaybackColorGradeComparisonFrameEvent>;
 
 class PlaybackController final : public QObject {
 public:
@@ -188,6 +197,8 @@ public:
         quint64 composition_revision,
         quint64 playback_generation,
         color::Graph graph);
+    void setColorGradeComparisonRequest(
+        std::optional<PlaybackColorGradeComparisonRequest> request);
     [[nodiscard]] bool gpuCompositionEnabled() const noexcept { return gpu_composition_enabled_; }
     void setHardwareDecodingEnabled(bool enabled);
     [[nodiscard]] bool hardwareDecodingEnabled() const noexcept { return hardware_decoding_enabled_; }

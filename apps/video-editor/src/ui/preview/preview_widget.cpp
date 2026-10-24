@@ -288,6 +288,7 @@ void PreviewWidget::setFrame(rendering::PreviewFramePayload frame, quint64 deliv
         cpu_surface_->setDeliveryTraceId(0); frame_image_ = {};
         stack_->setCurrentWidget(vulkan_surface_);
         vulkan_surface_->setFrame(current_payload_, delivery_trace_id);
+        updateComparisonSurfaces();
         return;
     }
     if (gpu_surface_ != nullptr && gpu_enabled_) {
@@ -295,6 +296,7 @@ void PreviewWidget::setFrame(rendering::PreviewFramePayload frame, quint64 deliv
         cpu_surface_->setDeliveryTraceId(0);
         frame_image_ = {};
         gpu_surface_->setFrame(current_payload_, delivery_trace_id);
+        updateComparisonSurfaces();
         return;
     }
 
@@ -328,6 +330,7 @@ void PreviewWidget::clearFrame(const QString& message) {
         cpu_surface_->setPixmap({});
         cpu_surface_->setText(empty_message_);
     }
+    updateComparisonSurfaces();
     if (gpu_surface_ != nullptr) gpu_surface_->clearFrame();
     if (vulkan_surface_) vulkan_surface_->clearFrame();
     if (vulkan_surface_) stack_->setCurrentWidget(cpu_surface_);
@@ -339,10 +342,12 @@ void PreviewWidget::releaseGpuFrames() {
     if (gpu_surface_) gpu_surface_->clearFrame();
 }
 
-void PreviewWidget::setDeliveryEpoch(quint64 epoch, bool retry_texture_delivery) noexcept {
+void PreviewWidget::setDeliveryEpoch(quint64 epoch, bool retry_texture_delivery) {
     delivery_epoch_ = epoch;
     if (vulkan_surface_) vulkan_surface_->setDeliveryEpoch(epoch);
     if (retry_texture_delivery && gpu_surface_) gpu_surface_->retryTextureDelivery();
+    updateComparisonSurfaces();
+    updateCpuPixmap();
 }
 
 bool PreviewWidget::textureDeliveryAvailable() const noexcept {
@@ -360,9 +365,26 @@ void PreviewWidget::setGrayscaleEnabled(bool enabled) {
 }
 
 void PreviewWidget::setComparisonReferenceImage(QImage image) {
+    reference_frame_payload_ = {};
     reference_image_ = image.isNull() ? QImage{} : image.convertToFormat(QImage::Format_RGBA8888);
     if (gpu_surface_) gpu_surface_->setComparisonReferenceImage(reference_image_);
     if (vulkan_surface_) vulkan_surface_->setComparisonReferenceImage(reference_image_);
+    updateComparisonSurfaces();
+    updateCpuPixmap();
+}
+
+void PreviewWidget::setComparisonReferenceFrame(rendering::PreviewFramePayload frame) {
+    if (!frame.valid() || frame.width() <= 0 || frame.height() <= 0 ||
+        (frame.rgba && (frame.rgba->stride < frame.rgba->width * 4 ||
+         frame.rgba->rgba_pixels.size() < static_cast<std::size_t>(frame.rgba->stride) *
+             static_cast<std::size_t>(frame.rgba->height)))) {
+        frame = {};
+    }
+    reference_image_ = {};
+    reference_frame_payload_ = std::move(frame);
+    if (gpu_surface_) gpu_surface_->setComparisonReferenceFrame(reference_frame_payload_);
+    if (vulkan_surface_) vulkan_surface_->setComparisonReferenceFrame(reference_frame_payload_);
+    updateComparisonSurfaces();
     updateCpuPixmap();
 }
 
@@ -370,9 +392,27 @@ void PreviewWidget::setComparison(
     creative_suite::composition::FrameComparisonMode mode, float reference_fraction) {
     comparison_mode_ = mode;
     reference_fraction_ = std::clamp(reference_fraction, 0.0F, 1.0F);
-    if (gpu_surface_) gpu_surface_->setComparison(comparison_mode_, reference_fraction_);
-    if (vulkan_surface_) vulkan_surface_->setComparison(comparison_mode_, reference_fraction_);
+    updateComparisonSurfaces();
     updateCpuPixmap();
+}
+
+bool PreviewWidget::comparisonReferenceMatchesCurrent() const noexcept {
+    return reference_frame_payload_.valid() && current_payload_.valid() &&
+        current_payload_.delivery_epoch == delivery_epoch_ &&
+        reference_frame_payload_.delivery_epoch == current_payload_.delivery_epoch &&
+        reference_frame_payload_.composition_revision == current_payload_.composition_revision &&
+        reference_frame_payload_.playback_generation == current_payload_.playback_generation &&
+        reference_frame_payload_.timeline_frame == current_payload_.timeline_frame;
+}
+
+void PreviewWidget::updateComparisonSurfaces() {
+    const bool image_reference = !reference_image_.isNull();
+    const bool frame_matches = comparisonReferenceMatchesCurrent();
+    const auto mode = (image_reference || frame_matches)
+        ? comparison_mode_
+        : creative_suite::composition::FrameComparisonMode::Off;
+    if (gpu_surface_) gpu_surface_->setComparison(mode, reference_fraction_);
+    if (vulkan_surface_) vulkan_surface_->setComparison(mode, reference_fraction_);
 }
 
 bool PreviewWidget::isGrayscaleEnabled() const noexcept {
@@ -437,9 +477,16 @@ void PreviewWidget::updateCpuPixmap() {
         rendering::PreviewTiming::CpuSurface);
 
     cpu_surface_->setText({});
+    QImage active_reference = reference_image_;
+    if (active_reference.isNull() && comparisonReferenceMatchesCurrent() &&
+        reference_frame_payload_.rgba) {
+        const auto& frame = *reference_frame_payload_.rgba;
+        active_reference = QImage(frame.rgba_pixels.data(), frame.width, frame.height,
+            frame.stride, QImage::Format_RGBA8888);
+    }
     if (comparison_mode_ != creative_suite::composition::FrameComparisonMode::Off &&
-        !reference_image_.isNull()) {
-        auto reference = reference_image_;
+        !active_reference.isNull()) {
+        auto reference = active_reference;
         if (grayscale_enabled_) {
             reference = reference.convertToFormat(QImage::Format_RGBA8888);
             for (int y = 0; y < reference.height(); ++y) {

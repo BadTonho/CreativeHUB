@@ -105,6 +105,7 @@ public:
 private:
     friend class OpenGlFrameCompositor;
     friend class VulkanFrameCompositor;
+    friend class VulkanDevice;
     friend class VulkanNativeImportBridge;
     struct State;
     explicit OpenGlTextureFrame(std::shared_ptr<State>);
@@ -123,6 +124,7 @@ struct FrameComparisonOptions {
     FrameComparisonMode mode = FrameComparisonMode::Off;
     OpenGlTextureFramePtr reference;
     float reference_fraction = 0.5F;
+    bool retain_rendered_frame = false;
 };
 
 struct OpenGlTextureCompositionResult {

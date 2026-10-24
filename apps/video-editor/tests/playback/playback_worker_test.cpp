@@ -1594,6 +1594,11 @@ void validateStaticImageComposition() {
 
 void validateColorInputInspection(QCoreApplication& application) {
     playback::PlaybackWorker worker;
+    QString composition_error;
+    QObject::connect(&worker, &playback::PlaybackWorker::playbackError,
+        [&composition_error](const QString& message, qint64, quint64) {
+            composition_error = message;
+        });
     auto source = std::make_shared<const media::VideoFrame>(media::VideoFrame{
         2, 1, 8, std::vector<std::uint8_t>{220, 40, 80, 173, 12, 90, 170, 61}});
     auto graph = color::makePassthroughGraph();
@@ -1634,8 +1639,8 @@ void validateColorInputInspection(QCoreApplication& application) {
             preview_identity = std::move(payload);
         });
     worker.renderCompositionFrame(0, 0, 990);
-    require(preview_identity.valid(),
-        "Color input inspection fixture failed to compose its Viewer frame.");
+    require(preview_identity.valid(), "Color input inspection fixture failed to compose its Viewer frame: " +
+        composition_error.toStdString());
 
     bool received = false;
     playback::VideoFramePtr input_at_curves;
@@ -1669,6 +1674,157 @@ void validateColorInputInspection(QCoreApplication& application) {
                                                                   79, 79, 79, 61},
         "Playback must asynchronously return the selected Curves input after prior nodes with alpha intact.");
     Q_UNUSED(application);
+}
+
+void validateColorGradeComparison(QCoreApplication&) {
+    struct CapturedComparison {
+        quint64 request_id = 0;
+        quint64 project_generation = 0;
+        timeline::ClipId clip_id = 0;
+        std::string version_id;
+        rendering::PreviewFramePayload frame;
+    };
+    playback::PlaybackWorker worker;
+    std::vector<std::uint8_t> comparison_pixels(
+        static_cast<std::size_t>(1920) * 1080 * 4);
+    for (std::size_t offset = 0; offset < comparison_pixels.size(); offset += 4) {
+        comparison_pixels[offset] = 220;
+        comparison_pixels[offset + 1] = 40;
+        comparison_pixels[offset + 2] = 80;
+        comparison_pixels[offset + 3] = 255;
+    }
+    const auto source = std::make_shared<const media::VideoFrame>(media::VideoFrame{
+        1920, 1080, 1920 * 4, std::move(comparison_pixels)});
+    auto current_graph = color::makePassthroughGraph();
+    auto saved_graph = color::makePassthroughGraph();
+    require(color::insertEffectAfter(saved_graph, 1,
+                creative_suite::effects::makeDefaultInstance("video.grayscale")),
+        "Saved Color comparison fixture could not create a grayscale version.");
+    playback::CompositionLayerSpec layer;
+    layer.timeline_start_frame = 10;
+    layer.segment_frame_count = 4;
+    layer.source_duration_frames = 4;
+    layer.track_index = 1;
+    layer.clip_index = 0;
+    layer.track_id = 3;
+    layer.clip_id = 900;
+    layer.kind = timeline::ClipKind::Image;
+    layer.still_frame = source;
+    layer.transform.opacity = 0.5;
+    layer.color_graph = current_graph;
+    const auto current_effects = color::linearEffectStack(current_graph);
+    layer.effects = current_effects.value_or(
+        std::vector<creative_suite::effects::EffectInstance>{});
+    std::vector<std::uint8_t> background_pixels(source->rgba_pixels.size());
+    for (std::size_t offset = 0; offset < background_pixels.size(); offset += 4) {
+        background_pixels[offset] = 30;
+        background_pixels[offset + 1] = 80;
+        background_pixels[offset + 2] = 220;
+        background_pixels[offset + 3] = 255;
+    }
+    const auto background = std::make_shared<const media::VideoFrame>(media::VideoFrame{
+        1920, 1080, 1920 * 4, std::move(background_pixels)});
+    auto background_graph = color::makePassthroughGraph();
+    playback::CompositionLayerSpec background_layer;
+    background_layer.timeline_start_frame = 10;
+    background_layer.segment_frame_count = 4;
+    background_layer.source_duration_frames = 4;
+    background_layer.track_index = 0;
+    background_layer.clip_index = 0;
+    background_layer.track_id = 2;
+    background_layer.clip_id = 901;
+    background_layer.kind = timeline::ClipKind::Image;
+    background_layer.still_frame = background;
+    background_layer.transform.opacity = 0.5;
+    background_layer.color_graph = background_graph;
+    background_layer.effects = color::linearEffectStack(background_graph).value_or(
+        std::vector<creative_suite::effects::EffectInstance>{});
+    const QList<playback::CompositionLayerSpec> composition_layers{
+        background_layer, layer};
+    worker.setCompositionCanvasSize(1920, 1080);
+    worker.setComposition(composition_layers, {}, 170);
+
+    rendering::PreviewFramePayload current;
+    std::vector<CapturedComparison> alternates;
+    QObject::connect(&worker, &playback::PlaybackWorker::previewFrameReady,
+        [&current](rendering::PreviewFramePayload frame, qint64, quint64, quint64) {
+            current = std::move(frame);
+        });
+    QObject::connect(&worker, &playback::PlaybackWorker::colorGradeComparisonFrameReady,
+        [&](quint64 request_id, quint64 project_generation, timeline::ClipId clip_id,
+            std::string version_id, rendering::PreviewFramePayload frame) {
+            alternates.push_back(CapturedComparison{request_id, project_generation,
+                clip_id, std::move(version_id), std::move(frame)});
+        });
+    playback::PlaybackColorGradeComparisonRequest request;
+    request.request_id = 73;
+    request.project_generation = 41;
+    request.clip_id = 900;
+    request.version_id = "saved-gray";
+    request.graph = saved_graph;
+    worker.setColorGradeComparisonRequest(request);
+    worker.renderCompositionFrame(11, 1, 170);
+    require(current.valid() && current.rgba && alternates.size() == 1 &&
+                alternates.front().request_id == 73 &&
+                alternates.front().project_generation == 41 &&
+                alternates.front().clip_id == 900 &&
+                alternates.front().version_id == "saved-gray" &&
+                alternates.front().frame.valid() && alternates.front().frame.rgba &&
+                alternates.front().frame.timeline_frame == current.timeline_frame &&
+                alternates.front().frame.playback_generation == current.playback_generation &&
+                alternates.front().frame.composition_revision == current.composition_revision &&
+                alternates.front().frame.delivery_epoch == current.delivery_epoch,
+        "Saved-grade comparison must return a versioned frame synchronized with the current Viewer.");
+    auto expected_layers = composition_layers;
+    const auto expected_target = std::find_if(expected_layers.begin(),
+        expected_layers.end(), [](const auto& candidate) {
+            return candidate.clip_id == 900;
+        });
+    require(expected_target != expected_layers.end(),
+        "The explicit saved-grade comparison fixture lost its target clip.");
+    expected_target->color_graph = saved_graph;
+    expected_target->effects = color::linearEffectStack(saved_graph).value_or(
+        std::vector<creative_suite::effects::EffectInstance>{});
+    playback::PlaybackWorker expected_worker;
+    expected_worker.setCompositionCanvasSize(1920, 1080);
+    expected_worker.setComposition(expected_layers, {}, 170);
+    rendering::PreviewFramePayload expected_composition;
+    QObject::connect(&expected_worker, &playback::PlaybackWorker::previewFrameReady,
+        [&expected_composition](rendering::PreviewFramePayload frame, qint64,
+            quint64, quint64) {
+            expected_composition = std::move(frame);
+        });
+    expected_worker.renderCompositionFrame(11, 1, 170);
+    const auto pixel_summary = [](const media::VideoFrame& frame) {
+        std::string value;
+        for (int channel = 0; channel < 4; ++channel) {
+            if (channel != 0) value += ",";
+            value += std::to_string(frame.rgba_pixels[static_cast<std::size_t>(channel)]);
+        }
+        return value;
+    };
+    require(expected_composition.valid() && expected_composition.rgba &&
+                alternates.front().frame.rgba->rgba_pixels ==
+                    expected_composition.rgba->rgba_pixels &&
+                alternates.front().frame.rgba->rgba_pixels != current.rgba->rgba_pixels,
+        "The temporary composition must replace only the target clip graph and retain current Viewer output (current=" +
+            pixel_summary(*current.rgba) + ", alternate=" +
+            pixel_summary(*alternates.front().frame.rgba) + ", expected=" +
+            (expected_composition.rgba ? pixel_summary(*expected_composition.rgba) :
+                std::string("unavailable")) + ").");
+
+    request.request_id = 74;
+    request.version_id = "newer-request";
+    worker.setColorGradeComparisonRequest(request);
+    worker.renderCompositionFrame(12, 2, 170);
+    require(alternates.size() == 2 && alternates.back().request_id == 74 &&
+                alternates.back().version_id == "newer-request" &&
+                alternates.back().frame.timeline_frame == 12,
+        "Replacing a comparison request must discard its prior identity and synchronize the new frame.");
+    worker.setColorGradeComparisonRequest(std::nullopt);
+    worker.renderCompositionFrame(13, 3, 170);
+    require(alternates.size() == 2 && current.timeline_frame == 13,
+        "Off must stop alternate renders while continuing the normal Viewer.");
 }
 
 void validateFusionNodePreview() {
@@ -2366,6 +2522,7 @@ int main(int argc, char* argv[]) {
         validateAnimatedTextGeometry();
         validateStaticImageComposition();
         validateColorInputInspection(application);
+        validateColorGradeComparison(application);
         validateFusionNodePreview();
         validateVisualEffectPreview();
         if (argc == 2) {

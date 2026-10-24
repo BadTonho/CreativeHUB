@@ -157,6 +157,14 @@ PlaybackController::PlaybackController(
                 std::move(frame), timeline_frame, project_generation, delivery_epoch,
                 composition_revision, generation});
         }, Qt::QueuedConnection);
+    QObject::connect(worker_, &PlaybackWorker::colorGradeComparisonFrameReady, this,
+        [this](quint64 request_id, quint64 project_generation,
+               timeline::ClipId clip_id, std::string version_id,
+               rendering::PreviewFramePayload frame) {
+            emitEvent(PlaybackColorGradeComparisonFrameEvent{request_id,
+                project_generation, clip_id, std::move(version_id),
+                std::move(frame)});
+        }, Qt::QueuedConnection);
     worker_thread_.start();
 }
 
@@ -531,6 +539,29 @@ void PlaybackController::requestColorInputFrame(quint64 request_id,
             playback_generation,
             std::move(graph));
     });
+}
+
+void PlaybackController::setColorGradeComparisonRequest(
+    std::optional<PlaybackColorGradeComparisonRequest> request) {
+    if (!available()) return;
+    if (request.has_value() &&
+        (request->request_id == 0 || request->clip_id == 0 ||
+         request->version_id.empty() || !color::validate(request->graph))) {
+        request.reset();
+    }
+    auto worker_request = request;
+    queueWorker([worker_request = std::move(worker_request)](PlaybackWorker& worker) mutable {
+        worker.setColorGradeComparisonRequest(std::move(worker_request));
+    });
+    if (!request.has_value() || playing_) return;
+
+    const auto global_frame = timelineFrame();
+    const auto destination = session_.timeline().topClipAt(global_frame);
+    if (!destination.has_value()) return;
+    const auto& clip = session_.timeline().tracks()[destination->track_index]
+        .clips[destination->clip_index];
+    renderCompositionFrame(global_frame,
+        global_frame - clip.timeline_start_frame);
 }
 
 void PlaybackController::setPreviewQuality(PreviewQuality quality) {

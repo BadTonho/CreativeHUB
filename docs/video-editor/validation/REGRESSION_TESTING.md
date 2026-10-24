@@ -16,7 +16,8 @@
 | CPU/GPU full-canvas still capture, stale revision/no-frame handling, source clip/frame provenance, Gallery rename/remove | `creative-suite-main-editor-playback-worker-errors`, `creative-suite-main-editor-color-workspace`, MainWindow integration |
 | Vulkan ApplyMask and MaskedBlend use the same Rec. 709 RGB coverage and exact alpha rounding as the shared CPU compositor | `creative-suite-composition-vulkan`, `creative-suite-composition`, `creative-suite-composition-opengl` |
 | Gallery reference selection, stale async replies, unavailable/removal reset, Off/Split-screen/Wipe state, page re-entry, and clip/playhead/history/project invariance | `creative-suite-main-editor-color-workspace`, `creative-suite-main-editor-color-workspace-integration` |
-| Synthetic comparison pixels: CPU/OpenGL Off identity, left/right split, aspect fit, wipe at 0/50/100%, and draggable divider; Vulkan presentation API modes and endpoints | `creative-suite-main-editor-preview`, `creative-suite-main-editor-opengl-preview`, `creative-suite-composition-vulkan` |
+| Saved-grade Compare Version selection and mode behavior, exclusive Gallery/version references, re-entry and clearing after clip/project/version changes, graph/playhead/dirty/history invariance, synchronized temporary alternate composition, stale and failed responses | `creative-suite-main-editor-color-workspace`, `creative-suite-main-editor-color-workspace-integration`, `creative-suite-main-editor-playback-worker-errors`, `creative-suite-main-editor-preview`, `creative-suite-main-editor-opengl-preview`, `creative-suite-composition-vulkan` |
+| Synthetic comparison pixels: CPU/OpenGL/Vulkan Off identity, left/right split, aspect fit, wipe at 0/50/100%, and draggable divider; Vulkan presentation API modes and endpoints | `creative-suite-main-editor-preview`, `creative-suite-main-editor-opengl-preview`, `creative-suite-composition-vulkan` |
 | CSP v39 matte-refinement save/reopen; v38 receives neutral defaults; v40 rejection, autosave/recovery and Hub backup/restoration with Gallery sidecars | `creative-suite-main-editor-project`, `creative-suite-main-editor-autosave`, `hub-backup-format-test`, `hub-backup-manager-test` |
 | Qualifier refinement limits, 3x3 denoise, clean levels, In/Out, Gaussian edges, exact alpha, cancellation, CPU/OpenGL/Vulkan parity within one RGB level, and bounded OpenGL resource refusal with a valid CPU reference path | `creative-suite-effects-video-curves`, `creative-suite-main-editor-color-graph`, `creative-suite-composition-opengl-color`, `creative-suite-composition-vulkan-color`, `creative-suite-main-editor-color-workspace` |
 | Selected Curves input after upstream nodes, disabled-node inspection, linear GPU-prefix selection, and stale preview rejection after a Viewer frame change | `creative-suite-main-editor-color-graph`, `creative-suite-main-editor-color-workspace`, `creative-suite-main-editor-playback-worker-errors`, `creative-suite-composition-opengl-color`, `creative-suite-composition-vulkan-color` |
@@ -868,17 +869,22 @@ the installer can be generated with Inno Setup.
 
 ## Manual UI validation
 
-Color Gallery comparison manual check (pending): in the Release Video Editor,
-open a project with a captured Gallery still and a visible Color Viewer frame.
-Select the still and confirm the Viewer stays unchanged until a comparison mode
-is chosen. Check Off, then Split-screen (reference left, current frame right,
-both preserving aspect ratio), and Wipe at the center, both endpoints, by
-dragging the divider, and with the accessible slider. Switch to Edit and back
-to Color; confirm the reference and selected mode return. Select an unavailable
-still and remove the active still; confirm comparison turns Off. Check that
-selection and mode changes do not dirty the project or change the clip,
-playhead, or Undo/Redo state. This interface check remains pending; automated
-coverage is listed above.
+Color comparison manual check (pending): in the Release Video Editor, open a
+project with a captured Gallery still, a saved grade version, and a visible
+Color Viewer frame. Select the still and confirm the Viewer stays unchanged
+until a comparison mode is chosen. Check Off, Split-screen (reference left,
+current frame right, both preserving aspect ratio), and Wipe at the center,
+both endpoints, by dragging the divider, and with the accessible slider. Select
+a saved grade version and press Compare Version: confirm the current graph is
+not applied or modified, the saved graph is on the reference side, Off starts
+Split-screen, and an active Wipe mode and divider position are preserved.
+Switch between Gallery and saved-grade references and confirm only one source
+is active. Switch to Edit and back to Color; confirm a valid comparison returns.
+Select an unavailable still, remove the active still, change clips/projects,
+and remove the active saved version; confirm the grade reference clears when
+required and comparison returns Off. Check that comparison does not dirty the
+project or change the clip, playhead, scopes, or Undo/Redo state. This interface
+check remains pending; automated coverage is listed above.
 
 Inspector expansion regression evidence (2026-10-11, Windows, Qt 6.7.2,
 Video Editor 0.1.0 Release): the earlier dock-geometry checks passed but missed

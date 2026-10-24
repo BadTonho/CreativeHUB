@@ -59,6 +59,10 @@ public:
         PresentDeferral deferral = PresentDeferral::None;
         PresentationReceipt receipt;
         std::string cause;
+        // GPU-resident shader output before the window blit. Populated only
+        // when FrameComparisonOptions::retain_rendered_frame is true; retaining
+        // it does not read pixels back.
+        OpenGlTextureFramePtr rendered_frame;
     };
     // The final argument simulates an unsignaled, unavailable acquisition in
     // native regression tests; production callers retain its default.

@@ -29,6 +29,7 @@ public:
     void clearFrame();
     void setGrayscaleEnabled(bool enabled);
     void setComparisonReferenceImage(QImage image);
+    void setComparisonReferenceFrame(PreviewFramePayload frame);
     void setComparison(creative_suite::composition::FrameComparisonMode mode,
         float reference_fraction);
     [[nodiscard]] bool textureDeliveryAvailable() const noexcept;
@@ -73,8 +74,11 @@ private:
     int video_width_ = 0;
     int video_height_ = 0;
     media::VideoFramePtr pending_frame_;
+    media::VideoFramePtr pending_reference_rgba_frame_;
     creative_suite::composition::OpenGlTextureFramePtr pending_gpu_frame_;
     creative_suite::composition::OpenGlTextureFramePtr current_gpu_frame_;
+    creative_suite::composition::OpenGlTextureFramePtr pending_reference_gpu_frame_;
+    creative_suite::composition::OpenGlTextureFramePtr reference_gpu_frame_;
     quint64 pending_delivery_trace_id_ = 0;
     quint64 uploaded_delivery_trace_id_ = 0;
     quint64 drawn_delivery_trace_id_ = 0;

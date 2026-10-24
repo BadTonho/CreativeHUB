@@ -214,13 +214,9 @@ void VulkanPreviewSurface::setFrame(const PreviewFramePayload& payload,quint64 t
 }
 void VulkanPreviewSurface::setGrayscaleEnabled(bool enabled){if(window_)window_->setGrayscale(enabled);}
 void VulkanPreviewSurface::setComparisonReferenceImage(QImage image) {
-    reference_frame_.reset();
     if (image.isNull()) {
+        reference_frame_.reset();
         if (window_) window_->setComparison({});
-        return;
-    }
-    if (!available()) {
-        emit comparisonUnavailable(QStringLiteral("The Vulkan comparison surface is unavailable."), 0);
         return;
     }
     image=image.convertToFormat(QImage::Format_RGBA8888);
@@ -230,8 +226,28 @@ void VulkanPreviewSurface::setComparisonReferenceImage(QImage image) {
     for(int y=0;y<rgba.height;++y)
         std::memcpy(rgba.rgba_pixels.data()+static_cast<std::size_t>(y)*rgba.stride,
             image.constScanLine(y),static_cast<std::size_t>(rgba.stride));
+    PreviewFramePayload payload;
+    payload.rgba = std::make_shared<const media::VideoFrame>(std::move(rgba));
+    setComparisonReferenceFrame(payload);
+}
+void VulkanPreviewSurface::setComparisonReferenceFrame(
+    const PreviewFramePayload& payload) {
+    reference_frame_.reset();
+    if (!payload.valid()) {
+        setComparison(comparison_mode_, reference_fraction_);
+        return;
+    }
+    if (!available()) {
+        emit comparisonUnavailable(QStringLiteral("The Vulkan comparison surface is unavailable."), 0);
+        return;
+    }
+    if (payload.gpu) {
+        reference_frame_ = payload.gpu;
+        setComparison(comparison_mode_, reference_fraction_);
+        return;
+    }
     c::VulkanFrameCompositor upload(device_);
-    auto result=upload.tryUpload(rgba);
+    auto result=upload.tryUpload(*payload.rgba);
     if(result.status!=c::OpenGlCompositionStatus::Complete || !result.frame) {
         const auto cause=QString::fromStdString(result.cause.empty()
             ? "The Vulkan comparison texture could not be uploaded." : result.cause);

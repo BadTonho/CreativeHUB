@@ -320,6 +320,11 @@
         <translation>Versões de correção</translation>
     </message>
     <message>
+        <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="958"/>
+        <source>Compare Version</source>
+        <translation>Comparar versão</translation>
+    </message>
+    <message>
         <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="909"/>
         <source>Save Version</source>
         <translation>Salvar versão</translation>
@@ -430,8 +435,8 @@
     <message>
         <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="829"/>
         <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="1513"/>
-        <source>No Gallery reference selected</source>
-        <translation>Nenhuma referência da Galeria selecionada</translation>
+        <source>No comparison reference selected</source>
+        <translation>Nenhuma referência de comparação selecionada</translation>
     </message>
     <message>
         <location filename="../../apps/video-editor/src/workspaces/color/ui/color_workspace.cpp" line="1423"/>

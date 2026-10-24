@@ -1103,7 +1103,8 @@ void PlaybackWorker::renderCompositionFrame(
                 segment_frame_count_ - 1);
         }
         auto& metrics = rendering::PreviewPerformanceMetrics::instance();
-        if (cached_composition_frame_.valid() &&
+        if (!color_grade_comparison_request_.has_value() &&
+            cached_composition_frame_.valid() &&
             cached_composition_frame_.delivery_epoch == delivery_epoch_ &&
             cached_composition_frame_.composition_revision == composition_revision_ &&
             cached_composition_generation_ == generation &&
@@ -1270,9 +1271,69 @@ void PlaybackWorker::renderCompositionFrame(
                 Clock::now() - payload_started)
             : std::chrono::nanoseconds::zero();
 
+        const bool current_gpu_composition = last_composition_gpu_;
+        auto measured_composition_elapsed = composition_elapsed;
+        std::optional<rendering::PreviewFramePayload> comparison_payload;
+        if (color_grade_comparison_request_.has_value()) {
+            const auto& request = *color_grade_comparison_request_;
+            const bool target_is_composed = std::any_of(decoded_layers->begin(),
+                decoded_layers->end(), [&request](const DecodedCompositionLayer& layer) {
+                    return layer.clip_id == request.clip_id;
+                });
+            if (target_is_composed) {
+                const auto alternate_started = Clock::now();
+                try {
+                    auto alternate = composeCompositionLayers(*decoded_layers,
+                        should_cancel, nullptr, false, &request);
+                    if (!should_cancel() && !last_composition_cancelled_ &&
+                        !last_composition_busy_ &&
+                        (alternate.has_value() || last_composition_texture_)) {
+                        rendering::PreviewFramePayload result;
+                        if (last_composition_texture_)
+                            result.gpu = std::move(last_composition_texture_);
+                        else
+                            result.rgba = std::make_shared<const media::VideoFrame>(
+                                std::move(*alternate));
+                        result.delivery_epoch = delivery_epoch_;
+                        result.composition_revision = composition_revision_;
+                        result.playback_generation = generation_;
+                        result.timeline_frame = global_frame;
+                        comparison_payload = std::move(result);
+                    } else if (!should_cancel() && !last_composition_cancelled_ &&
+                        !last_composition_busy_ &&
+                        reported_grade_comparison_failure_request_id_ != request.request_id) {
+                        logging::Logger::instance().log(logging::Level::Error,
+                            "color-grade-comparison", "compose_alternate_viewer",
+                            "The alternate Color composition returned no frame.",
+                            {{"request_id", std::to_string(request.request_id)},
+                             {"clip_id", std::to_string(request.clip_id)},
+                             {"version_id", request.version_id},
+                             {"timeline_frame", std::to_string(global_frame)},
+                             {"composition_revision", std::to_string(composition_revision_)}});
+                        reported_grade_comparison_failure_request_id_ = request.request_id;
+                    }
+                } catch (const std::exception& error) {
+                    if (reported_grade_comparison_failure_request_id_ != request.request_id) {
+                        logging::Logger::instance().log(logging::Level::Error,
+                            "color-grade-comparison", "compose_alternate_viewer",
+                            error.what(), {{"request_id", std::to_string(request.request_id)},
+                                {"clip_id", std::to_string(request.clip_id)},
+                                {"version_id", request.version_id},
+                                {"timeline_frame", std::to_string(global_frame)},
+                                {"composition_revision", std::to_string(composition_revision_)}});
+                        reported_grade_comparison_failure_request_id_ = request.request_id;
+                    }
+                }
+                if (collect_slow_frame) {
+                    measured_composition_elapsed += std::chrono::duration_cast<
+                        std::chrono::nanoseconds>(Clock::now() - alternate_started);
+                }
+            }
+        }
+
         if (collect_slow_frame) {
             rendering::SlowFrameSample sample;
-            sample.gpu_composition = last_composition_gpu_;
+            sample.gpu_composition = current_gpu_composition;
             sample.texture_delivery = bool(payload.gpu);
             sample.texture_pool_bytes = gpu_texture_budget_->bytes();
             sample.playback_generation = generation_;
@@ -1301,7 +1362,7 @@ void PlaybackWorker::renderCompositionFrame(
             sample.decode_nanoseconds = static_cast<std::uint64_t>(
                 std::max<std::int64_t>(0, decode_elapsed.count()));
             sample.composition_nanoseconds = static_cast<std::uint64_t>(
-                std::max<std::int64_t>(0, composition_elapsed.count()));
+                std::max<std::int64_t>(0, measured_composition_elapsed.count()));
             sample.payload_nanoseconds = static_cast<std::uint64_t>(
                 std::max<std::int64_t>(0, payload_elapsed.count()));
             sample.composition_adapter_nanoseconds =
@@ -1422,6 +1483,12 @@ void PlaybackWorker::renderCompositionFrame(
             ? metrics.createFrameDeliveryTrace(generation_, global_frame)
             : 0U;
         publishPreviewFrame(std::move(payload), frame_index, generation_, trace_id);
+        if (comparison_payload.has_value() && color_grade_comparison_request_) {
+            const auto& request = *color_grade_comparison_request_;
+            emit colorGradeComparisonFrameReady(request.request_id,
+                request.project_generation, request.clip_id, request.version_id,
+                std::move(*comparison_payload));
+        }
     } catch (const media::MediaError& error) {
         reportFailure(error, "compose", frame_index);
     } catch (const std::exception& error) {
@@ -1570,6 +1637,19 @@ void PlaybackWorker::requestScopeFrame(quint64 request_id, qint64 timeline_frame
     pending_scope_readback_ = PendingScopeReadback{gpu_compositor_.get(),
         submitted.ticket, texture, request_id, generation, requested_revision, timeline_frame};
     scope_readback_timer_->start();
+}
+
+void PlaybackWorker::setColorGradeComparisonRequest(
+    std::optional<PlaybackColorGradeComparisonRequest> request) {
+    if (request.has_value() && (request->request_id == 0 || request->clip_id == 0 ||
+        request->version_id.empty() || !color::validate(request->graph))) {
+        request.reset();
+    }
+    const auto previous_id = color_grade_comparison_request_
+        ? color_grade_comparison_request_->request_id : 0;
+    const auto next_id = request ? request->request_id : 0;
+    if (previous_id != next_id) reported_grade_comparison_failure_request_id_ = 0;
+    color_grade_comparison_request_ = std::move(request);
 }
 
 void PlaybackWorker::requestColorInputFrame(quint64 request_id,
@@ -3373,17 +3453,28 @@ PlaybackWorker::decodeCompositionLayers(
     for (const auto& request : requests) {
         auto& composition = composition_sessions_[request.session_index];
         const auto& spec = composition.spec;
-        const bool color_cpu_graph = spec.color_graph.has_value() &&
-            !color::linearEffectStack(*spec.color_graph).has_value();
+        const bool grade_comparison_target = color_grade_comparison_request_ &&
+            color_grade_comparison_request_->clip_id == spec.clip_id;
+        const auto* comparison_graph = grade_comparison_target
+            ? &color_grade_comparison_request_->graph : nullptr;
+        const bool color_cpu_graph =
+            (spec.color_graph.has_value() &&
+             !color::linearEffectStack(*spec.color_graph).has_value()) ||
+            (comparison_graph != nullptr &&
+             !color::linearEffectStack(*comparison_graph).has_value());
         if (request.local_frame < 0 ||
             request.local_frame >= spec.segment_frame_count) {
             continue;
         }
         if (spec.kind == timeline::ClipKind::Adjustment) {
             const auto transform = timeline::evaluateTransform(spec.transform, spec.keyframes, request.local_frame);
-            if (!rendering::adjustmentRequiresProcessing(
+            const bool current_adjustment = rendering::adjustmentRequiresProcessing(
                     transform, spec.effects,
-                    spec.color_graph ? &*spec.color_graph : nullptr)) continue;
+                    spec.color_graph ? &*spec.color_graph : nullptr);
+            const bool comparison_adjustment = comparison_graph != nullptr &&
+                rendering::adjustmentRequiresProcessing(transform, spec.effects,
+                    comparison_graph);
+            if (!current_adjustment && !comparison_adjustment) continue;
             DecodedCompositionLayer adjustment;
             adjustment.kind = timeline::ClipKind::Adjustment;
             adjustment.transform = transform;
@@ -3635,7 +3726,8 @@ std::optional<media::VideoFrame> PlaybackWorker::composeCompositionLayers(
     const std::vector<DecodedCompositionLayer>& decoded_layers,
     const media::VideoPlaybackSession::CancellationPredicate& should_cancel,
     rendering::FrameCompositionTimings* timings,
-    bool force_full_resolution) {
+    bool force_full_resolution,
+    const PlaybackColorGradeComparisonRequest* grade_override) {
     using namespace creative_suite::composition;
     last_composition_gpu_ = false;
     last_composition_cancelled_ = false;
@@ -3660,27 +3752,81 @@ std::optional<media::VideoFrame> PlaybackWorker::composeCompositionLayers(
 
     std::vector<rendering::CompositionLayer> layers;
     layers.reserve(decoded_layers.size());
+    std::vector<std::optional<color::Graph>> effective_graphs;
+    effective_graphs.reserve(decoded_layers.size());
+    std::vector<std::vector<creative_suite::effects::EffectInstance>>
+        grade_override_effect_storage;
+    grade_override_effect_storage.reserve(decoded_layers.size());
+    std::vector<VideoFramePtr> grade_override_frames(decoded_layers.size());
     auto& metrics = rendering::PreviewPerformanceMetrics::instance();
-    for (const auto& decoded : decoded_layers) {
+    bool needs_adjustment_composition = adjustment_cpu_frame_;
+    for (std::size_t index = 0; index < decoded_layers.size(); ++index) {
+        const auto& decoded = decoded_layers[index];
+        const auto& spec = composition_sessions_[decoded.composition_session_index].spec;
+        auto graph = spec.color_graph;
+        const bool overridden = grade_override != nullptr &&
+            grade_override->clip_id == decoded.clip_id;
+        if (overridden) graph = grade_override->graph;
+        effective_graphs.push_back(graph);
+
         rendering::CompositionLayer layer{
             decoded.frame.get(),
             decoded.transform,
             decoded.alpha_coverage};
-        layer.effect_stack = composition_sessions_[decoded.composition_session_index].spec.effects;
+        const auto linear_effects = graph
+            ? color::linearEffectStack(*graph)
+            : std::optional<std::vector<creative_suite::effects::EffectInstance>>{};
+        layer.effect_stack = spec.effects;
+        if (overridden && linear_effects.has_value()) {
+            grade_override_effect_storage.push_back(*linear_effects);
+            layer.effect_stack = grade_override_effect_storage.back();
+        }
         layer.native_frame = decoded.native_frame;
         layer.texture_frame = decoded.texture_frame;
+
+        if (overridden && decoded.kind != timeline::ClipKind::Adjustment) {
+            if (linear_effects.has_value()) {
+                const auto raw_frame = decoded.color_input_frame &&
+                    usableRgbaFrame(*decoded.color_input_frame)
+                    ? decoded.color_input_frame : decoded.frame;
+                layer.frame = raw_frame.get();
+                if (decoded.color_input_texture && decoded.color_input_texture->valid())
+                    layer.texture_frame = decoded.color_input_texture;
+            } else {
+                if (!decoded.color_input_frame ||
+                    !usableRgbaFrame(*decoded.color_input_frame)) {
+                    throw media::MediaError(
+                        "The saved Color version input is unavailable as RGBA.");
+                }
+                auto evaluated = color::evaluate(*graph, *decoded.color_input_frame,
+                    should_cancel);
+                if (!evaluated || should_cancel())
+                    throw media::MediaError(
+                        "The saved Color version could not produce an alternate frame.");
+                grade_override_frames[index] =
+                    std::make_shared<const media::VideoFrame>(std::move(*evaluated));
+                layer.frame = grade_override_frames[index].get();
+                layer.native_frame.reset();
+                layer.texture_frame.reset();
+                layer.effect_stack = {};
+            }
+        }
+        if (decoded.kind == timeline::ClipKind::Adjustment &&
+            rendering::adjustmentRequiresProcessing(decoded.transform,
+                layer.effect_stack, graph ? &*graph : nullptr)) {
+            needs_adjustment_composition = true;
+        }
         layers.push_back(std::move(layer));
     }
-    if (adjustment_cpu_frame_) {
+    if (needs_adjustment_composition) {
         std::vector<rendering::TimelineCompositionStep> steps;
         steps.reserve(layers.size());
         for (std::size_t index = 0; index < layers.size(); ++index)
         {
-            const auto& spec = composition_sessions_[decoded_layers[index].composition_session_index].spec;
             rendering::TimelineCompositionStep step{
                 layers[index],
                 decoded_layers[index].kind == timeline::ClipKind::Adjustment};
-            if (step.adjustment) step.color_graph = spec.color_graph;
+            if (step.adjustment) step.color_graph = effective_graphs[index];
             steps.push_back(std::move(step));
         }
         const auto compose_on_cpu = [&]() {
@@ -3700,7 +3846,7 @@ std::optional<media::VideoFrame> PlaybackWorker::composeCompositionLayers(
             auto recovered = decodeCompositionLayers(current_timeline_frame_, should_cancel);
             if (!recovered) return {};
             return composeCompositionLayers(*recovered, should_cancel, timings,
-                                            force_full_resolution);
+                                            force_full_resolution, grade_override);
         };
         const bool gpu_adjustment_available = gpu_surface_ ||
             creative_suite::composition::sessionGraphicsBackend() == creative_suite::composition::GraphicsBackend::Vulkan;
@@ -3896,7 +4042,7 @@ std::optional<media::VideoFrame> PlaybackWorker::composeCompositionLayers(
         auto recovered = decodeCompositionLayers(current_timeline_frame_, should_cancel);
         if (!recovered) return {};
         return composeCompositionLayers(*recovered, should_cancel, timings,
-                                        force_full_resolution);
+                                        force_full_resolution, grade_override);
     }
     if (gpu_composition_enabled_ && timings) adapter_started = Clock::now();
     // Only the CPU path prepares and reports CPU text raster fast paths.

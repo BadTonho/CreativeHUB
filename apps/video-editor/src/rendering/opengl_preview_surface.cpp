@@ -44,6 +44,7 @@ uniform bool u_grayscale;
 uniform int u_comparison_mode;
 uniform float u_reference_fraction;
 uniform bool u_source_flip_y;
+uniform bool u_reference_flip_y;
 uniform vec2 u_video_size;
 uniform vec2 u_reference_size;
 uniform vec4 u_surround;
@@ -58,7 +59,9 @@ vec4 sample_reference(vec2 canvas_uv) {
     vec2 point=canvas_uv*u_video_size;
     if(any(lessThan(point,offset)) || any(greaterThanEqual(point,offset+fitted)))
         return u_surround;
-    return texture(u_reference,(point-offset)/fitted);
+    vec2 reference_uv=(point-offset)/fitted;
+    if(u_reference_flip_y)reference_uv.y=1.0-reference_uv.y;
+    return texture(u_reference,reference_uv);
 }
 
 void main() {
@@ -78,7 +81,8 @@ void main() {
             color=u_surround;
         else {
             vec2 source_uv=(point-offset)/fitted;
-            color=left_panel?texture(u_reference,source_uv):texture(u_texture,
+            vec2 reference_uv=vec2(source_uv.x,u_reference_flip_y?1.0-source_uv.y:source_uv.y);
+            color=left_panel?texture(u_reference,reference_uv):texture(u_texture,
                 vec2(source_uv.x,u_source_flip_y?1.0-source_uv.y:source_uv.y));
         }
         if(abs(canvas_uv.x-0.5)<1.5*fwidth(canvas_uv.x))color=vec4(0.78,0.82,0.88,1.0);
@@ -230,6 +234,18 @@ void OpenGLPreviewSurface::setGrayscaleEnabled(bool enabled) {
 
 void OpenGLPreviewSurface::setComparisonReferenceImage(QImage image) {
     reference_image_ = image.isNull() ? QImage{} : image.convertToFormat(QImage::Format_RGBA8888);
+    pending_reference_gpu_frame_.reset();
+    reference_gpu_frame_.reset();
+    pending_reference_rgba_frame_.reset();
+    reference_pending_ = true;
+    reference_available_ = false;
+    update();
+}
+
+void OpenGLPreviewSurface::setComparisonReferenceFrame(PreviewFramePayload frame) {
+    reference_image_ = {};
+    pending_reference_gpu_frame_ = frame.gpu;
+    pending_reference_rgba_frame_ = frame.rgba;
     reference_pending_ = true;
     reference_available_ = false;
     update();
@@ -325,6 +341,22 @@ void OpenGLPreviewSurface::paintGL() {
             return;
         }
     }
+    bool reference_gpu_in_use = false;
+    if (reference_available_ && reference_gpu_frame_) {
+        std::string reference_cause;
+        std::int64_t reference_code = 0;
+        {
+            PreviewPerformanceScope sync_timing(metrics, PreviewTiming::GpuFenceWaitSubmission);
+            reference_gpu_in_use = reference_gpu_frame_->beginUse(
+                context(), reference_cause, reference_code);
+        }
+        if (!reference_gpu_in_use) {
+            reference_gpu_frame_.reset();
+            reference_available_ = false;
+            comparison_mode_ = FrameComparisonMode::Off;
+            emit comparisonUnavailable(QString::fromStdString(reference_cause), reference_code);
+        }
+    }
     functions_->glClear(GL_COLOR_BUFFER_BIT);
 
     shader_program_->bind();
@@ -336,6 +368,8 @@ void OpenGLPreviewSurface::paintGL() {
     shader_program_->setUniformValue("u_reference_fraction", reference_fraction_);
     shader_program_->setUniformValue("u_source_flip_y",
         current_gpu_frame_ && current_gpu_frame_->bottomLeftOrigin());
+    shader_program_->setUniformValue("u_reference_flip_y",
+        reference_gpu_frame_ && reference_gpu_frame_->bottomLeftOrigin());
     shader_program_->setUniformValue("u_video_size",
         QVector2D(float(video_width_), float(video_height_)));
     shader_program_->setUniformValue("u_reference_size",
@@ -345,7 +379,9 @@ void OpenGLPreviewSurface::paintGL() {
     functions_->glActiveTexture(GL_TEXTURE0);
     functions_->glBindTexture(GL_TEXTURE_2D, current_gpu_frame_ ? current_gpu_frame_->texture() : texture_);
     functions_->glActiveTexture(GL_TEXTURE1);
-    functions_->glBindTexture(GL_TEXTURE_2D, reference_available_ ? reference_texture_ : texture_);
+    functions_->glBindTexture(GL_TEXTURE_2D, reference_available_
+        ? (reference_gpu_frame_ ? reference_gpu_frame_->texture() : reference_texture_)
+        : texture_);
     functions_->glActiveTexture(GL_TEXTURE0);
     functions_->glBindVertexArray(vertex_array_);
     functions_->glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
@@ -360,6 +396,19 @@ void OpenGLPreviewSurface::paintGL() {
         if (!current_gpu_frame_->endUse(context(), cause, code)) {
             failTextureDelivery(QString::fromStdString(cause), code);
             return;
+        }
+    }
+    if (reference_gpu_in_use) {
+        std::string reference_cause;
+        std::int64_t reference_code = 0;
+        {
+            PreviewPerformanceScope sync_timing(metrics, PreviewTiming::GpuConsumerFenceSubmission);
+            if (!reference_gpu_frame_->endUse(context(), reference_cause, reference_code)) {
+                reference_gpu_frame_.reset();
+                reference_available_ = false;
+                comparison_mode_ = FrameComparisonMode::Off;
+                emit comparisonUnavailable(QString::fromStdString(reference_cause), reference_code);
+            }
         }
     }
     metrics.recordGpuPresentedFrame();
@@ -377,7 +426,19 @@ void OpenGLPreviewSurface::paintGL() {
 bool OpenGLPreviewSurface::uploadPendingReference() {
     if (!reference_pending_ || functions_ == nullptr || !initialized_) return true;
     reference_pending_ = false;
-    if (reference_image_.isNull()) {
+    if (pending_reference_gpu_frame_ && pending_reference_gpu_frame_->valid()) {
+        reference_gpu_frame_ = std::move(pending_reference_gpu_frame_);
+        pending_reference_rgba_frame_.reset();
+        if (reference_texture_ != 0) functions_->glDeleteTextures(1, &reference_texture_);
+        reference_texture_ = 0;
+        reference_width_ = reference_gpu_frame_->width();
+        reference_height_ = reference_gpu_frame_->height();
+        reference_available_ = true;
+        update();
+        return true;
+    }
+    reference_gpu_frame_.reset();
+    if (reference_image_.isNull() && !pending_reference_rgba_frame_) {
         if (reference_texture_ != 0) functions_->glDeleteTextures(1, &reference_texture_);
         reference_texture_ = 0;
         reference_width_ = reference_height_ = 0;
@@ -389,7 +450,11 @@ bool OpenGLPreviewSurface::uploadPendingReference() {
         emit comparisonUnavailable(QStringLiteral("OpenGL could not allocate the comparison texture."), -1);
         return true;
     }
-    const QImage image = reference_image_.convertToFormat(QImage::Format_RGBA8888);
+    const auto cpu_frame = pending_reference_rgba_frame_;
+    const QImage image = cpu_frame
+        ? QImage(cpu_frame->rgba_pixels.data(), cpu_frame->width, cpu_frame->height,
+            cpu_frame->stride, QImage::Format_RGBA8888)
+        : reference_image_.convertToFormat(QImage::Format_RGBA8888);
     functions_->glBindTexture(GL_TEXTURE_2D, reference_texture_);
     functions_->glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
     functions_->glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
@@ -408,6 +473,7 @@ bool OpenGLPreviewSurface::uploadPendingReference() {
     }
     reference_width_ = image.width();
     reference_height_ = image.height();
+    pending_reference_rgba_frame_.reset();
     reference_available_ = true;
     update();
     return true;
@@ -699,6 +765,9 @@ void OpenGLPreviewSurface::failTextureDelivery(const QString& message, qint64 er
 void OpenGLPreviewSurface::releaseResources() {
     pending_gpu_frame_.reset();
     current_gpu_frame_.reset();
+    pending_reference_gpu_frame_.reset();
+    reference_gpu_frame_.reset();
+    pending_reference_rgba_frame_.reset();
     if (context() == nullptr || functions_ == nullptr) return;
 
     makeCurrent();

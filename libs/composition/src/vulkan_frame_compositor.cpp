@@ -1608,9 +1608,13 @@ VulkanDevice::PresentationResult VulkanDevice::presentFrame(QWindow* window,cons
         p.instance.presentAboutToBeQueued(window);const auto result=vkQueuePresentKHR(p.queue,&present);p.instance.presentQueued(window);
         if(p.serial)check(vkQueueWaitIdle(p.queue),"Wait for serial Vulkan presentation.");
         PresentationReceipt receipt;receipt.owner_=weak_from_this();receipt.token_=swap.acquired[acquire_slot];
+        OpenGlTextureFramePtr rendered_frame;
+        if(comparison.retain_rendered_frame)
+            rendered_frame=OpenGlTextureFramePtr(new OpenGlTextureFrame(display));
         if(result==VK_ERROR_OUT_OF_DATE_KHR || result==VK_SUBOPTIMAL_KHR){check(vkDeviceWaitIdle(p.device),"Wait before Vulkan surface recreation.");p.destroy(swap);}
         else check(result,"Present Vulkan image.");
-        return {PresentStatus::Submitted,PresentDeferral::None,std::move(receipt)};
+        return {PresentStatus::Submitted,PresentDeferral::None,std::move(receipt),{},
+            std::move(rendered_frame)};
     }catch(const Failure& error){
         try{retire_failed_acquisition();}catch(...){impl_->lost=true;}
         if(error.status==Status::Busy && !impl_->lost)return {PresentStatus::Deferred,PresentDeferral::ContextBusy};

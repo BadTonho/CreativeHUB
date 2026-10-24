@@ -79,6 +79,8 @@ int main(int argc, char* argv[]) {
             QStringLiteral("Ativar qualificador tonal") ||
         QCoreApplication::translate("ColorWorkspace", "Matte preview") !=
             QStringLiteral("Prévia da máscara") ||
+        QCoreApplication::translate("ColorWorkspace", "Compare Version") !=
+            QStringLiteral("Comparar vers\u00e3o") ||
         QCoreApplication::translate("ColorWorkspace", "Grade Versions") !=
             QStringLiteral("Versões de correção") ||
         QCoreApplication::translate("ColorWorkspace", "Copy Grade") !=
@@ -95,6 +97,8 @@ int main(int argc, char* argv[]) {
             QStringLiteral("Cortina") ||
         QCoreApplication::translate("ColorWorkspace", "Wipe position") !=
             QStringLiteral("Posição da cortina") ||
+        QCoreApplication::translate("ColorWorkspace", "No comparison reference selected") !=
+            QStringLiteral("Nenhuma refer\u00eancia de compara\u00e7\u00e3o selecionada") ||
         QCoreApplication::translate("ColorWorkspace", "Comparison unavailable") !=
             QStringLiteral("Comparação indisponível") ||
         QCoreApplication::translate("MainWindow",

@@ -826,7 +826,7 @@ ColorWorkspace::ColorWorkspace(QWidget* parent) : QWidget(parent) {
     comparison_wipe_slider_->setEnabled(false);
     comparison_layout->addWidget(comparison_wipe_slider_);
     comparison_reference_label_ = new QLabel(
-        QCoreApplication::translate("ColorWorkspace", "No Gallery reference selected"),
+        QCoreApplication::translate("ColorWorkspace", "No comparison reference selected"),
         comparison_bar);
     comparison_reference_label_->setObjectName("colorGalleryReferenceName");
     comparison_reference_label_->setMinimumWidth(80);
@@ -954,6 +954,11 @@ ColorWorkspace::ColorWorkspace(QWidget* parent) : QWidget(parent) {
         QCoreApplication::translate("ColorWorkspace", "Apply Version"),
         grade_versions_panel_);
     apply_grade_version_button_->setObjectName("colorApplyGradeVersionButton");
+    compare_grade_version_button_ = new QPushButton(
+        QCoreApplication::translate("ColorWorkspace", "Compare Version"),
+        grade_versions_panel_);
+    compare_grade_version_button_->setObjectName("colorCompareGradeVersionButton");
+    compare_grade_version_button_->setEnabled(false);
     rename_grade_version_button_ = new QPushButton(
         QCoreApplication::translate("ColorWorkspace", "Rename Version"),
         grade_versions_panel_);
@@ -963,6 +968,7 @@ ColorWorkspace::ColorWorkspace(QWidget* parent) : QWidget(parent) {
         grade_versions_panel_);
     remove_grade_version_button_->setObjectName("colorRemoveGradeVersionButton");
     grade_version_actions->addWidget(apply_grade_version_button_);
+    grade_version_actions->addWidget(compare_grade_version_button_);
     grade_version_actions->addWidget(rename_grade_version_button_);
     grade_version_actions->addWidget(remove_grade_version_button_);
     grade_versions_layout->addLayout(grade_version_actions);
@@ -972,6 +978,8 @@ ColorWorkspace::ColorWorkspace(QWidget* parent) : QWidget(parent) {
         this, [this] { saveGradeVersion(); });
     connect(apply_grade_version_button_, &QPushButton::clicked,
         this, [this] { applySelectedGradeVersion(); });
+    connect(compare_grade_version_button_, &QPushButton::clicked,
+        this, [this] { compareSelectedGradeVersion(); });
     connect(rename_grade_version_button_, &QPushButton::clicked,
         this, [this] { renameSelectedGradeVersion(); });
     connect(remove_grade_version_button_, &QPushButton::clicked,
@@ -979,6 +987,7 @@ ColorWorkspace::ColorWorkspace(QWidget* parent) : QWidget(parent) {
     connect(grade_versions_, &QListWidget::currentRowChanged, this, [this](int row) {
         const bool selected = row >= 0;
         apply_grade_version_button_->setEnabled(selected);
+        compare_grade_version_button_->setEnabled(selected);
         rename_grade_version_button_->setEnabled(selected);
         remove_grade_version_button_->setEnabled(selected);
     });
@@ -993,6 +1002,8 @@ ColorWorkspace::ColorWorkspace(QWidget* parent) : QWidget(parent) {
     });
     connect(stills_, &QListWidget::currentRowChanged, this,
         [this](int) { handleGallerySelectionChanged(); });
+    connect(stills_, &QListWidget::itemClicked, this,
+        [this](QListWidgetItem*) { handleGallerySelectionChanged(); });
     connect(comparison_mode_, qOverload<int>(&QComboBox::currentIndexChanged),
         this, [this](int) { applyPreviewComparison(); });
     connect(comparison_wipe_slider_, &QSlider::valueChanged, this,
@@ -1167,7 +1178,14 @@ void ColorWorkspace::setPreviewWidget(QWidget* preview) {
                     QCoreApplication::translate("ColorWorkspace", "Comparison unavailable"));
                 applyPreviewComparison();
             });
-        preview_widget_->setComparisonReferenceImage(reference_image_);
+        if (reference_source_ == ReferenceSource::Gallery)
+            preview_widget_->setComparisonReferenceImage(reference_image_);
+        else if (reference_source_ == ReferenceSource::GradeVersion)
+            preview_widget_->setComparisonReferenceFrame(latest_grade_comparison_frame_);
+        else {
+            preview_widget_->setComparisonReferenceImage({});
+            preview_widget_->setComparisonReferenceFrame({});
+        }
         applyPreviewComparison();
     }
 }
@@ -1175,6 +1193,11 @@ void ColorWorkspace::setPreviewWidget(QWidget* preview) {
 QWidget* ColorWorkspace::takePreviewWidget() {
     auto* result = preview_;
     if (preview_widget_ != nullptr) {
+        if (grade_comparison_request_active_ && grade_comparison_request_handler_)
+            grade_comparison_request_handler_(std::nullopt);
+        grade_comparison_request_active_ = false;
+        latest_grade_comparison_frame_ = {};
+        preview_widget_->setComparisonReferenceFrame({});
         preview_widget_->setComparison(creative_suite::composition::FrameComparisonMode::Off,
             float(comparison_wipe_slider_->value()) / 100.0F);
         disconnect(preview_widget_, &PreviewWidget::wipePositionDragged, this, nullptr);
@@ -1188,13 +1211,7 @@ QWidget* ColorWorkspace::takePreviewWidget() {
 
 void ColorWorkspace::setActive(bool active) {
     active_ = active;
-    if (!active_) {
-        if (preview_widget_ != nullptr)
-            preview_widget_->setComparison(creative_suite::composition::FrameComparisonMode::Off,
-                float(comparison_wipe_slider_->value()) / 100.0F);
-    } else {
-        applyPreviewComparison();
-    }
+    applyPreviewComparison();
     ++waveform_generation_;
     if (active) waveform_timer_->start();
     else {
@@ -1212,6 +1229,9 @@ void ColorWorkspace::setActive(bool active) {
 
 void ColorWorkspace::setClips(std::vector<ClipItem> clips, timeline::ClipId selected,
     color::Graph graph) {
+    const auto previous_selected_clip = selected_clip_;
+    if (grade_comparison_reference_ && selected != grade_comparison_reference_->clip_id)
+        clearGradeComparisonReference(true);
     if (selected_clip_ != selected || graph_ != graph) {
         latest_scope_source_ = {};
         latest_curves_input_ = {};
@@ -1258,9 +1278,34 @@ void ColorWorkspace::setClips(std::vector<ClipItem> clips, timeline::ClipId sele
     save_grade_version_button_->setEnabled(selected_clip_ != 0 && color::validate(graph_));
     const bool has_version = grade_versions_->currentRow() >= 0;
     apply_grade_version_button_->setEnabled(has_version);
+    compare_grade_version_button_->setEnabled(has_version);
     rename_grade_version_button_->setEnabled(has_version);
     remove_grade_version_button_->setEnabled(has_version);
+    if (grade_comparison_reference_ && previous_selected_clip == selected) {
+        const auto active_version = std::find_if(selected_grade_versions_.begin(),
+            selected_grade_versions_.end(), [this](const auto& version) {
+                return version.id == grade_comparison_reference_->version_id;
+            });
+        if (active_version == selected_grade_versions_.end()) {
+            clearGradeComparisonReference(true);
+        } else {
+            const bool graph_changed = grade_comparison_reference_->graph != active_version->graph;
+            grade_comparison_reference_->graph = active_version->graph;
+            grade_comparison_reference_->version_id = active_version->id;
+            const auto name = QString::fromUtf8(active_version->name.data(),
+                static_cast<qsizetype>(active_version->name.size()));
+            comparison_reference_label_->setText(
+                QCoreApplication::translate("ColorWorkspace", "Reference: %1").arg(name));
+            if (graph_changed && grade_comparison_request_active_) {
+                if (grade_comparison_request_handler_)
+                    grade_comparison_request_handler_(std::nullopt);
+                grade_comparison_request_active_ = false;
+                latest_grade_comparison_frame_ = {};
+            }
+        }
+    }
     refreshNodes(old_selected);
+    applyPreviewComparison();
 }
 
 void ColorWorkspace::setClipSelectedHandler(std::function<void(timeline::ClipId)> handler) {
@@ -1308,6 +1353,12 @@ void ColorWorkspace::setColorInputFrameRequestHandler(
     std::function<void(quint64, timeline::ClipId, color::NodeId, qint64,
         quint64, quint64, quint64, color::Graph)> handler) {
     color_input_frame_request_handler_ = std::move(handler);
+}
+
+void ColorWorkspace::setGradeComparisonRequestHandler(
+    std::function<void(std::optional<playback::PlaybackColorGradeComparisonRequest>)> handler) {
+    grade_comparison_request_handler_ = std::move(handler);
+    applyPreviewComparison();
 }
 
 void ColorWorkspace::acceptScopeFrame(quint64 request_id, playback::VideoFramePtr frame,
@@ -1370,6 +1421,27 @@ void ColorWorkspace::acceptColorInputFrame(quint64 request_id,
     refreshMattePreview();
 }
 
+void ColorWorkspace::acceptGradeComparisonFrame(quint64 request_id,
+    quint64 project_generation, timeline::ClipId clip_id,
+    const std::string& version_id, rendering::PreviewFramePayload frame) {
+    if (!grade_comparison_request_active_ || !grade_comparison_reference_ ||
+        request_id == 0 || request_id != grade_comparison_reference_->request_id ||
+        project_generation != gallery_project_generation_ ||
+        clip_id != grade_comparison_reference_->clip_id ||
+        version_id != grade_comparison_reference_->version_id ||
+        reference_source_ != ReferenceSource::GradeVersion || !active_ ||
+        comparison_mode_->currentData().toInt() ==
+            int(creative_suite::composition::FrameComparisonMode::Off)) return;
+    if (latest_grade_comparison_frame_.valid() && frame.valid() &&
+        latest_grade_comparison_frame_.delivery_epoch == frame.delivery_epoch &&
+        latest_grade_comparison_frame_.composition_revision == frame.composition_revision &&
+        latest_grade_comparison_frame_.playback_generation == frame.playback_generation &&
+        latest_grade_comparison_frame_.timeline_frame > frame.timeline_frame) return;
+    latest_grade_comparison_frame_ = std::move(frame);
+    if (preview_widget_ != nullptr)
+        preview_widget_->setComparisonReferenceFrame(latest_grade_comparison_frame_);
+}
+
 void ColorWorkspace::setGalleryStills(std::vector<StillItem> stills,
     quint64 project_generation) {
     const bool project_changed = gallery_project_generation_ != project_generation;
@@ -1398,8 +1470,12 @@ void ColorWorkspace::setGalleryStills(std::vector<StillItem> stills,
         }
         if (selected_row >= 0) stills_->setCurrentRow(selected_row);
     }
-    if (project_changed) clearGalleryReference(true);
-    handleGallerySelectionChanged();
+    if (project_changed) {
+        clearGradeComparisonReference(true);
+        clearGalleryReference(true);
+    }
+    if (reference_source_ != ReferenceSource::GradeVersion)
+        handleGallerySelectionChanged();
 }
 
 void ColorWorkspace::setGalleryReferenceRequestHandler(
@@ -1410,7 +1486,7 @@ void ColorWorkspace::setGalleryReferenceRequestHandler(
 void ColorWorkspace::acceptGalleryReferenceImage(quint64 request_id,
     const QString& still_id, QImage image) {
     if (request_id == 0 || request_id != active_gallery_reference_request_id_ ||
-        still_id != reference_still_id_) return;
+        still_id != reference_still_id_ || reference_source_ != ReferenceSource::Gallery) return;
     active_gallery_reference_request_id_ = 0;
     if (image.isNull()) {
         reference_image_ = {};
@@ -1437,8 +1513,18 @@ void ColorWorkspace::acceptGalleryReferenceImage(quint64 request_id,
 void ColorWorkspace::handleGallerySelectionChanged() {
     const auto* item = stills_->currentItem();
     if (item == nullptr) {
-        if (!reference_still_id_.isEmpty()) clearGalleryReference(true);
+        if (reference_source_ == ReferenceSource::Gallery || !reference_still_id_.isEmpty())
+            clearGalleryReference(true);
         return;
+    }
+    if (reference_source_ != ReferenceSource::Gallery) {
+        clearGradeComparisonReference(false);
+        reference_source_ = ReferenceSource::Gallery;
+        active_gallery_reference_request_id_ = 0;
+        if (preview_widget_ != nullptr) {
+            preview_widget_->setComparisonReferenceFrame({});
+            preview_widget_->setComparisonReferenceImage({});
+        }
     }
     const QString id = item->data(Qt::UserRole).toString();
     const QString name = item->data(Qt::UserRole + 2).toString();
@@ -1450,6 +1536,7 @@ void ColorWorkspace::handleGallerySelectionChanged() {
         reference_image_ = {};
         if (preview_widget_ != nullptr) {
             preview_widget_->setComparisonReferenceImage({});
+            preview_widget_->setComparisonReferenceFrame({});
             preview_widget_->setComparison(
                 creative_suite::composition::FrameComparisonMode::Off, 0.5F);
         }
@@ -1470,7 +1557,10 @@ void ColorWorkspace::handleGallerySelectionChanged() {
             comparison_reference_label_->setText(
                 QCoreApplication::translate("ColorWorkspace", "Reference: %1").arg(name));
             comparison_mode_->setEnabled(true);
+            if (preview_widget_ != nullptr)
+                preview_widget_->setComparisonReferenceImage(reference_image_);
         }
+        applyPreviewComparison();
         return;
     }
     reference_still_id_ = id;
@@ -1481,6 +1571,7 @@ void ColorWorkspace::handleGallerySelectionChanged() {
     if (active_gallery_reference_request_id_ == 0)
         active_gallery_reference_request_id_ = next_gallery_reference_request_id_++;
     if (preview_widget_ != nullptr) preview_widget_->setComparisonReferenceImage({});
+    if (preview_widget_ != nullptr) preview_widget_->setComparisonReferenceFrame({});
     comparison_mode_->setEnabled(false);
     comparison_wipe_slider_->setEnabled(false);
     comparison_reference_label_->setText(
@@ -1498,8 +1589,11 @@ void ColorWorkspace::clearGalleryReference(bool reset_mode) {
     reference_still_id_.clear();
     reference_still_name_.clear();
     reference_image_ = {};
+    if (reference_source_ == ReferenceSource::Gallery)
+        reference_source_ = ReferenceSource::None;
     if (preview_widget_ != nullptr) {
         preview_widget_->setComparisonReferenceImage({});
+        preview_widget_->setComparisonReferenceFrame({});
         preview_widget_->setComparison(creative_suite::composition::FrameComparisonMode::Off,
             float(comparison_wipe_slider_->value()) / 100.0F);
     }
@@ -1510,18 +1604,117 @@ void ColorWorkspace::clearGalleryReference(bool reset_mode) {
     comparison_mode_->setEnabled(false);
     comparison_wipe_slider_->setEnabled(false);
     comparison_reference_label_->setText(
-        QCoreApplication::translate("ColorWorkspace", "No Gallery reference selected"));
+        QCoreApplication::translate("ColorWorkspace", "No comparison reference selected"));
 }
 
 void ColorWorkspace::applyPreviewComparison() {
     const auto mode = static_cast<creative_suite::composition::FrameComparisonMode>(
         comparison_mode_->currentData().toInt());
     const float fraction = float(comparison_wipe_slider_->value()) / 100.0F;
-    comparison_wipe_slider_->setEnabled(active_ && !reference_image_.isNull() &&
+    const bool gallery_reference = reference_source_ == ReferenceSource::Gallery &&
+        !reference_image_.isNull();
+    const bool grade_reference = reference_source_ == ReferenceSource::GradeVersion &&
+        grade_comparison_reference_.has_value();
+    const bool has_reference = gallery_reference || grade_reference;
+    const bool visible = active_ && has_reference &&
+        mode != creative_suite::composition::FrameComparisonMode::Off;
+    comparison_mode_->setEnabled(has_reference);
+    comparison_wipe_slider_->setEnabled(visible &&
         mode == creative_suite::composition::FrameComparisonMode::Wipe);
-    if (preview_widget_ == nullptr) return;
-    preview_widget_->setComparison(active_ && !reference_image_.isNull() ? mode :
-        creative_suite::composition::FrameComparisonMode::Off, fraction);
+
+    if (grade_reference) {
+        if (visible && !grade_comparison_request_active_) {
+            auto& request = *grade_comparison_reference_;
+            request.request_id = next_grade_comparison_request_id_++;
+            if (next_grade_comparison_request_id_ == 0)
+                next_grade_comparison_request_id_ = 1;
+            if (request.request_id == 0) request.request_id = next_grade_comparison_request_id_++;
+            grade_comparison_request_active_ = true;
+            latest_grade_comparison_frame_ = {};
+            if (preview_widget_ != nullptr)
+                preview_widget_->setComparisonReferenceFrame({});
+            if (grade_comparison_request_handler_)
+                grade_comparison_request_handler_(request);
+        } else if (!visible && grade_comparison_request_active_) {
+            grade_comparison_request_active_ = false;
+            latest_grade_comparison_frame_ = {};
+            if (grade_comparison_request_handler_)
+                grade_comparison_request_handler_(std::nullopt);
+        }
+        if (preview_widget_ != nullptr) {
+            if (!visible)
+                preview_widget_->setComparisonReferenceFrame({});
+        }
+    } else if (grade_comparison_request_active_) {
+        grade_comparison_request_active_ = false;
+        latest_grade_comparison_frame_ = {};
+        if (grade_comparison_request_handler_)
+            grade_comparison_request_handler_(std::nullopt);
+        if (preview_widget_ != nullptr)
+            preview_widget_->setComparisonReferenceFrame({});
+    }
+    if (preview_widget_ != nullptr)
+        preview_widget_->setComparison(visible ? mode :
+            creative_suite::composition::FrameComparisonMode::Off, fraction);
+}
+
+void ColorWorkspace::compareSelectedGradeVersion() {
+    const auto* item = grade_versions_->currentItem();
+    if (item == nullptr || selected_clip_ == 0) return;
+    const auto id = item->data(Qt::UserRole).toString().toUtf8().toStdString();
+    const auto version = std::find_if(selected_grade_versions_.begin(),
+        selected_grade_versions_.end(), [&id](const timeline::ColorGradeVersion& entry) {
+            return entry.id == id;
+        });
+    if (version == selected_grade_versions_.end()) return;
+
+    if (grade_comparison_request_active_ && grade_comparison_request_handler_)
+        grade_comparison_request_handler_(std::nullopt);
+    grade_comparison_request_active_ = false;
+    active_gallery_reference_request_id_ = 0;
+    reference_image_ = {};
+    reference_source_ = ReferenceSource::GradeVersion;
+    grade_comparison_reference_ = playback::PlaybackColorGradeComparisonRequest{};
+    grade_comparison_reference_->clip_id = selected_clip_;
+    grade_comparison_reference_->version_id = version->id;
+    grade_comparison_reference_->graph = version->graph;
+    grade_comparison_reference_->project_generation = gallery_project_generation_;
+    latest_grade_comparison_frame_ = {};
+    if (preview_widget_ != nullptr) {
+        preview_widget_->setComparisonReferenceImage({});
+        preview_widget_->setComparisonReferenceFrame({});
+    }
+    comparison_reference_label_->setText(
+        QCoreApplication::translate("ColorWorkspace", "Reference: %1")
+            .arg(QString::fromUtf8(version->name.data(),
+                static_cast<qsizetype>(version->name.size()))));
+    comparison_mode_->setEnabled(true);
+    if (comparison_mode_->currentData().toInt() ==
+        int(creative_suite::composition::FrameComparisonMode::Off)) {
+        const QSignalBlocker blocker(comparison_mode_);
+        comparison_mode_->setCurrentIndex(1);
+    }
+    applyPreviewComparison();
+}
+
+void ColorWorkspace::clearGradeComparisonReference(bool reset_mode) {
+    const bool was_grade_source = reference_source_ == ReferenceSource::GradeVersion;
+    if (grade_comparison_request_active_ && grade_comparison_request_handler_)
+        grade_comparison_request_handler_(std::nullopt);
+    grade_comparison_request_active_ = false;
+    grade_comparison_reference_.reset();
+    latest_grade_comparison_frame_ = {};
+    if (was_grade_source) reference_source_ = ReferenceSource::None;
+    if (preview_widget_ != nullptr)
+        preview_widget_->setComparisonReferenceFrame({});
+    if (reset_mode) {
+        const QSignalBlocker blocker(comparison_mode_);
+        comparison_mode_->setCurrentIndex(0);
+    }
+    if (was_grade_source) {
+        comparison_reference_label_->setText(
+            QCoreApplication::translate("ColorWorkspace", "No comparison reference selected"));
+    }
 }
 
 void ColorWorkspace::setCapturePending(bool pending) {

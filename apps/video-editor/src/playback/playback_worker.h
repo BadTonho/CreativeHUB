@@ -40,6 +40,14 @@ namespace playback {
 
 using VideoFramePtr = media::VideoFramePtr;
 
+struct PlaybackColorGradeComparisonRequest {
+    quint64 request_id = 0;
+    quint64 project_generation = 0;
+    timeline::ClipId clip_id = 0;
+    std::string version_id;
+    color::Graph graph;
+};
+
 namespace detail {
 
 inline constexpr qint64 maximum_sequential_decode_gap_frames = 8;
@@ -183,6 +191,8 @@ public slots:
         timeline::ClipId clip_id, color::NodeId node_id, qint64 timeline_frame,
         quint64 project_generation, quint64 delivery_epoch,
         quint64 composition_revision, quint64 generation, color::Graph graph);
+    virtual void setColorGradeComparisonRequest(
+        std::optional<PlaybackColorGradeComparisonRequest> request);
     virtual void stepForward();
     virtual void stepBackward();
     virtual void seekToFrame(qint64 frame_index, quint64 generation);
@@ -217,6 +227,10 @@ signals:
         color::NodeId node_id, VideoFramePtr frame, qint64 timeline_frame,
         quint64 project_generation, quint64 delivery_epoch,
         quint64 composition_revision, quint64 generation);
+    void colorGradeComparisonFrameReady(
+        quint64 request_id, quint64 project_generation,
+        timeline::ClipId clip_id, std::string version_id,
+        rendering::PreviewFramePayload frame);
 
 private slots:
     void decodeTick();
@@ -269,7 +283,8 @@ private:
         const std::vector<DecodedCompositionLayer>& layers,
         const media::VideoPlaybackSession::CancellationPredicate& should_cancel,
         rendering::FrameCompositionTimings* timings = nullptr,
-        bool force_full_resolution = false);
+        bool force_full_resolution = false,
+        const PlaybackColorGradeComparisonRequest* grade_override = nullptr);
     void clearCompositionCache() noexcept;
     void reportFailure(
         const media::MediaError& error,
@@ -500,6 +515,8 @@ private:
     quint64 cached_composition_generation_ = 0;
     std::int64_t cached_composition_global_frame_ = -1;
     rendering::PreviewFramePayload cached_composition_frame_;
+    std::optional<PlaybackColorGradeComparisonRequest> color_grade_comparison_request_;
+    quint64 reported_grade_comparison_failure_request_id_ = 0;
 };
 
 } // namespace playback

@@ -535,7 +535,7 @@ int main(int argc, char** argv) {
         workspace.setGalleryStills({still_a, still_b}, 1);
         require(comparison_mode->currentData().toInt() == 0 &&
                     !comparison_mode->isEnabled() &&
-                    reference_label->text().contains(QStringLiteral("No Gallery")),
+                    reference_label->text().contains(QStringLiteral("No comparison")),
                 "Removing the active Gallery still must clear its reference and reset Off.");
         gallery_list->setCurrentRow(0);
         require(gallery_reference_requests.size() == 3,
@@ -546,9 +546,131 @@ int main(int argc, char** argv) {
             QStringLiteral("still-a"), reference);
         require(comparison_mode->currentData().toInt() == 0 &&
                     !comparison_mode->isEnabled() &&
-                    reference_label->text().contains(QStringLiteral("No Gallery")),
+                    reference_label->text().contains(QStringLiteral("No comparison")),
                 "A response from the previous project must be discarded.");
         workspace.setGalleryStills({}, 2);
+
+        const std::vector<creative_suite::effects::EffectInstance> saved_effects{
+            creative_suite::effects::makeDefaultInstance("video.brightness")};
+        auto saved_comparison_graph = color::fromEffectStack(saved_effects);
+        grade_versions = {
+            {"saved-grade-a", "Reference Grade", saved_comparison_graph},
+            {"saved-grade-b", "Second Grade", version_graph}};
+        workspace.setClips({{7, QStringLiteral("Shot A"), thumbnail, grade_versions}},
+            7, graph);
+        versions_list = workspace.findChild<QListWidget*>("colorGradeVersions");
+        auto* compare_version = workspace.findChild<QPushButton*>(
+            "colorCompareGradeVersionButton");
+        require(versions_list && compare_version && versions_list->count() == 2 &&
+                    !compare_version->isEnabled(),
+                "Compare Version must be a separate action enabled by list selection.");
+        std::vector<std::optional<playback::PlaybackColorGradeComparisonRequest>>
+            grade_comparison_requests;
+        workspace.setGradeComparisonRequestHandler([&](auto request) {
+            grade_comparison_requests.push_back(std::move(request));
+        });
+        versions_list->setCurrentRow(0);
+        require(compare_version->isEnabled() && grade_comparison_requests.empty() &&
+                    comparison_mode->currentData().toInt() == 0,
+                "Selecting a saved grade must enable Compare Version without starting comparison.");
+        const auto graph_before_grade_comparison = graph;
+        const auto edits_before_grade_comparison = edits;
+        const auto viewer_before_grade_comparison = viewer->currentPayload();
+        workspace.setActive(true);
+        compare_version->click();
+        require(comparison_mode->currentData().toInt() == 1 &&
+                    !grade_comparison_requests.empty() &&
+                    grade_comparison_requests.back().has_value() &&
+                    grade_comparison_requests.back()->clip_id == 7 &&
+                    grade_comparison_requests.back()->version_id == "saved-grade-a" &&
+                    grade_comparison_requests.back()->graph == saved_comparison_graph &&
+                    reference_label->text().contains(QStringLiteral("Reference Grade")),
+                "Compare Version must request the selected snapshot and start Split-screen from Off.");
+        const auto first_grade_request = grade_comparison_requests.back()->request_id;
+        auto alternate_frame = viewer_before_grade_comparison;
+        alternate_frame.rgba = std::make_shared<const media::VideoFrame>(*frame);
+        workspace.acceptGradeComparisonFrame(first_grade_request + 1, 2, 7,
+            "saved-grade-a", alternate_frame);
+        require(comparison_mode->currentData().toInt() == 1,
+                "A stale alternate frame must not change comparison mode.");
+        workspace.acceptGradeComparisonFrame(first_grade_request, 2, 7,
+            "saved-grade-a", alternate_frame);
+        workspace.acceptGradeComparisonFrame(first_grade_request, 2, 7,
+            "saved-grade-a", {});
+        require(comparison_mode->currentData().toInt() == 1 && graph ==
+                    graph_before_grade_comparison && edits == edits_before_grade_comparison &&
+                    viewer->currentPayload().timeline_frame ==
+                        viewer_before_grade_comparison.timeline_frame &&
+                    viewer->currentPayload().composition_revision ==
+                        viewer_before_grade_comparison.composition_revision &&
+                    viewer->currentPayload().rgba == viewer_before_grade_comparison.rgba,
+                "Compare requests and missing alternate frames must leave the active grade and Viewer state unchanged.");
+        comparison_mode->setCurrentIndex(0);
+        require(!grade_comparison_requests.back().has_value(),
+                "Off must stop alternate grade renders.");
+        comparison_mode->setCurrentIndex(2);
+        wipe_position->setValue(37);
+        compare_version->click();
+        require(comparison_mode->currentData().toInt() == 2 &&
+                    wipe_position->value() == 37 &&
+                    grade_comparison_requests.back().has_value() &&
+                    grade_comparison_requests.back()->request_id != first_grade_request,
+                "Compare Version must preserve Wipe position and reject responses from the prior request.");
+        const auto grade_request_before_gallery =
+            grade_comparison_requests.back()->request_id;
+        workspace.setGalleryStills({still_a}, 2);
+        gallery_list->setCurrentRow(0);
+        require(!grade_comparison_requests.back().has_value() &&
+                    gallery_reference_requests.back().second == QStringLiteral("still-a"),
+                "Selecting a Gallery still must replace the active saved-grade reference.");
+        const auto gallery_reentry_request = gallery_reference_requests.back().first;
+        workspace.acceptGalleryReferenceImage(gallery_reentry_request,
+            QStringLiteral("still-a"), reference);
+        require(comparison_mode->currentData().toInt() == 2 &&
+                    wipe_position->value() == 37,
+                "Switching reference sources must preserve the selected Wipe mode and divider.");
+        versions_list->setCurrentRow(0);
+        compare_version->click();
+        require(comparison_mode->currentData().toInt() == 2 &&
+                    grade_comparison_requests.back().has_value() &&
+                    grade_comparison_requests.back()->request_id != grade_request_before_gallery,
+                "Compare Version must switch back from Gallery while preserving Wipe.");
+        workspace.setActive(false);
+        require(!grade_comparison_requests.back().has_value(),
+                "Leaving Color must stop temporary alternate renders.");
+        workspace.setActive(true);
+        require(grade_comparison_requests.back().has_value(),
+                "Re-entering Color must restore the selected saved-grade comparison.");
+        workspace.setClips({{8, QStringLiteral("Shot B"), thumbnail, grade_versions}},
+            8, graph);
+        require(comparison_mode->currentData().toInt() == 0 &&
+                    !grade_comparison_requests.back().has_value(),
+                "Changing clips must clear the active grade reference and reset Off.");
+        workspace.setClips({{8, QStringLiteral("Shot B"), thumbnail, grade_versions}},
+            8, graph);
+        versions_list->setCurrentRow(0);
+        compare_version->click();
+        require(comparison_mode->currentData().toInt() == 1,
+                "A new clip's version can be compared independently.");
+        workspace.setClips({{8, QStringLiteral("Shot B"), thumbnail, {}}}, 8, graph);
+        require(comparison_mode->currentData().toInt() == 0 &&
+                    !grade_comparison_requests.back().has_value(),
+                "Removing the active saved version must clear the reference and reset Off.");
+        workspace.setClips({{8, QStringLiteral("Shot B"), thumbnail, grade_versions}},
+            8, graph);
+        versions_list->setCurrentRow(0);
+        compare_version->click();
+        workspace.setGalleryStills({still_a}, 3);
+        require(comparison_mode->currentData().toInt() == 0 &&
+                    !grade_comparison_requests.back().has_value(),
+                "Changing projects must clear the active saved-grade reference.");
+        workspace.setActive(false);
+        workspace.setClips({{7, QStringLiteral("Shot A"), thumbnail}}, 7,
+            scope_curves_graph);
+        QTest::mouseClick(nodes->viewport(), Qt::LeftButton, Qt::NoModifier,
+            curves_canvas_position);
+        QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+
         int curves_input_requests = 0;
         quint64 last_curves_input_request = 0;
         media::VideoFramePtr captured_curves_input;

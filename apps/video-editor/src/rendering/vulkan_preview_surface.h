@@ -18,6 +18,7 @@ public:
     void setDeliveryEpoch(quint64);
     void setGrayscaleEnabled(bool);
     void setComparisonReferenceImage(QImage);
+    void setComparisonReferenceFrame(const PreviewFramePayload&);
     void setComparison(creative_suite::composition::FrameComparisonMode, float);
     void suspendForTransition(bool);
     bool available() const noexcept;

@@ -756,6 +756,11 @@ void MainWindow::createWorkspace() {
                         revision, generation,
                         std::move(graph));
             });
+        color_workspace_->setGradeComparisonRequestHandler(
+            [this](std::optional<playback::PlaybackColorGradeComparisonRequest> request) {
+                if (playback_controller_)
+                    playback_controller_->setColorGradeComparisonRequest(std::move(request));
+            });
         color_workspace_->setCaptureStillHandler([this] { captureColorStill(); });
         color_workspace_->setRenameStillHandler([this](const QString& id, const QString& name) {
             renameColorStill(id, name);

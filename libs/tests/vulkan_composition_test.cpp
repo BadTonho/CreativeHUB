@@ -28,6 +28,21 @@ media::RgbaFrame fixture(int w,int h,bool alpha=true) {
         p[3]=alpha?uint8_t((x*31+y*11)%256):255;}
     return f;
 }
+media::RgbaFrame solidFixture(int w,int h,std::array<std::uint8_t,4> color) {
+    media::RgbaFrame frame{w,h,w*4,{}};
+    frame.rgba_pixels.resize(static_cast<std::size_t>(frame.stride)*h);
+    for(int y=0;y<h;++y)for(int x=0;x<w;++x)
+        std::copy(color.begin(),color.end(),frame.rgba_pixels.begin()+
+            static_cast<std::ptrdiff_t>(y*frame.stride+x*4));
+    return frame;
+}
+bool pixelIs(const media::RgbaFrame& frame,int x,int y,
+    std::array<int,3> minimums,std::array<int,3> maximums) {
+    const auto* pixel=frame.rgba_pixels.data()+static_cast<std::size_t>(y)*frame.stride+x*4;
+    for(int channel=0;channel<3;++channel)
+        if(pixel[channel]<minimums[channel] || pixel[channel]>maximums[channel])return false;
+    return true;
+}
 void parity(const media::RgbaFrame& a,const media::RgbaFrame& b,int tolerance=2,
             const char* context="Vulkan") {
     static int parity_call = 0;
@@ -190,8 +205,18 @@ void correctness(const std::shared_ptr<VulkanDevice>& device) {
         require(asynchronous.collectAsyncReadback(ticket.ticket).status==OpenGlCompositionStatus::Unsupported,"A stale ticket collected another frame after reconfiguration.");
         require(asynchronous.collectAsyncReadback(replacement.ticket).frame.has_value(),"The replacement readback was lost.");
     }
+    const auto current_pixels=solidFixture(160,90,{225,32,24,255});
+    const auto reference_pixels=solidFixture(160,90,{20,45,225,255});
+    const auto current_texture=gpu.composeTexture(160,90,{{&current_pixels}});
+    const auto reference_texture=gpu.composeTexture(160,90,{{&reference_pixels}});
+    require(current_texture.frame && reference_texture.frame,
+        "Vulkan comparison pixel fixtures failed to compose.");
+    texture.frame=current_texture.frame;
     QWindow window;device->attachWindow(&window);window.resize(320,180);window.create();std::string cause;
-    auto presentation=device->presentFrame(&window,texture.frame,false);
+    FrameComparisonOptions retain_output;
+    retain_output.retain_rendered_frame=true;
+    auto presentation=device->presentFrame(&window,texture.frame,false,
+        {0,0,0,1},false,retain_output);
     require(presentation.status==VulkanDevice::PresentStatus::Submitted,presentation.cause);
     require(device->presentFrame(nullptr,texture.frame,false).status==VulkanDevice::PresentStatus::Failed,
         "An invalid presentation window was accepted.");
@@ -202,16 +227,28 @@ void correctness(const std::shared_ptr<VulkanDevice>& device) {
     while(device->pollPresentation(receipt,cause)==VulkanDevice::CompletionStatus::Pending && std::chrono::steady_clock::now()<deadline)
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
     require(device->pollPresentation(receipt,cause)==VulkanDevice::CompletionStatus::Complete,cause);
-    const auto comparison_reference = gpu.composeTexture(19, 13, {{&b}});
-    require(bool(comparison_reference.frame), comparison_reference.cause);
+    const auto readPresented=[&](const VulkanDevice::PresentationResult& result) {
+        require(bool(result.rendered_frame),"Vulkan presentation did not retain its GPU output.");
+        const auto pixels=gpu.readback(result.rendered_frame);
+        require(bool(pixels.frame),pixels.cause);
+        return *pixels.frame;
+    };
+    auto off_pixels=readPresented(presentation);
+    require(pixelIs(off_pixels,32,45,{200,0,0},{255,80,80}) &&
+        pixelIs(off_pixels,128,45,{200,0,0},{255,80,80}),
+        "Vulkan Off comparison changed the current Viewer pixels.");
+
+    const auto comparison_reference = reference_texture;
     for (const auto [mode, fraction] : std::array{
             std::pair{FrameComparisonMode::SplitScreen, 0.5F},
             std::pair{FrameComparisonMode::Wipe, 0.0F},
             std::pair{FrameComparisonMode::Wipe, 0.5F},
             std::pair{FrameComparisonMode::Wipe, 1.0F}}) {
         const FrameComparisonOptions comparison{mode, comparison_reference.frame, fraction};
+        auto retained_comparison=comparison;
+        retained_comparison.retain_rendered_frame=true;
         const auto compared = device->presentFrame(&window, texture.frame, false,
-            {0, 0, 0, 1}, false, comparison);
+            {0, 0, 0, 1}, false, retained_comparison);
         require(compared.status == VulkanDevice::PresentStatus::Submitted, compared.cause);
         const auto compare_deadline = std::chrono::steady_clock::now() +
             std::chrono::seconds(3);
@@ -222,6 +259,25 @@ void correctness(const std::shared_ptr<VulkanDevice>& device) {
             compare_status = device->pollPresentation(compared.receipt, cause);
         }
         require(compare_status == VulkanDevice::CompletionStatus::Complete, cause);
+        const auto compared_pixels=readPresented(compared);
+        if(mode==FrameComparisonMode::SplitScreen) {
+            require(pixelIs(compared_pixels,32,45,{0,0,200},{80,100,255}) &&
+                pixelIs(compared_pixels,128,45,{200,0,0},{255,80,80}) &&
+                pixelIs(compared_pixels,32,4,{0,0,0},{35,35,35}),
+                "Vulkan split-screen order or aspect-fit pixels are incorrect.");
+        } else if(fraction==0.0F) {
+            require(pixelIs(compared_pixels,32,45,{200,0,0},{255,80,80}) &&
+                pixelIs(compared_pixels,128,45,{200,0,0},{255,80,80}),
+                "Vulkan wipe at zero percent must show only the current Viewer.");
+        } else if(fraction==0.5F) {
+            require(pixelIs(compared_pixels,32,45,{0,0,200},{80,100,255}) &&
+                pixelIs(compared_pixels,128,45,{200,0,0},{255,80,80}),
+                "Vulkan wipe at fifty percent has incorrect reference/current pixels.");
+        } else {
+            require(pixelIs(compared_pixels,32,45,{0,0,200},{80,100,255}) &&
+                pixelIs(compared_pixels,128,45,{0,0,200},{80,100,255}),
+                "Vulkan wipe at one hundred percent must show only the reference.");
+        }
     }
     const auto submissions=device->diagnostics().submissions;
     for(int repeat=0;repeat<10;++repeat){
@@ -231,6 +287,8 @@ void correctness(const std::shared_ptr<VulkanDevice>& device) {
     require(device->diagnostics().submissions==submissions,"Unavailable acquisition submitted empty GPU commands.");
     auto recovered=device->presentFrame(&window,texture.frame,false);
     require(recovered.status==VulkanDevice::PresentStatus::Submitted,recovered.cause);
+    require(!recovered.rendered_frame,
+        "Default Vulkan presentation unexpectedly retained a rendered-frame wrapper.");
     require(device->pollPresentation(receipt,cause)==VulkanDevice::CompletionStatus::Complete,"Context reuse invalidated an older receipt.");
     QSemaphore locked,resume;OpenGlTextureCompositionResult threaded;
     std::thread worker([&]{VulkanFrameCompositor compositor(device);int calls=0;

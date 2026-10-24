@@ -399,8 +399,60 @@ public:
         window.removeColorStill(QStringLiteral("color-reference-integration"));
         require(comparison->currentData().toInt() == 0 && !comparison->isEnabled() &&
                     !wipe->isEnabled() &&
-                    reference_status->text().contains(QStringLiteral("No Gallery")),
+                    reference_status->text().contains(QStringLiteral("No comparison")),
                 "Removing the active Gallery still did not clear comparison and return Off.");
+
+        location = window.timeline_model_.locateClip(clip_id);
+        require(location.has_value(), "The comparison clip disappeared before saved-grade setup.");
+        const auto saved_comparison_graph = timeline::colorGraphForClip(
+            window.timeline_model_.tracks()[location->track_index].clips[location->clip_index]);
+        const auto saved_version_result = window.timeline_command_service_.execute(
+            application::SetClipColorGradeVersionsCommand{clip_id,
+                {{"integration-compare-version", "Saved Compare Grade",
+                    saved_comparison_graph}}});
+        require(saved_version_result.changed(),
+                "The selected clip could not receive a saved version for comparison.");
+        window.updateTimelineState();
+        window.refreshColorSelection();
+        auto* grade_versions = window.color_workspace_->findChild<QListWidget*>(
+            "colorGradeVersions");
+        auto* compare_version = window.color_workspace_->findChild<QPushButton*>(
+            "colorCompareGradeVersionButton");
+        require(grade_versions && grade_versions->count() == 1 && compare_version,
+                "MainWindow did not expose Compare Version for the selected clip.");
+        grade_versions->setCurrentRow(0);
+        const auto clip_before_grade_comparison = window.active_timeline_clip_id_;
+        const auto playhead_before_grade_comparison = window.timelinePlayheadFrame();
+        const auto dirty_before_grade_comparison = window.project_dirty_;
+        const auto can_undo_before_grade_comparison = window.timeline_command_service_.canUndo();
+        const auto can_redo_before_grade_comparison = window.timeline_command_service_.canRedo();
+        compare_version->click();
+        require(comparison->currentData().toInt() == 1 &&
+                    window.active_timeline_clip_id_ == clip_before_grade_comparison &&
+                    window.timelinePlayheadFrame() == playhead_before_grade_comparison &&
+                    window.project_dirty_ == dirty_before_grade_comparison &&
+                    window.timeline_command_service_.canUndo() == can_undo_before_grade_comparison &&
+                    window.timeline_command_service_.canRedo() == can_redo_before_grade_comparison &&
+                    timeline::colorGraphForClip(window.timeline_model_.tracks()
+                        [location->track_index].clips[location->clip_index]) ==
+                        saved_comparison_graph,
+                "Compare Version changed clip, playhead, dirty state, history, or active grade.");
+        comparison->setCurrentIndex(2);
+        wipe->setValue(25);
+        setWorkspacePageImmediately(window, ui::WorkspacePageId::Edit);
+        setWorkspacePageImmediately(window, ui::WorkspacePageId::Color);
+        QApplication::processEvents();
+        require(comparison->currentData().toInt() == 2 && wipe->value() == 25,
+                "Returning to Color did not restore the saved-grade Wipe reference.");
+        const auto remove_comparison_version = window.timeline_command_service_.execute(
+            application::SetClipColorGradeVersionsCommand{clip_id, {}});
+        require(remove_comparison_version.changed(),
+                "The active saved grade version could not be removed.");
+        window.updateTimelineState();
+        window.refreshColorSelection();
+        require(comparison->currentData().toInt() == 0 && !comparison->isEnabled() &&
+                    !wipe->isEnabled(),
+                "Removing the active grade version did not clear and disable its comparison.");
 
         const auto screenshot_path = qEnvironmentVariable("CS_COLOR_SCREENSHOT");
         if (!screenshot_path.isEmpty()) {

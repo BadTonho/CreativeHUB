@@ -119,10 +119,50 @@ int main(int argc, char* argv[]) {
         require(widget.grab().toImage() == baseline,
                 "Off comparison changed the existing CPU Viewer output.");
 
+        auto alternate = makeFrame();
+        for (std::size_t index = 0; index < alternate.rgba_pixels.size(); index += 4) {
+            alternate.rgba_pixels[index] = 15;
+            alternate.rgba_pixels[index + 1] = 35;
+            alternate.rgba_pixels[index + 2] = 220;
+        }
+        rendering::PreviewFramePayload alternate_payload{
+            std::make_shared<const media::VideoFrame>(alternate)};
+        alternate_payload.timeline_frame = widget.currentPayload().timeline_frame;
+        alternate_payload.delivery_epoch = widget.currentPayload().delivery_epoch;
+        alternate_payload.composition_revision = widget.currentPayload().composition_revision;
+        alternate_payload.playback_generation = widget.currentPayload().playback_generation;
+        widget.setComparisonReferenceFrame(alternate_payload);
         widget.setComparison(creative_suite::composition::FrameComparisonMode::SplitScreen,
             0.5F);
         application.processEvents();
         auto compared = widget.grab().toImage();
+        require(compared.pixelColor(80, 100).blue() > 200 &&
+                    compared.pixelColor(320, 100).red() > 200,
+                "CPU comparison must accept a synchronized RGBA alternate Viewer frame.");
+        alternate_payload.timeline_frame += 1;
+        widget.setComparisonReferenceFrame(alternate_payload);
+        application.processEvents();
+        require(widget.grab().toImage() == baseline,
+                "CPU Viewer must remain unchanged while the alternate frame identity is stale.");
+        auto current_identity = widget.currentPayload();
+        current_identity.timeline_frame = alternate_payload.timeline_frame;
+        widget.setFrame(current_identity);
+        widget.setComparisonReferenceFrame(alternate_payload);
+        application.processEvents();
+        compared = widget.grab().toImage();
+        require(compared.pixelColor(80, 100).blue() > 200 &&
+                    compared.pixelColor(320, 100).red() > 200,
+                "CPU comparison did not become visible when current and alternate frame identities matched.");
+        widget.setDeliveryEpoch(current_identity.delivery_epoch + 1);
+        application.processEvents();
+        require(widget.grab().toImage() == baseline,
+                "CPU comparison must be hidden after its delivery epoch becomes stale.");
+
+        widget.setComparisonReferenceImage(reference);
+        widget.setComparison(creative_suite::composition::FrameComparisonMode::SplitScreen,
+            0.5F);
+        application.processEvents();
+        compared = widget.grab().toImage();
         require(compared.pixelColor(100, 75).blue() > 200 &&
                     compared.pixelColor(100, 125).red() > 200 &&
                     compared.pixelColor(300, 75).red() > 200 &&

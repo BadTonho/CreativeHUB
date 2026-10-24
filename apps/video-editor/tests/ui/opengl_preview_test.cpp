@@ -460,6 +460,29 @@ int main(int argc, char* argv[]) {
                 colorIs(image.pixelColor(80, 210), 230, 190, 20) &&
                 colorIs(image.pixelColor(400, 180), 220, 120, 40);
         }), "OpenGL comparison inverted a top-left Gallery still beside a GPU Viewer frame.");
+        auto split_source = std::make_shared<media::VideoFrame>(
+            *makeFrame(4, 2, 0, 0, 0, 0));
+        for (int y = 0; y < split_source->height; ++y) {
+            for (int x = 0; x < split_source->width; ++x) {
+                const auto offset = static_cast<std::size_t>(y * split_source->stride + x * 4);
+                split_source->rgba_pixels[offset] = y == 0 ? 15 : 230;
+                split_source->rgba_pixels[offset + 1] = y == 0 ? 35 : 190;
+                split_source->rgba_pixels[offset + 2] = y == 0 ? 220 : 20;
+                split_source->rgba_pixels[offset + 3] = 255;
+            }
+        }
+        const auto dynamic_reference = comparison_producer.compose(split_source, 4, 2);
+        require(dynamic_reference.gpu && !dynamic_reference.rgba,
+                "A grade-comparison reference fixture must remain a GPU texture without readback.");
+        widget.setComparisonReferenceFrame(dynamic_reference);
+        widget.setComparison(creative_suite::composition::FrameComparisonMode::SplitScreen,
+            0.5F);
+        require(waitFor([&] {
+            image = surface->grabFramebuffer();
+            return !image.isNull() && colorIs(image.pixelColor(80, 150), 15, 35, 220) &&
+                colorIs(image.pixelColor(80, 210), 230, 190, 20) &&
+                colorIs(image.pixelColor(400, 180), 220, 120, 40);
+        }), "OpenGL must sample a synchronized GPU alternate frame directly with its orientation preserved.");
         widget.setComparison(creative_suite::composition::FrameComparisonMode::Off, 0.5F);
         widget.setComparisonReferenceImage({});
 

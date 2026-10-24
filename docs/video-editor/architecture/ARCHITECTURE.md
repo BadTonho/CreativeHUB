@@ -71,6 +71,16 @@ workspaces use shared Timeline history. The Color clip menu copies and applies
 the current graph; its temporary clipboard clears on project replacement.
 Applying a version changes only the current graph, while splitting or
 duplicating an Adjustment clip carries the clip's version snapshots.
+Compare Version instead renders a saved graph as a temporary alternate for
+that clip in the full Viewer. The current grade and Color scopes remain
+unchanged; Gallery stills and saved grades are exclusive reference sources.
+Turning comparison Off or leaving Color stops the alternate render, while a
+valid comparison resumes when Color is reopened. Comparing two saved versions
+directly remains outside scope.
+Vulkan comparison options can opt in to retaining the shader output as a GPU
+texture for explicit diagnostics or regression readback. Ordinary preview
+presentation does not allocate a retained wrapper or read pixels back to CPU
+memory.
 Color's viewer and clip selection are shared with Edit; its panels are created
 on first entry and the prior native dock layout is restored on exit. See the
 [Color Workspace Roadmap](../COLOR_WORKSPACE_ROADMAP.md).
