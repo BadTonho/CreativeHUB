@@ -373,6 +373,7 @@ private:
     QDockWidget* toolbox_dock_ = nullptr;
     QDockWidget* favorites_dock_ = nullptr;
     QDockWidget* effects_dock_ = nullptr;
+    QAction* effects_dock_view_action_ = nullptr;
     QDockWidget* preview_dock_ = nullptr;
     QDockWidget* inspector_dock_ = nullptr;
     QDockWidget* timeline_dock_ = nullptr;
@@ -415,6 +416,8 @@ private:
     EffectsToolboxWidget* effects_toolbox_ = nullptr;
     EffectsFavoritesWidget* effects_favorites_ = nullptr;
     EffectsListWidget* effects_list_ = nullptr;
+    QWidget* effects_catalog_host_ = nullptr;
+    QVBoxLayout* effects_catalog_layout_ = nullptr;
     QTimer* preview_metrics_timer_ = nullptr;
     QTimer* autosave_timer_ = nullptr;
     QTimer* linked_image_poll_timer_ = nullptr;

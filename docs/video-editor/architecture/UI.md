@@ -33,6 +33,13 @@ discarded, and the scope shows an empty state when there is no frame. Leaving
 Color restores the previous dock arrangement. See the
 [Color roadmap](../COLOR_WORKSPACE_ROADMAP.md).
 
+The upper Color area is a horizontal splitter with the shared Viewer, node
+canvas, and a right-side Effects catalog panel. The top Effects action toggles
+that panel; it occupies only the upper Color area and can be resized with the
+splitter. The shared Effects list returns to its dock before the previous dock
+layout is restored on exit. The View menu hides the dock-specific Effects action
+while Color uses the embedded panel.
+
 The Color Gallery captures the current composed Viewer frame into an ordered
 list with its source clip and Timeline frame. Rename and Remove affect the
 project-owned list; selecting a still does not replace the Viewer. GPU

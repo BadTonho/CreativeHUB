@@ -81,6 +81,11 @@ effectInstancesInOrder(const Graph& graph);
 [[nodiscard]] const Node* findNode(const Graph& graph, NodeId id) noexcept;
 [[nodiscard]] Node* findNode(Graph& graph, NodeId id) noexcept;
 
+// Adds a validated, disconnected effect node at the given graph position.
+// Returns no ID and leaves the graph unchanged if the effect or graph is invalid.
+[[nodiscard]] std::optional<NodeId> addDisconnectedEffectNode(
+    Graph& graph, creative_suite::effects::EffectInstance effect,
+    double x, double y);
 [[nodiscard]] bool insertEffectAfter(
     Graph& graph, NodeId anchor, creative_suite::effects::EffectInstance effect);
 [[nodiscard]] bool insertCurvesAfter(Graph& graph, NodeId anchor);

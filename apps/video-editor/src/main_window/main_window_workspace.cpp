@@ -7,6 +7,7 @@
 #include "settings/settings_dialog.h"
 #include "settings/shortcut_manager.h"
 #include "timeline/timeline_widget.h"
+#include "ui/effects/effects_list_widget.h"
 #include "ui/functions/function_palette.h"
 #include "ui/media_browser/media_browser_list_widget.h"
 #include "ui/timeline/timeline_end_buttons.h"
@@ -842,6 +843,24 @@ void MainWindow::createWorkspace() {
         workspace_host_->setColorWorkspace(color_workspace_);
         refreshColorSelection();
     });
+    workspace_transition_controller_->setColorPageEffectsCatalogHandler(
+        [this](bool embed_in_color) {
+            if (color_workspace_ == nullptr || effects_list_ == nullptr ||
+                effects_catalog_layout_ == nullptr) {
+                return;
+            }
+            if (embed_in_color) {
+                effects_catalog_layout_->removeWidget(effects_list_);
+                effects_list_->hide();
+                color_workspace_->setEffectsCatalogWidget(effects_list_);
+                color_workspace_->setEffectsPanelVisible(false);
+                return;
+            }
+            color_workspace_->setEffectsPanelVisible(false);
+            color_workspace_->setEffectsCatalogWidget(nullptr);
+            effects_catalog_layout_->addWidget(effects_list_);
+            effects_list_->show();
+        });
 
     function_palette_ = new ui::FunctionPalette(this, *shortcut_manager_);
     function_palette_->setAddHandler([this](const QString& id) {
@@ -983,6 +1002,7 @@ void MainWindow::refreshColorSelection() {
     }
     color_workspace_->setGalleryStills(std::move(stills),
         static_cast<quint64>(project_generation_));
+    refreshEffectsContext();
 }
 
 void MainWindow::captureColorStill() {
@@ -1244,6 +1264,19 @@ void MainWindow::refreshWorkspaceMenuVisibility() {
             }
         }
     }
+    // The Effects toolbar action also controls the dock from Color. It shares
+    // its toolbar with Media Pool, whose actions remain scoped to Edit/Fusion.
+    if (effects_action_ != nullptr && workspace_host_ != nullptr) {
+        const auto page = workspace_host_->currentPage();
+        effects_action_->setVisible(
+            page == ui::WorkspacePageId::Edit ||
+            page == ui::WorkspacePageId::Fusion ||
+            page == ui::WorkspacePageId::Color);
+        if (effects_dock_view_action_ != nullptr) {
+            effects_dock_view_action_->setVisible(
+                page != ui::WorkspacePageId::Color);
+        }
+    }
     if (menuBar() == nullptr) return;
     for (auto* action : menuBar()->actions()) {
         if (action != nullptr && action->menu() != nullptr) {
@@ -1463,13 +1496,13 @@ void MainWindow::createMenus() {
     effects_menu->setObjectName(QStringLiteral("effectsViewMenu"));
     auto* toolbox_view_action = toolbox_dock_->toggleViewAction();
     auto* favorites_view_action = favorites_dock_->toggleViewAction();
-    auto* effects_view_action = effects_dock_->toggleViewAction();
+    effects_dock_view_action_ = effects_dock_->toggleViewAction();
     effects_menu->addAction(toolbox_view_action);
     effects_menu->addAction(favorites_view_action);
-    effects_menu->addAction(effects_view_action);
+    effects_menu->addAction(effects_dock_view_action_);
     register_menu_action(toolbox_view_action, settings::ShortcutScope::Shared);
     register_menu_action(favorites_view_action, settings::ShortcutScope::Shared);
-    register_menu_action(effects_view_action, settings::ShortcutScope::Shared);
+    register_menu_action(effects_dock_view_action_, settings::ShortcutScope::Shared);
     auto* preview_view_action = preview_dock_->toggleViewAction();
     preview_view_action->setObjectName(QStringLiteral("previewViewAction"));
     view_menu->addAction(preview_view_action);
@@ -1570,15 +1603,15 @@ void MainWindow::createMenus() {
     register_menu_action(media_pool_action_, settings::ShortcutScope::Shared);
     media_pool_action_->setCheckable(true);
     media_pool_action_->setToolTip(QCoreApplication::translate("MainWindow", "Show the Media Pool docks"));
+    auto* workspace_toolbar_spacer = new QWidget(media_pool_toolbar);
+    workspace_toolbar_spacer->setSizePolicy(
+        QSizePolicy::Expanding, QSizePolicy::Preferred);
+    media_pool_toolbar->addWidget(workspace_toolbar_spacer);
     effects_action_ = media_pool_toolbar->addAction(QCoreApplication::translate("MainWindow", "Effects"));
     effects_action_->setObjectName(QStringLiteral("effectsGroupAction"));
     register_menu_action(effects_action_, settings::ShortcutScope::Shared);
     effects_action_->setCheckable(true);
     effects_action_->setToolTip(QCoreApplication::translate("MainWindow", "Show the Effects docks"));
-    auto* workspace_toolbar_spacer = new QWidget(media_pool_toolbar);
-    workspace_toolbar_spacer->setSizePolicy(
-        QSizePolicy::Expanding, QSizePolicy::Preferred);
-    media_pool_toolbar->addWidget(workspace_toolbar_spacer);
     auto* layouts_toolbar_action = media_pool_toolbar->addAction(
         QCoreApplication::translate("MainWindow", "Layouts"));
     layouts_toolbar_action->setObjectName(QStringLiteral("layoutsToolbarAction"));
@@ -1602,7 +1635,17 @@ void MainWindow::createMenus() {
     updateMediaPoolActionState();
 
     connect(effects_action_, &QAction::triggered,
-            this, [this](bool) { activateEffectsGroup(); });
+            this, [this](bool checked) {
+                if (workspace_host_ != nullptr &&
+                    workspace_host_->currentPage() == ui::WorkspacePageId::Color) {
+                    if (color_workspace_ != nullptr)
+                        color_workspace_->setEffectsPanelVisible(checked);
+                    updateMediaPoolActionState();
+                    updateEffectsActionState();
+                    return;
+                }
+                activateEffectsGroup();
+            });
     connect(toolbox_dock_, &QDockWidget::visibilityChanged, this,
             [this](bool) {
                 updateMediaPoolActionState();
@@ -2725,6 +2768,13 @@ void MainWindow::updateEffectsActionState() {
         return;
     }
     const QSignalBlocker blocker(effects_action_);
+    if (workspace_host_ != nullptr &&
+        workspace_host_->currentPage() == ui::WorkspacePageId::Color) {
+        effects_action_->setChecked(
+            color_workspace_ != nullptr &&
+            color_workspace_->effectsPanelVisible());
+        return;
+    }
     effects_action_->setChecked(
         toolbox_dock_->isVisible() &&
         favorites_dock_->isVisible() &&

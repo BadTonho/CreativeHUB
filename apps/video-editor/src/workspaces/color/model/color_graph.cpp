@@ -106,6 +106,23 @@ Node* findNode(Graph& graph, NodeId id) noexcept {
     return found == graph.nodes.end() ? nullptr : &*found;
 }
 
+std::optional<NodeId> addDisconnectedEffectNode(
+    Graph& graph, creative_suite::effects::EffectInstance effect,
+    double x, double y) {
+    if (!validate(graph) || !std::isfinite(x) || !std::isfinite(y) ||
+        !creative_suite::effects::isValid(effect)) {
+        return std::nullopt;
+    }
+
+    auto candidate = graph;
+    const auto id = allocateId(candidate);
+    if (id == 0) return std::nullopt;
+    candidate.nodes.push_back({id, NodeType::Effect, x, y, std::move(effect)});
+    if (!validate(candidate)) return std::nullopt;
+    graph = std::move(candidate);
+    return id;
+}
+
 std::optional<std::vector<NodeId>> evaluationOrder(const Graph& graph) {
     if (graph.nodes.empty()) return std::nullopt;
     std::unordered_map<NodeId, std::size_t> indegree;

@@ -6,7 +6,7 @@
 
 namespace effects {
 
-enum class Workspace { Edit, Fusion, None };
+enum class Workspace { Edit, Fusion, Color, None };
 
 // UI actions route creation to the workspace that owns the corresponding model.
 enum class Action {
@@ -28,6 +28,7 @@ struct Definition {
     QString category_id;
     Action edit_action = Action::Unavailable;
     Action fusion_action = Action::Unavailable;
+    Action color_action = Action::Unavailable;
 };
 
 const QVector<Category>& categories();

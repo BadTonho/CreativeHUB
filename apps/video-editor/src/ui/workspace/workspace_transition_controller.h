@@ -54,6 +54,7 @@ public:
     void setPageChangedHandler(std::function<void(WorkspacePageId)> handler);
     void setAudioPagePreparationHandler(std::function<void()> handler);
     void setColorPagePreparationHandler(std::function<void()> handler);
+    void setColorPageEffectsCatalogHandler(std::function<void(bool)> handler);
 
 protected:
     bool eventFilter(QObject* watched, QEvent* event) override;
@@ -90,6 +91,7 @@ private:
     std::function<void(WorkspacePageId)> page_changed_handler_;
     std::function<void()> audio_page_preparation_handler_;
     std::function<void()> color_page_preparation_handler_;
+    std::function<void(bool)> color_page_effects_catalog_handler_;
 };
 
 }  // namespace ui

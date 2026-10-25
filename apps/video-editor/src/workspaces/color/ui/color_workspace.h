@@ -20,6 +20,8 @@ class QPushButton;
 class QTimer;
 class QCheckBox;
 class QSlider;
+class QSplitter;
+class QVBoxLayout;
 class PreviewWidget;
 
 namespace ui {
@@ -43,6 +45,9 @@ public:
 
     explicit ColorWorkspace(QWidget* parent = nullptr);
     void setPreviewWidget(QWidget* preview);
+    void setEffectsCatalogWidget(QWidget* catalog);
+    void setEffectsPanelVisible(bool visible);
+    [[nodiscard]] bool effectsPanelVisible() const noexcept;
     QWidget* takePreviewWidget();
     void setActive(bool active);
     void setClips(std::vector<ClipItem> clips, timeline::ClipId selected,
@@ -107,6 +112,11 @@ private:
     void removeSelectedGradeVersion();
 
     QWidget* preview_container_ = nullptr;
+    QSplitter* upper_splitter_ = nullptr;
+    QWidget* effects_panel_ = nullptr;
+    QVBoxLayout* effects_catalog_layout_ = nullptr;
+    QWidget* effects_catalog_widget_ = nullptr;
+    bool effects_panel_size_initialized_ = false;
     QWidget* preview_ = nullptr;
     ::PreviewWidget* preview_widget_ = nullptr;
     QLabel* comparison_reference_label_ = nullptr;

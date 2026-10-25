@@ -2,25 +2,37 @@
 
 ## Workspace catalog
 
-The Effects dock is the creation catalog for Edit and Fusion. App-owned
+The Effects dock is the creation catalog for Edit, Fusion, and Color. App-owned
 `Definition` metadata describes an action for each workspace; `actionFor`,
 `isAvailable`, workspace-aware `isDraggable`, and `categoryAvailable` are shared
 by Toolbox, Effects and Favorites. This UI catalog does not own render engines
 or persisted graph types. Render offers no catalog creation actions.
 
-| Category | Edit | Fusion |
-| --- | --- | --- |
-| Video | Fusion Composition, Adjustment Clip | Visual effect nodes and Fusion-only Gaussian Blur |
-| Video > Generators | Opaque-white Background clip | Transparent Background node |
-| Text | Text clip | Text node |
-| Audio / Transitions | Existing Edit tools | Hidden |
-| Fusion | Hidden | Input, Transform, Color, Merge |
-| Fusion > Masks | Hidden | Rectangle Mask, Ellipse Mask |
+| Category | Edit | Fusion | Color |
+| --- | --- | --- | --- |
+| Video | Fusion Composition, Adjustment Clip | Visual effect nodes and Fusion-only Gaussian Blur | Grayscale, Brightness, Contrast, Saturation, Primary Grade nodes |
+| Video > Generators | Opaque-white Background clip | Transparent Background node | Hidden |
+| Text | Text clip | Text node | Hidden |
+| Audio / Transitions | Existing Edit tools | Hidden | Hidden |
+| Fusion | Hidden | Input, Transform, Color, Merge | Hidden |
+| Fusion > Masks | Hidden | Rectangle Mask, Ellipse Mask | Hidden |
 
 All includes only available items; parents include descendants and empty
 categories are hidden. A category unavailable after a workspace change resets
 to All. Favorites keep their existing settings key and stable IDs; filtering
 never removes a hidden workspace-specific favorite from storage.
+
+In Color, the top-right Effects button stays visible and toggles a resizable
+catalog panel to the right of the node canvas in the upper workspace area. The
+shared catalog is hosted in that panel while Color is active, then returned to
+its dock when leaving Color; the previous dock layout is restored. With a
+compatible visual clip selected, dragging a supported correction to the Color
+canvas creates a selected, disconnected effect node at the drop position. It
+does not connect the new node even when dropped over an existing node or cable;
+connect it using the Color canvas ports. The graph model validates and stores
+the node through the existing Timeline command, dirty-state, Preview/export,
+and CSP v39 paths. Curves remains a Color-specific canvas context-menu node
+and is not part of this catalog.
 
 In Fusion, drag from Effects or Favorites to create a node at the drop position,
 or double-click to create and select a disconnected node at a free location

@@ -1,6 +1,7 @@
 #include "workspaces/color/ui/color_workspace.h"
 #include "workspaces/color/ui/color_node_canvas.h"
 #include "workspaces/color/evaluation/color_graph_evaluator.h"
+#include "ui/media_browser/media_drag_mime.h"
 #include "ui/preview/preview_widget.h"
 
 #include <QApplication>
@@ -10,12 +11,16 @@
 #include <QCoreApplication>
 #include <QContextMenuEvent>
 #include <QDoubleSpinBox>
+#include <QDragEnterEvent>
+#include <QDragMoveEvent>
+#include <QDropEvent>
 #include <QElapsedTimer>
 #include <QInputDialog>
 #include <QKeyEvent>
 #include <QLabel>
 #include <QListWidget>
 #include <QMenu>
+#include <QMimeData>
 #include <QMessageBox>
 #include <QMouseEvent>
 #include <QMetaObject>
@@ -29,6 +34,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 #include <cstdio>
 #include <stdexcept>
 #include <vector>
@@ -42,6 +48,93 @@ void require(bool condition, const char* message) {
 int main(int argc, char** argv) {
     QApplication application(argc, argv);
     try {
+        {
+            ui::ColorWorkspace drop_workspace;
+            drop_workspace.resize(1100, 760);
+            int drop_commits = 0;
+            auto dropped_graph = color::makePassthroughGraph();
+            drop_workspace.setEffectsChangedHandler(
+                [&](timeline::ClipId id, color::Graph graph) {
+                    require(id == 7,
+                            "A dropped Color effect must target the selected clip.");
+                    dropped_graph = std::move(graph);
+                    ++drop_commits;
+                });
+            drop_workspace.setClips({{7, QStringLiteral("Drop target")}}, 7,
+                dropped_graph);
+            drop_workspace.setActive(true);
+            drop_workspace.show();
+            application.processEvents();
+            auto* drop_canvas = static_cast<ui::ColorNodeCanvas*>(
+                drop_workspace.findChild<QWidget*>("colorNodeCanvas"));
+            require(drop_canvas != nullptr,
+                    "Color must expose its correction node canvas for effect drops.");
+            const QPoint drop_point(60, 45);
+            const auto expected_position = drop_canvas->mapToScene(drop_point);
+            QMimeData brightness_mime;
+            brightness_mime.setData(ui::kEffectIdMimeType,
+                QByteArrayLiteral("video.brightness"));
+            QDragEnterEvent brightness_enter(drop_point, Qt::CopyAction,
+                &brightness_mime, Qt::LeftButton, Qt::NoModifier);
+            QApplication::sendEvent(drop_canvas->viewport(), &brightness_enter);
+            QDragMoveEvent brightness_move(drop_point, Qt::CopyAction,
+                &brightness_mime, Qt::LeftButton, Qt::NoModifier);
+            QApplication::sendEvent(drop_canvas->viewport(), &brightness_move);
+            QDropEvent brightness_drop(QPointF(drop_point), Qt::CopyAction,
+                &brightness_mime, Qt::LeftButton, Qt::NoModifier);
+            QApplication::sendEvent(drop_canvas->viewport(), &brightness_drop);
+            const auto dropped_id = drop_canvas->selectedNode();
+            const auto* dropped_node = dropped_id
+                ? color::findNode(dropped_graph, *dropped_id) : nullptr;
+            require(brightness_enter.isAccepted() && brightness_move.isAccepted() &&
+                        brightness_drop.isAccepted() && drop_commits == 1 &&
+                        dropped_id == 3 && dropped_node && dropped_node->effect &&
+                        dropped_node->effect->id == "video.brightness" &&
+                        std::abs(dropped_node->x - expected_position.x()) < 0.01 &&
+                        std::abs(dropped_node->y - expected_position.y()) < 0.01 &&
+                        dropped_graph.connections ==
+                            color::makePassthroughGraph().connections &&
+                        color::validate(dropped_graph),
+                    "Dropping an effect must create and select an unconnected node at the drop point.");
+
+            const auto before_unsupported_drop = dropped_graph;
+            QMimeData unsupported_mime;
+            unsupported_mime.setData(ui::kEffectIdMimeType,
+                QByteArrayLiteral("video.gaussian_blur"));
+            QDropEvent unsupported_drop(QPointF(drop_point), Qt::CopyAction,
+                &unsupported_mime, Qt::LeftButton, Qt::NoModifier);
+            QApplication::sendEvent(drop_canvas->viewport(), &unsupported_drop);
+            require(!unsupported_drop.isAccepted() && drop_commits == 1 &&
+                        dropped_graph == before_unsupported_drop,
+                    "Color must reject catalog entries unavailable to its graph.");
+
+            ui::ColorWorkspace no_target_workspace;
+            int no_target_commits = 0;
+            no_target_workspace.setEffectsChangedHandler(
+                [&](timeline::ClipId, color::Graph) { ++no_target_commits; });
+            no_target_workspace.setClips({}, 0, color::makePassthroughGraph());
+            no_target_workspace.setActive(true);
+            no_target_workspace.resize(1100, 760);
+            no_target_workspace.show();
+            application.processEvents();
+            auto* no_target_canvas = static_cast<ui::ColorNodeCanvas*>(
+                no_target_workspace.findChild<QWidget*>("colorNodeCanvas"));
+            require(no_target_canvas != nullptr,
+                    "Color without a selected clip must retain its canvas.");
+            QDropEvent no_target_drop(QPointF(drop_point), Qt::CopyAction,
+                &brightness_mime, Qt::LeftButton, Qt::NoModifier);
+            QDragEnterEvent no_target_enter(drop_point, Qt::CopyAction,
+                &brightness_mime, Qt::LeftButton, Qt::NoModifier);
+            QApplication::sendEvent(no_target_canvas->viewport(), &no_target_enter);
+            QDragMoveEvent no_target_move(drop_point, Qt::CopyAction,
+                &brightness_mime, Qt::LeftButton, Qt::NoModifier);
+            QApplication::sendEvent(no_target_canvas->viewport(), &no_target_move);
+            QApplication::sendEvent(no_target_canvas->viewport(), &no_target_drop);
+            require(no_target_enter.isAccepted() && no_target_move.isAccepted() &&
+                        !no_target_drop.isAccepted() && no_target_commits == 0,
+                    "Color must reject effect drops when no compatible clip is selected.");
+        }
+
         ui::ColorWorkspace workspace;
         auto graph = color::makePassthroughGraph();
         int edits = 0;

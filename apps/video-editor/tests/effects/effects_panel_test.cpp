@@ -71,13 +71,24 @@ int main(int argc, char* argv[]) {
             const auto effect_id = effects_list.item(index)
                 ->data(Qt::UserRole).toString();
             const bool expected_draggable =
+                effect_id == QStringLiteral("video.background") ||
+                effect_id == QStringLiteral("video.fusion_composition") ||
+                effect_id == QStringLiteral("video.adjustment_clip") ||
                 effect_id == QStringLiteral("text.text") ||
                 effect_id == QStringLiteral("transitions.cross_dissolve") ||
                 effect_id == QStringLiteral("transitions.fade_to_black");
-            require(
-                effects_list.item(index)->flags().testFlag(Qt::ItemIsDragEnabled) ==
-                    expected_draggable,
-                "Only timeline-editable items must be draggable from Edit.");
+            const bool actual_draggable = effects_list.item(index)->flags()
+                .testFlag(Qt::ItemIsDragEnabled);
+            if (actual_draggable != expected_draggable) {
+                throw std::runtime_error(QStringLiteral(
+                    "Unexpected Edit drag state for %1: expected %2, received %3.")
+                    .arg(effect_id)
+                    .arg(expected_draggable ? QStringLiteral("draggable")
+                                            : QStringLiteral("not draggable"))
+                    .arg(actual_draggable ? QStringLiteral("draggable")
+                                          : QStringLiteral("not draggable"))
+                    .toStdString());
+            }
         }
         const auto verifyDragMime = [&effects_list](
             const QString& name,
@@ -122,8 +133,8 @@ int main(int argc, char* argv[]) {
         effects_list.setCategory(toolbox.currentCategoryId());
         require(effects_list.categoryId() == "video",
                 "Effects list category did not change to Video.");
-        require(effects_list.visibleEffectCount() == 8,
-                "Video category must show the five visual filters.");
+        require(effects_list.visibleEffectCount() == 3,
+                "Edit Video must show only timeline clips; corrections belong to Color.");
 
         require(toolbox.item(2)->text().trimmed()=="Generators","Generators subcategory is missing.");
         effects_list.setCategory("video.generators");
@@ -147,7 +158,7 @@ int main(int argc, char* argv[]) {
                 "Text category must show one effect.");
         effects_list.setCategory("unknown");
         require(effects_list.categoryId() == "all" &&
-                    effects_list.visibleEffectCount() == 12,
+                    effects_list.visibleEffectCount() == 7,
                 "Unknown categories must fall back to All.");
 
         require(effects::categories().size() == 8,
@@ -223,6 +234,47 @@ int main(int argc, char* argv[]) {
         effects_list.itemDoubleClicked(ellipse);
         require(activations == 1 && effects_list.mimeData({ellipse}) == nullptr,
                 "Fusion-only items must not activate or drag in Edit.");
+        effects_list.setWorkspace(effects::Workspace::Color);
+        favorites.setWorkspace(effects::Workspace::Color);
+        toolbox.setWorkspace(effects::Workspace::Color);
+        const QStringList color_effect_ids{
+            QStringLiteral("video.grayscale"), QStringLiteral("video.brightness"),
+            QStringLiteral("video.contrast"), QStringLiteral("video.saturation"),
+            QStringLiteral("video.primary_grade")};
+        require(effects_list.categoryId() == QStringLiteral("all") &&
+                    effects_list.visibleEffectCount() == color_effect_ids.size(),
+                "Color must expose only its implemented correction effects.");
+        const auto findCatalogItem = [&effects_list](const QString& id) {
+            for (int index = 0; index < effects_list.count(); ++index) {
+                auto* item = effects_list.item(index);
+                if (item->data(Qt::UserRole).toString() == id) return item;
+            }
+            return static_cast<QListWidgetItem*>(nullptr);
+        };
+        for (const auto& id : color_effect_ids) {
+            auto* item = findCatalogItem(id);
+            require(item != nullptr && !item->isHidden() &&
+                        item->flags().testFlag(Qt::ItemIsDragEnabled),
+                    "A Color correction must be visible and draggable.");
+            auto* mime = effects_list.mimeData({item});
+            require(mime != nullptr &&
+                        mime->data(ui::kEffectIdMimeType) == id.toUtf8(),
+                    "A Color correction must use the shared effect drag MIME.");
+            delete mime;
+        }
+        for (const auto& id : {QStringLiteral("video.gaussian_blur"),
+                               QStringLiteral("video.background"),
+                               QStringLiteral("fusion.transform")}) {
+            auto* item = findCatalogItem(id);
+            require(item != nullptr && item->isHidden() &&
+                        effects_list.mimeData({item}) == nullptr,
+                    "Effects outside Color must be hidden and rejected for dragging.");
+        }
+        require(effects::actionFor(QStringLiteral("video.primary_grade"),
+                    effects::Workspace::Color) == effects::Action::VisualEffect &&
+                    !effects::isAvailable(QStringLiteral("video.primary_grade"),
+                        effects::Workspace::Fusion),
+                "Primary Grade must be draggable in Color without changing Fusion availability.");
         effects_list.setWorkspace(effects::Workspace::None);
         favorites.setWorkspace(effects::Workspace::None);
         toolbox.setWorkspace(effects::Workspace::None);

@@ -11,6 +11,9 @@
 class QGraphicsPathItem;
 class QGraphicsScene;
 class QContextMenuEvent;
+class QDragEnterEvent;
+class QDragMoveEvent;
+class QDropEvent;
 
 namespace ui {
 
@@ -21,6 +24,8 @@ public:
     [[nodiscard]] std::optional<color::NodeId> selectedNode() const noexcept;
     void setGraphChangedHandler(std::function<void(color::Graph)> handler);
     void setSelectionChangedHandler(std::function<void(color::NodeId)> handler);
+    void setEffectDropRequestedHandler(
+        std::function<bool(const QString&, const QPointF&)> handler);
 
 protected:
     void drawBackground(QPainter* painter, const QRectF& rect) override;
@@ -29,6 +34,9 @@ protected:
     void mouseReleaseEvent(QMouseEvent* event) override;
     void wheelEvent(QWheelEvent* event) override;
     void contextMenuEvent(QContextMenuEvent* event) override;
+    void dragEnterEvent(QDragEnterEvent* event) override;
+    void dragMoveEvent(QDragMoveEvent* event) override;
+    void dropEvent(QDropEvent* event) override;
 
 private:
     struct PortHit {
@@ -49,6 +57,7 @@ private:
     QPoint last_pan_position_;
     std::function<void(color::Graph)> graph_changed_handler_;
     std::function<void(color::NodeId)> selection_changed_handler_;
+    std::function<bool(const QString&, const QPointF&)> effect_drop_requested_handler_;
     bool rebuilding_ = false;
     bool panning_ = false;
 };

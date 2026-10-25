@@ -76,6 +76,7 @@
 #include <QScrollArea>
 #include <QScrollBar>
 #include <QSlider>
+#include <QSplitter>
 #include <QTabWidget>
 #include <QUrl>
 #include <QWheelEvent>
@@ -276,6 +277,68 @@ public:
                 window.shortcut_manager_->shortcut(QStringLiteral("workspace.switch_color")) ==
                     QKeySequence(QStringLiteral("Alt+5")),
                 "Color must start lazy with the Alt+5 binding.");
+        auto* effects_button = window.findChild<QAction*>("effectsGroupAction");
+        auto* effects_toolbar = window.findChild<QToolBar*>("mediaPoolToolbar");
+        require(effects_button != nullptr,
+                "The shared Effects action must be available for Color.");
+        require(effects_toolbar != nullptr,
+                "The shared Effects toolbar must be available for Color.");
+        setWorkspacePageImmediately(window, ui::WorkspacePageId::Color);
+        QApplication::processEvents();
+        auto* effects_button_widget = effects_toolbar->widgetForAction(effects_button);
+        auto* color_effects_panel = window.color_workspace_->findChild<QWidget*>(
+            "colorEffectsPanel");
+        auto* color_node_panel = window.color_workspace_->findChild<QWidget*>(
+            "colorNodesPanel");
+        auto* color_upper_splitter = window.color_workspace_->findChild<QSplitter*>(
+            "colorWorkspaceUpperSplitter");
+        require(effects_button->isVisible() && effects_toolbar->isVisible() &&
+                    effects_button_widget != nullptr &&
+                    effects_button_widget->geometry().center().x() >
+                        effects_toolbar->width() / 2 && color_effects_panel != nullptr &&
+                    color_node_panel != nullptr &&
+                    color_upper_splitter != nullptr &&
+                    !window.effects_dock_view_action_->isVisible(),
+                "Color must show the Effects button on the right side of the top toolbar.");
+        auto* no_target_brightness = window.effects_list_->findItems(
+            QStringLiteral("Brightness"), Qt::MatchExactly).value(0, nullptr);
+        effects_button->trigger();
+        QApplication::processEvents();
+        require(no_target_brightness != nullptr &&
+                    window.effects_dock_->isHidden() &&
+                    color_effects_panel->isVisible() && effects_button->isChecked() &&
+                    !window.effects_list_->isEnabled() &&
+                    window.effects_list_->mimeData({
+                        no_target_brightness}) == nullptr,
+                "Color must show its embedded Effects panel and reject drags without a compatible clip.");
+        effects_button->trigger();
+        require(color_effects_panel->isHidden() && window.effects_dock_->isHidden(),
+                "Closing Color Effects must hide only its embedded panel.");
+        setWorkspacePageImmediately(window, ui::WorkspacePageId::Edit);
+        QApplication::processEvents();
+        require(window.effects_dock_view_action_->isVisible() &&
+                    window.effects_dock_->widget() == window.effects_catalog_host_ &&
+                    window.effects_list_->parentWidget() == window.effects_catalog_host_,
+                "Leaving Color must return the shared catalog to its Effects dock.");
+        window.activateMediaPoolGroup();
+        effects_button->trigger();
+        QApplication::processEvents();
+        require(window.effects_dock_->isVisible() &&
+                    window.toolbox_dock_->isVisible() &&
+                    window.favorites_dock_->isVisible(),
+                "The Effects button must retain its dock-group behavior in Edit.");
+        window.activateMediaPoolGroup();
+        setWorkspacePageImmediately(window, ui::WorkspacePageId::Fusion);
+        effects_button->trigger();
+        QApplication::processEvents();
+        require(effects_button->isVisible() && window.effects_dock_->isVisible() &&
+                    window.toolbox_dock_->isVisible() &&
+                    window.favorites_dock_->isVisible(),
+                "The Effects button must retain its dock-group behavior in Fusion.");
+        setWorkspacePageImmediately(window, ui::WorkspacePageId::Edit);
+        window.activateMediaPoolGroup();
+        QApplication::processEvents();
+
         auto* controller = window.edit_workspace_->controller();
         controller->setPlaybackPresentation(false, false, true);
         const auto track_id = window.timeline_model_.tracks().front().track_id;
@@ -301,8 +364,39 @@ public:
         auto* nodes = static_cast<ui::ColorNodeCanvas*>(
             window.color_workspace_->findChild<QWidget*>("colorNodeCanvas"));
         auto* add = window.color_workspace_->findChild<QPushButton*>("colorAddNodeButton");
-        require(clips && clips->count() == 1 && nodes && nodes->selectedNode() && add,
+        require(clips && clips->count() == 1 && nodes && nodes->selectedNode() && add &&
+                    color_effects_panel && color_node_panel,
                 "Color must show the selected visual clip and its graph canvas.");
+        require(effects_button != nullptr && !effects_button->isChecked(),
+                "Color must enter with the Effects panel closed.");
+        effects_button->trigger();
+        QApplication::processEvents();
+        const auto node_panel_position = color_node_panel->mapTo(
+            window.color_workspace_, QPoint(0, 0));
+        const auto effects_panel_position = color_effects_panel->mapTo(
+            window.color_workspace_, QPoint(0, 0));
+        require(color_effects_panel->isVisible() &&
+                    window.effects_dock_->isHidden() && effects_button->isChecked() &&
+                    window.toolbox_dock_->isHidden() &&
+                    window.favorites_dock_->isHidden() &&
+                    window.bins_dock_->isHidden() && window.media_dock_->isHidden() &&
+                    window.inspector_dock_->isHidden() && window.preview_dock_->isHidden() &&
+                    window.timeline_dock_->isHidden() &&
+                    window.effects_list_->isEnabled() &&
+                    window.effects_list_->visibleEffectCount() == 5 &&
+                    color_upper_splitter->handle(2)->isVisible() &&
+                    effects_panel_position.x() >= node_panel_position.x() +
+                        color_node_panel->width() &&
+                    color_effects_panel->height() ==
+                        color_upper_splitter->height() &&
+                    effects_panel_position.y() + color_effects_panel->height() <=
+                        clips->mapTo(window.color_workspace_, QPoint(0, 0)).y(),
+                "Color Effects must occupy a resizable pane to the right of the node canvas.");
+        effects_button->trigger();
+        QApplication::processEvents();
+        require(color_effects_panel->isHidden() && window.effects_dock_->isHidden() &&
+                    !effects_button->isChecked(),
+                "The Color Effects button must close its panel when toggled off.");
         add->click();
         auto location = window.timeline_model_.locateClip(clip_id);
         require(location && window.timeline_model_.tracks()[location->track_index]
@@ -332,6 +426,72 @@ public:
                     .clips[location->clip_index].color_graph->nodes.size() == 5 &&
                 controller->undo().changed() && controller->redo().changed(),
                 "Color graph topology must use the shared Timeline Undo/Redo history.");
+
+        effects_button->trigger();
+        QApplication::processEvents();
+        auto* brightness_item = window.effects_list_->findItems(
+            QStringLiteral("Brightness"), Qt::MatchExactly).value(0, nullptr);
+        require(brightness_item != nullptr,
+                "The Color Effects panel must list Brightness for drag and drop.");
+        std::unique_ptr<QMimeData> brightness_mime(
+            window.effects_list_->mimeData({brightness_item}));
+        require(brightness_mime &&
+                    brightness_mime->data(ui::kEffectIdMimeType) ==
+                        QByteArrayLiteral("video.brightness"),
+                "Color Effects must produce the shared Brightness drag payload.");
+        location = window.timeline_model_.locateClip(clip_id);
+        require(location.has_value(),
+                "The Color drag target disappeared before effect insertion.");
+        const auto graph_before_drop = timeline::colorGraphForClip(
+            window.timeline_model_.tracks()[location->track_index]
+                .clips[location->clip_index]);
+        const QPoint drop_point(std::max(20, nodes->viewport()->width() - 30),
+                                std::max(20, nodes->viewport()->height() - 30));
+        const auto expected_drop_position = nodes->mapToScene(drop_point);
+        QDragEnterEvent brightness_enter(drop_point, Qt::CopyAction,
+            brightness_mime.get(), Qt::LeftButton, Qt::NoModifier);
+        QApplication::sendEvent(nodes->viewport(), &brightness_enter);
+        QDragMoveEvent brightness_move(drop_point, Qt::CopyAction,
+            brightness_mime.get(), Qt::LeftButton, Qt::NoModifier);
+        QApplication::sendEvent(nodes->viewport(), &brightness_move);
+        QDropEvent brightness_drop(QPointF(drop_point), Qt::CopyAction,
+            brightness_mime.get(), Qt::LeftButton, Qt::NoModifier);
+        QApplication::sendEvent(nodes->viewport(), &brightness_drop);
+        location = window.timeline_model_.locateClip(clip_id);
+        require(brightness_enter.isAccepted() && brightness_move.isAccepted() &&
+                    brightness_drop.isAccepted() && location.has_value(),
+                "Dragging a Color effect onto the graph must commit it.");
+        const auto graph_after_drop = timeline::colorGraphForClip(
+            window.timeline_model_.tracks()[location->track_index]
+                .clips[location->clip_index]);
+        const auto dropped_node_id = nodes->selectedNode();
+        const auto* dropped_node = dropped_node_id
+            ? color::findNode(graph_after_drop, *dropped_node_id) : nullptr;
+        require(graph_after_drop.nodes.size() == graph_before_drop.nodes.size() + 1 &&
+                    graph_after_drop.connections == graph_before_drop.connections &&
+                    dropped_node && dropped_node->type == color::NodeType::Effect &&
+                    dropped_node->effect &&
+                    dropped_node->effect->id == "video.brightness" &&
+                    std::abs(dropped_node->x - expected_drop_position.x()) < 0.01 &&
+                    std::abs(dropped_node->y - expected_drop_position.y()) < 0.01 &&
+                    controller->undo().changed(),
+                "A Color catalog drop must add an unconnected node through Timeline history.");
+        location = window.timeline_model_.locateClip(clip_id);
+        require(location && timeline::colorGraphForClip(
+                    window.timeline_model_.tracks()[location->track_index]
+                        .clips[location->clip_index]) == graph_before_drop &&
+                    controller->redo().changed(),
+                "Undo/Redo must remove and restore the dropped Color effect node.");
+        location = window.timeline_model_.locateClip(clip_id);
+        require(location && timeline::colorGraphForClip(
+                    window.timeline_model_.tracks()[location->track_index]
+                        .clips[location->clip_index]) == graph_after_drop,
+                "Redo must restore the disconnected Color effect node.");
+        effects_button->trigger();
+        QApplication::processEvents();
+        require(color_effects_panel->isHidden() && window.effects_dock_->isHidden() &&
+                    !effects_button->isChecked(),
+                "Closing Color Effects must leave the prior dock layout ready for restoration.");
 
         QImage reference_image(32, 18, QImage::Format_RGBA8888);
         reference_image.fill(QColor(20, 40, 220));
@@ -2612,7 +2772,8 @@ public:
                                 edit_or_fusion &&
                             preview_view_action->isVisible() == edit_or_fusion &&
                             window.media_pool_action_->isVisible() == edit_or_fusion &&
-                            window.effects_action_->isVisible() == edit_or_fusion &&
+                            window.effects_action_->isVisible() ==
+                                (edit_or_fusion || page == ui::WorkspacePageId::Color) &&
                             fusion_fixture_action->isVisible() == fusion_active &&
                             fusion_fixture_menu->menuAction()->isVisible() ==
                                 fusion_active &&

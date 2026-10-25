@@ -1,6 +1,6 @@
 # Color Workspace Roadmap
 
-Status: **The project-owned Color graph, Curves, CPU/OpenGL/Vulkan qualifier matte refinement, selected-node input preview, Gallery capture and organization, transient Gallery still comparison, saved-grade comparison against the current Viewer, Wheels/Bars/Log Primary Grade, four scopes, shared Edit controls, reusable grades, and per-clip grade versions are implemented. Gallery stills and saved grades are exclusive reference sources. Saved-grade comparison recomposes the selected clip's alternate graph for the current timeline frame without changing the active graph or history. CSP v39 persists curves, qualifier refinements, and named graph snapshots. Refined serial GPU compositions use bounded R8 intermediates and fall back to CPU when allocation or processing fails; branched graphs continue through the CPU evaluator. The Inspector matte preview evaluates the selected Curves node's actual input asynchronously and does not change the Viewer. General graph action controls remain hidden; Curves is created and managed from the canvas context menu. Native visual interaction and platform acceptance remain pending.**
+Status: **The project-owned Color graph, Curves, CPU/OpenGL/Vulkan qualifier matte refinement, selected-node input preview, Gallery capture and organization, transient Gallery still comparison, saved-grade comparison against the current Viewer, Wheels/Bars/Log Primary Grade, four scopes, shared Edit controls, reusable grades, per-clip grade versions, and drag-and-drop creation from the shared Effects catalog are implemented. Gallery stills and saved grades are exclusive reference sources. Saved-grade comparison recomposes the selected clip's alternate graph for the current timeline frame without changing the active graph or history. CSP v39 persists curves, qualifier refinements, and named graph snapshots. Refined serial GPU compositions use bounded R8 intermediates and fall back to CPU when allocation or processing fails; branched graphs continue through the CPU evaluator. The Inspector matte preview evaluates the selected Curves node's actual input asynchronously and does not change the Viewer. The top-right Effects action toggles a resizable catalog panel beside the Color node canvas; leaving Color returns the catalog to its shared dock and restores the previous dock layout. Dropping a supported correction creates a selected, disconnected node at the drop point. Other graph action controls remain hidden; Curves is created and managed from the canvas context menu. Native visual interaction and platform acceptance remain pending.**
 
 This document records the current implementation, the functional areas expected
 from a complete color workspace, and a staged order for developing them. The
@@ -18,6 +18,15 @@ its inputs by normalized weighted RGBA average, with equal weights by default.
 The canvas currently supports node selection, movement, and connecting or
 reconnecting ports. The Add Effect, Add Branch, On/Off, Remove, and effect-type
 controls remain connected to their actions but are hidden from the interface.
+The top-right Effects button remains visible in Color and toggles a resizable
+catalog panel at the right of the node canvas, within the upper workspace area.
+The shared catalog is temporarily hosted there and returns to its dock when
+leaving Color, which restores the prior dock layout. It exposes the implemented
+Grayscale, Brightness, Contrast, Saturation, and Primary Grade corrections when
+a compatible clip is selected. Dragging one onto the canvas creates and selects
+a disconnected node at the drop position; the user connects it through the
+existing graph ports. The node uses the current graph validation and Timeline
+history path, and does not require a CSP schema change.
 The canvas context menu adds Curves after the selected node and provides its
 enable/disable and removal actions. The Edit Inspector can select the same
 effect nodes and change parameters or enabled state. Graph structure, layout,
@@ -237,9 +246,11 @@ and restoration. Keep large image assets outside the main CSP document.
 
 ## Staged development order
 
-1. **Make graph editing reachable.** Restore visible access to effect type,
-   add effect, add branch, enable/disable, and remove actions. Choose an
-   appropriate canvas or panel interaction without changing graph semantics.
+1. **Make graph editing reachable (partially implemented).** Color can create
+   supported correction nodes by dragging them from the shared, resizable
+   Effects catalog panel beside the node canvas. Nodes are added disconnected
+   and connected through the canvas ports. Other graph-management actions
+   remain hidden.
 2. **Broaden primary grading and monitoring (implemented).** Wheels/Bars/Log,
    Vectorscope, and RGB Histogram use normalized RGB and Rec. 709-derived
    scopes; calibrated IRE, HDR, and display-managed modes await a color

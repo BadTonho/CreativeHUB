@@ -4,6 +4,7 @@
 
 | Behavior | Verification |
 | --- | --- |
+| Color Effects catalog filtering, shared drag MIME, compatible-clip gating, disconnected node creation/selection at the drop point, right-side upper panel placement/resizing, Effects-only toggle, menu action suppression, dock restoration and Undo/Redo | `creative-suite-main-editor-effects-panel`, `creative-suite-main-editor-color-workspace`, `creative-suite-main-editor-color-graph`, `creative-suite-main-editor-color-workspace-integration` |
 | Lazy Color page, shared Viewer, clip strip, graph canvas, four scope modes and empty state, Edit dock restoration | `creative-suite-main-editor-color-workspace-integration`, `creative-suite-main-editor-color-workspace`, `creative-suite-main-editor-workspace-page-switch` |
 | Graph connection validity, cycle rejection, branch weights/mixing, layout, node add/remove and effect state/parameter edits | `creative-suite-main-editor-color-graph`, `creative-suite-main-editor-color-workspace`, `creative-suite-main-editor-timeline-command-service`, `creative-suite-main-editor-color-workspace-integration` |
 | Graph edits in shared Undo/Redo, clip duplication/split and project reopen | `creative-suite-main-editor-adjustment`, `creative-suite-main-editor-project`, Edit controller, `creative-suite-main-editor-color-workspace-integration` |
@@ -75,6 +76,22 @@ stills and a named grade version. Confirm a v36 project opens with no saved
 versions. Confirm a v37 project opens without Curves and a future v40 project is
 refused by the Hub. This manual visual check is documented and remains pending; it is not
 run as part of the current implementation pass.
+
+Manual Effects check: select a compatible visual clip in Color and confirm the
+top-right Effects button is visible. Open it and confirm the catalog appears to
+the right of the node canvas, within the upper Viewer/canvas row. Drag the
+divider to resize the panel and confirm the Viewer and node canvas remain
+usable. Confirm the View menu does not expose an action that opens an empty
+Effects dock in Color. Drag Grayscale, Brightness, Contrast, Saturation, and
+Primary Grade separately onto free canvas space, then onto an existing node
+and a cable; each drop should create a selected, disconnected node at the
+pointer position. Connect a node through its ports, edit its parameters, and
+verify the Viewer updates. Undo and Redo the graph edit, then save and reopen
+the project and confirm the graph and connection persist. Close Effects and
+leave Color; confirm the catalog returns to its dock and the prior dock layout
+is restored. Confirm the Effects button continues to open the dock group in Edit
+and Fusion. This manual interaction check remains pending until performed in
+the native UI.
 
 Windows Release verification on 2026-10-23: the focused Primary Grade CPU,
 OpenGL and Vulkan tests, Color UI and dedicated MainWindow Color integration,
@@ -792,7 +809,7 @@ hardware and drivers. No percentage target is set from this measurement.
 | Media Browser model | Canonical duplicates, bins, rename, offline and restore behavior |
 | Media Browser UI | Media Pool grouping with independent Bins and Media docks, native workspace layout persistence, list/block modes, global mode and icon-scale persistence, bounded 50%-150% icon resizing, seven-character media and folder labels, full-name inline editing, cached thumbnail retention, technical-information role, and preserved selection/drag metadata |
 | Media Browser bin organization | Contextual bin creation, media-to-bin drops, bin subtree reparenting, empty-bin preservation, invalid destination rejection, and project bin synchronization |
-| Effects UI and Color graph | Edit catalog does not create correction nodes; Color can add, connect, branch, rewire, move and remove correction nodes; Edit exposes shared parameter/enabled-state controls; mixer weights, shared Undo/Redo, Preview and export are covered by `color_graph_test.cpp`, Color workspace, Edit controller, playback, export and MainWindow tests |
+| Effects UI and Color graph | Color catalog filtering and shared drag MIME are covered by `effects_panel_test.cpp`; compatible-clip gating and graph behavior by `color_workspace_test.cpp` and `color_graph_test.cpp`; the Color panel's right-side upper placement, resizing handle, Effects-only toggle, menu suppression, restoration of the shared dock, and Timeline Undo/Redo by `main_window_integration_test.cpp`. Edit catalog behavior, Color graph editing, mixer weights, shared Preview and export remain covered by Color graph/workspace, Edit controller, playback, export and MainWindow tests |
 | Clip attribute copy/paste | `tests/ui/edit_workspace_controller_test.cpp` covers complete in-memory attribute snapshots, effects including clearing with an empty source stack, transform/keyframes, clip audio gain/mute, text content/style, compatibility rejection, no dirty/history change on copy, and a single undoable paste; `tests/timeline/timeline_command_service_test.cpp` covers atomic group application, linked audio pairs, standalone audio destinations, local keyframe offsets, endpoint clipping for shorter clips, unchanged frame positions and held values for longer clips, rejection without partial mutation; `tests/application/main_window_integration_test.cpp` covers Ctrl+C/Ctrl+Shift+V registration, shortcut customization, text-field copy behavior, modal category defaults/disabled groups, no-target guidance, Apply, and Undo/Redo |
 | Multi-clip Paste Attributes | `tests/timeline/timeline_widget_test.cpp` covers Ctrl+click toggling, selection order/primary behavior, normal-click collapse and gap clearing; `tests/timeline/timeline_command_service_test.cpp` covers atomic multi-destination paste, per-target compatibility skipping, linked video/audio routing, stale-target rejection without partial changes, and one-step Undo/Redo; `tests/application/main_window_integration_test.cpp` checks category compatible counts and mixed-selection defaults |
 | Preview | CPU fallback, valid and invalid frames, resize, grayscale, clean shutdown |

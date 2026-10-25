@@ -1,5 +1,6 @@
 #include "workspaces/color/ui/color_workspace.h"
 
+#include "ui/effects/effects_catalog.h"
 #include "ui/preview/preview_widget.h"
 #include "workspaces/color/evaluation/color_graph_evaluator.h"
 
@@ -29,6 +30,7 @@
 #include <QMessageBox>
 #include <QScrollArea>
 #include <QSignalBlocker>
+#include <QSplitter>
 #include <QSlider>
 #include <QThreadPool>
 #include <QTimer>
@@ -774,6 +776,9 @@ ColorWorkspace::ColorWorkspace(QWidget* parent) : QWidget(parent) {
         QWidget#colorNodesPanel, QWidget#colorPrimaryControls {
             background: #252b35; border: 1px solid #39424e; border-radius: 5px;
         }
+        QWidget#colorEffectsPanel {
+            background: #20242a; border: 1px solid #39424e; border-radius: 5px;
+        }
         QWidget#colorWorkspacePage QLabel { color: #d7e0ea; }
         QLabel#colorWaveform {
             background: #141a22; border: 1px solid #39424e; border-radius: 5px;
@@ -793,7 +798,10 @@ ColorWorkspace::ColorWorkspace(QWidget* parent) : QWidget(parent) {
     auto* root = new QVBoxLayout(this);
     root->setContentsMargins(8, 8, 8, 8);
     root->setSpacing(8);
-    auto* upper = new QHBoxLayout;
+    upper_splitter_ = new QSplitter(Qt::Horizontal, this);
+    upper_splitter_->setObjectName("colorWorkspaceUpperSplitter");
+    upper_splitter_->setChildrenCollapsible(false);
+    upper_splitter_->setHandleWidth(5);
     preview_container_ = new QWidget(this);
     preview_container_->setObjectName("colorViewerContainer");
     auto* preview_layout = new QVBoxLayout(preview_container_);
@@ -832,7 +840,7 @@ ColorWorkspace::ColorWorkspace(QWidget* parent) : QWidget(parent) {
     comparison_reference_label_->setMinimumWidth(80);
     comparison_layout->addWidget(comparison_reference_label_, 1);
     preview_layout->addWidget(comparison_bar);
-    upper->addWidget(preview_container_, 3);
+    upper_splitter_->addWidget(preview_container_);
     auto* node_panel = new QWidget(this);
     node_panel->setObjectName("colorNodesPanel");
     auto* node_layout = new QVBoxLayout(node_panel);
@@ -866,8 +874,23 @@ ColorWorkspace::ColorWorkspace(QWidget* parent) : QWidget(parent) {
     node_action_layout->addLayout(node_buttons);
     node_action_controls->hide();
     node_layout->addWidget(node_action_controls);
-    upper->addWidget(node_panel, 2);
-    root->addLayout(upper, 3);
+    upper_splitter_->addWidget(node_panel);
+    effects_panel_ = new QWidget(this);
+    effects_panel_->setObjectName("colorEffectsPanel");
+    effects_panel_->setMinimumWidth(240);
+    effects_catalog_layout_ = new QVBoxLayout(effects_panel_);
+    effects_catalog_layout_->setContentsMargins(6, 6, 6, 6);
+    effects_catalog_layout_->setSpacing(4);
+    auto* effects_title = new QLabel(
+        QCoreApplication::translate("MainWindow", "Effects"), effects_panel_);
+    effects_title->setObjectName("colorEffectsPanelTitle");
+    effects_catalog_layout_->addWidget(effects_title);
+    upper_splitter_->addWidget(effects_panel_);
+    upper_splitter_->setStretchFactor(0, 5);
+    upper_splitter_->setStretchFactor(1, 3);
+    upper_splitter_->setStretchFactor(2, 2);
+    effects_panel_->hide();
+    root->addWidget(upper_splitter_, 3);
 
     auto* transport = new QHBoxLayout;
     transport->addStretch();
@@ -1086,6 +1109,22 @@ ColorWorkspace::ColorWorkspace(QWidget* parent) : QWidget(parent) {
     nodes_->setGraphChangedHandler([this](color::Graph graph) {
         submit(std::move(graph), nodes_->selectedNode());
     });
+    nodes_->setEffectDropRequestedHandler([this](const QString& id,
+                                                  const QPointF& position) {
+        if (!active_ || selected_clip_ == 0 || !effects_changed_handler_ ||
+            effects::actionFor(id, effects::Workspace::Color) !=
+                effects::Action::VisualEffect) {
+            return false;
+        }
+        auto graph = graph_;
+        const auto node_id = color::addDisconnectedEffectNode(
+            graph,
+            creative_suite::effects::makeDefaultInstance(id.toStdString()),
+            position.x(), position.y());
+        if (!node_id) return false;
+        submit(std::move(graph), *node_id);
+        return true;
+    });
     nodes_->setSelectionChangedHandler([this](color::NodeId id) {
         selected_node_ = id;
         active_color_input_request_id_ = 0;
@@ -1188,6 +1227,43 @@ void ColorWorkspace::setPreviewWidget(QWidget* preview) {
         }
         applyPreviewComparison();
     }
+}
+
+void ColorWorkspace::setEffectsCatalogWidget(QWidget* catalog) {
+    if (effects_catalog_widget_ == catalog) return;
+    if (effects_catalog_widget_ != nullptr) {
+        effects_catalog_layout_->removeWidget(effects_catalog_widget_);
+        effects_catalog_widget_->hide();
+        effects_catalog_widget_->setParent(nullptr);
+    }
+    effects_catalog_widget_ = catalog;
+    if (effects_catalog_widget_ != nullptr) {
+        effects_catalog_layout_->addWidget(effects_catalog_widget_);
+        effects_catalog_widget_->show();
+    }
+}
+
+void ColorWorkspace::setEffectsPanelVisible(bool visible) {
+    if (effects_panel_ == nullptr) return;
+    const bool was_hidden = effects_panel_->isHidden();
+    effects_panel_->setVisible(visible);
+    if (!visible || !was_hidden || effects_panel_size_initialized_ ||
+        upper_splitter_ == nullptr) {
+        return;
+    }
+    const int total_width = upper_splitter_->width();
+    if (total_width <= 0) return;
+    const int effects_width = std::clamp(
+        qRound(static_cast<double>(total_width) * 0.22), 260, 420);
+    const int remaining_width = std::max(1, total_width - effects_width);
+    const int preview_width = qRound(static_cast<double>(remaining_width) * 0.67);
+    upper_splitter_->setSizes({
+        preview_width, remaining_width - preview_width, effects_width});
+    effects_panel_size_initialized_ = true;
+}
+
+bool ColorWorkspace::effectsPanelVisible() const noexcept {
+    return effects_panel_ != nullptr && !effects_panel_->isHidden();
 }
 
 QWidget* ColorWorkspace::takePreviewWidget() {

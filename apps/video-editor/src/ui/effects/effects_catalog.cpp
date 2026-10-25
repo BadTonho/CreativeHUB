@@ -57,15 +57,20 @@ QString translateCatalogLabel(const QString& source_text) {
 }
 
 bool isDraggable(const QString& id) {
-    return isDraggable(id, Workspace::Edit) || isDraggable(id, Workspace::Fusion);
+    return isDraggable(id, Workspace::Edit) || isDraggable(id, Workspace::Fusion) ||
+        isDraggable(id, Workspace::Color);
 }
 
 Action actionFor(const QString& id, Workspace workspace) {
     if (workspace == Workspace::None) return Action::Unavailable;
     for (const auto& definition : definitions()) {
-        if (definition.id == id)
-            return workspace == Workspace::Fusion
-                ? definition.fusion_action : definition.edit_action;
+        if (definition.id != id) continue;
+        switch (workspace) {
+        case Workspace::Edit: return definition.edit_action;
+        case Workspace::Fusion: return definition.fusion_action;
+        case Workspace::Color: return definition.color_action;
+        case Workspace::None: return Action::Unavailable;
+        }
     }
     return Action::Unavailable;
 }
@@ -145,6 +150,9 @@ const QVector<Definition>& definitions() {
     static const QVector<Definition> values = [] {
         QVector<Definition> result;
         for (const auto& effect : creative_suite::effects::builtInEffects()) {
+            const bool color_supported = effect.id == "video.grayscale" ||
+                effect.id == "video.brightness" || effect.id == "video.contrast" ||
+                effect.id == "video.saturation" || effect.id == "video.primary_grade";
             result.push_back({QString::fromUtf8(effect.id.data(),
                                                 static_cast<qsizetype>(effect.id.size())),
                               translateCatalogLabel(QString::fromUtf8(effect.name.data(),
@@ -152,7 +160,8 @@ const QVector<Definition>& definitions() {
                               QString::fromUtf8(effect.category_id.data(),
                                                 static_cast<qsizetype>(effect.category_id.size())),
                               Action::Unavailable,
-                              effect.id == "video.primary_grade" ? Action::Unavailable : Action::VisualEffect});
+                              effect.id == "video.primary_grade" ? Action::Unavailable : Action::VisualEffect,
+                              color_supported ? Action::VisualEffect : Action::Unavailable});
         }
         result.push_back({"video.gaussian_blur", translateCatalogLabel(QStringLiteral("Gaussian Blur")), "video", Action::Unavailable, Action::GaussianBlurNode});
         result.push_back({"video.background", translateCatalogLabel(QStringLiteral("Background")), "video.generators", Action::BackgroundClip, Action::BackgroundNode});

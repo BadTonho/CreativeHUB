@@ -65,6 +65,29 @@ int main() {
                     std::vector<std::uint8_t>{100, 100, 100, 255},
                 "A disconnected effect must not alter the Output image.");
 
+        auto catalog_drop_graph = empty;
+        const auto initial_connections = catalog_drop_graph.connections;
+        const auto dropped_id = color::addDisconnectedEffectNode(
+            catalog_drop_graph,
+            creative_suite::effects::makeDefaultInstance("video.brightness"),
+            260.0, 300.0);
+        const auto* dropped_node = dropped_id
+            ? color::findNode(catalog_drop_graph, *dropped_id) : nullptr;
+        require(dropped_id == 3 && dropped_node &&
+                    dropped_node->type == color::NodeType::Effect &&
+                    dropped_node->effect &&
+                    dropped_node->effect->id == "video.brightness" &&
+                    dropped_node->x == 260.0 && dropped_node->y == 300.0 &&
+                    catalog_drop_graph.connections == initial_connections &&
+                    color::validate(catalog_drop_graph),
+                "A catalog drop must create a valid, disconnected effect at its canvas position.");
+        const auto before_invalid_drop = catalog_drop_graph;
+        require(!color::addDisconnectedEffectNode(
+                    catalog_drop_graph,
+                    creative_suite::effects::makeDefaultInstance("unknown.effect"),
+                    400.0, 500.0) && catalog_drop_graph == before_invalid_drop,
+                "An invalid catalog effect must be rejected without changing the graph.");
+
         auto serial = color::fromEffectStack(std::vector{
             creative_suite::effects::makeDefaultInstance("video.grayscale"),
             creative_suite::effects::makeDefaultInstance("video.brightness")});

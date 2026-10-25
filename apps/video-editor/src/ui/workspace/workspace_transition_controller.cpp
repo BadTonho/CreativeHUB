@@ -153,6 +153,8 @@ void WorkspaceTransitionController::applyPage(WorkspacePageId page) {
 
     auto* main_window = qobject_cast<QMainWindow*>(workspace_host_->window());
     if (workspace_host_->currentPage() == WorkspacePageId::Color) {
+        if (color_page_effects_catalog_handler_)
+            color_page_effects_catalog_handler_(false);
         workspace_host_->setPage(WorkspacePageId::Edit, false);
         if (main_window != nullptr && !dock_layout_before_color_.isEmpty())
             main_window->restoreState(dock_layout_before_color_, 9);
@@ -160,6 +162,8 @@ void WorkspaceTransitionController::applyPage(WorkspacePageId page) {
     }
     if (page == WorkspacePageId::Color) {
         if (main_window != nullptr) dock_layout_before_color_ = main_window->saveState(9);
+        if (color_page_effects_catalog_handler_)
+            color_page_effects_catalog_handler_(true);
         workspace_host_->setPage(page, false);
         for (auto* dock : dockWidgets()) if (dock != nullptr) dock->hide();
         workspace_host_->refreshCentralWorkspaceVisibility();
@@ -345,6 +349,11 @@ void WorkspaceTransitionController::setAudioPagePreparationHandler(
 void WorkspaceTransitionController::setColorPagePreparationHandler(
     std::function<void()> handler) {
     color_page_preparation_handler_ = std::move(handler);
+}
+
+void WorkspaceTransitionController::setColorPageEffectsCatalogHandler(
+    std::function<void(bool)> handler) {
+    color_page_effects_catalog_handler_ = std::move(handler);
 }
 
 bool WorkspaceTransitionController::eventFilter(

@@ -1,11 +1,18 @@
 #include "color_node_canvas.h"
 
+#include "ui/effects/effects_catalog.h"
+#include "ui/media_browser/media_drag_mime.h"
+
+#include <QDragEnterEvent>
+#include <QDragMoveEvent>
+#include <QDropEvent>
 #include <QGraphicsPathItem>
 #include <QGraphicsScene>
 #include <QContextMenuEvent>
 #include <QLineF>
 #include <QMenu>
 #include <QMouseEvent>
+#include <QMimeData>
 #include <QPainter>
 #include <QScrollBar>
 #include <QWheelEvent>
@@ -21,6 +28,15 @@ namespace {
 constexpr qreal node_width = 154.0;
 constexpr qreal node_height = 78.0;
 constexpr qreal port_radius = 5.0;
+
+QString colorEffectIdFromMime(const QMimeData* mime) {
+    if (mime == nullptr || !mime->hasFormat(ui::kEffectIdMimeType)) return {};
+    const auto value = mime->data(ui::kEffectIdMimeType);
+    const auto id = QString::fromUtf8(value.constData(), value.size());
+    return effects::actionFor(id, effects::Workspace::Color) ==
+            effects::Action::VisualEffect
+        ? id : QString{};
+}
 
 QString nodeTitle(const color::Node& node) {
     switch (node.type) {
@@ -136,6 +152,8 @@ ColorNodeCanvas::ColorNodeCanvas(QWidget* parent)
     setTransformationAnchor(QGraphicsView::AnchorUnderMouse);
     setMinimumSize(300, 210);
     setBackgroundBrush(QColor(29, 34, 42));
+    setAcceptDrops(true);
+    viewport()->setAcceptDrops(true);
     refreshScene();
 }
 
@@ -157,6 +175,11 @@ void ColorNodeCanvas::setGraphChangedHandler(std::function<void(color::Graph)> h
 void ColorNodeCanvas::setSelectionChangedHandler(
     std::function<void(color::NodeId)> handler) {
     selection_changed_handler_ = std::move(handler);
+}
+
+void ColorNodeCanvas::setEffectDropRequestedHandler(
+    std::function<bool(const QString&, const QPointF&)> handler) {
+    effect_drop_requested_handler_ = std::move(handler);
 }
 
 void ColorNodeCanvas::drawBackground(QPainter* painter, const QRectF& rect) {
@@ -411,6 +434,37 @@ void ColorNodeCanvas::contextMenuEvent(QContextMenuEvent* event) {
         }
     }
     event->accept();
+}
+
+void ColorNodeCanvas::dragEnterEvent(QDragEnterEvent* event) {
+    if (!colorEffectIdFromMime(event->mimeData()).isEmpty()) {
+        event->acceptProposedAction();
+        return;
+    }
+    event->ignore();
+}
+
+void ColorNodeCanvas::dragMoveEvent(QDragMoveEvent* event) {
+    if (!colorEffectIdFromMime(event->mimeData()).isEmpty()) {
+        event->acceptProposedAction();
+        return;
+    }
+    event->ignore();
+}
+
+void ColorNodeCanvas::dropEvent(QDropEvent* event) {
+    const auto effect_id = colorEffectIdFromMime(event->mimeData());
+    if (effect_id.isEmpty() || !effect_drop_requested_handler_) {
+        event->ignore();
+        return;
+    }
+
+    const auto position = mapToScene(event->position().toPoint());
+    if (!effect_drop_requested_handler_(effect_id, position)) {
+        event->ignore();
+        return;
+    }
+    event->acceptProposedAction();
 }
 
 }  // namespace ui
