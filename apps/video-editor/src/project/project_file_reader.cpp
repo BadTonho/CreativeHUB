@@ -1242,6 +1242,49 @@ ProjectDocument detail::load(const std::filesystem::path& project_path) {
         document.timeline_video_row_height = row_height_value.toDouble();
         document.timeline_audio_row_height = row_height_value.toDouble();
     }
+    if (version >= audio_mixing_format_version) {
+        const auto buses_value = timeline_object.value("audio_buses");
+        if (!buses_value.isArray()) {
+            throwJson(ProjectErrorCode::MissingField, project_path,
+                      "CSP v41 is missing the audio buses array.");
+        }
+        for (const auto& bus_value : buses_value.toArray()) {
+            if (!bus_value.isObject()) {
+                throwJson(ProjectErrorCode::InvalidValue, project_path,
+                          "Project JSON contains an invalid audio bus.");
+            }
+            const auto bus_object = bus_value.toObject();
+            timeline::AudioBus bus;
+            bus.bus_id = requiredStableId(bus_object, "bus_id", project_path);
+            bus.name = requiredString(bus_object, "name", project_path)
+                .toUtf8().toStdString();
+            const auto gain = bus_object.value("audio_gain");
+            const auto muted = bus_object.value("audio_muted");
+            const auto pan = bus_object.value("audio_pan");
+            if (!gain.isDouble() || !muted.isBool() || !pan.isDouble()) {
+                throwJson(ProjectErrorCode::InvalidValue, project_path,
+                          "Project JSON contains invalid audio bus mix settings.");
+            }
+            bus.audio_gain = gain.toDouble();
+            bus.audio_muted = muted.toBool();
+            bus.audio_pan = pan.toDouble();
+            document.audio_buses.push_back(std::move(bus));
+        }
+        const auto master_value = timeline_object.value("master_audio");
+        if (!master_value.isObject()) {
+            throwJson(ProjectErrorCode::MissingField, project_path,
+                      "CSP v41 is missing the Master audio settings.");
+        }
+        const auto master_object = master_value.toObject();
+        const auto master_gain = master_object.value("audio_gain");
+        const auto master_muted = master_object.value("audio_muted");
+        if (!master_gain.isDouble() || !master_muted.isBool()) {
+            throwJson(ProjectErrorCode::InvalidValue, project_path,
+                      "Project JSON contains invalid Master audio settings.");
+        }
+        document.master_audio_mix = {
+            master_gain.toDouble(), master_muted.toBool()};
+    }
     timeline::TrackId migrated_track_id = 1;
     timeline::ClipId migrated_clip_id = 1;
     if (version == legacy_format_version) {
@@ -1314,6 +1357,53 @@ ProjectDocument detail::load(const std::filesystem::path& project_path) {
                     throwJson(ProjectErrorCode::InvalidValue, project_path, "Project JSON contains an invalid track mute flag.");
                 }
                 track.audio_muted = track_object.value("audio_muted").toBool();
+            }
+            if (version >= audio_mixing_format_version) {
+                const auto pan = track_object.value("audio_pan");
+                const auto output_bus = track_object.value("output_bus_id");
+                const auto sends = track_object.value("audio_sends");
+                if (!pan.isDouble() || output_bus.isUndefined() ||
+                    !sends.isArray()) {
+                    throwJson(ProjectErrorCode::MissingField, project_path,
+                              "CSP v41 is missing track audio routing fields.");
+                }
+                track.audio_pan = pan.toDouble();
+                if (!output_bus.isNull()) {
+                    const auto output_id = requiredInteger(
+                        track_object, "output_bus_id", project_path);
+                    if (output_id <= 0) {
+                        throwJson(ProjectErrorCode::InvalidValue, project_path,
+                                  "Project JSON contains an invalid audio output bus identifier.");
+                    }
+                    track.output_bus_id =
+                        static_cast<timeline::AudioBusId>(output_id);
+                }
+                for (const auto& send_value : sends.toArray()) {
+                    if (!send_value.isObject()) {
+                        throwJson(ProjectErrorCode::InvalidValue, project_path,
+                                  "Project JSON contains an invalid audio send.");
+                    }
+                    const auto send_object = send_value.toObject();
+                    const auto send_gain = send_object.value("gain");
+                    const auto tap = send_object.value("tap");
+                    if (!send_gain.isDouble() || !tap.isString()) {
+                        throwJson(ProjectErrorCode::InvalidValue, project_path,
+                                  "Project JSON contains invalid audio send settings.");
+                    }
+                    timeline::AudioSend send;
+                    send.destination_bus_id = requiredStableId(
+                        send_object, "destination_bus_id", project_path);
+                    send.gain = send_gain.toDouble();
+                    if (tap.toString() == QLatin1String("pre_fader")) {
+                        send.tap = timeline::AudioSendTap::PreFader;
+                    } else if (tap.toString() == QLatin1String("post_fader")) {
+                        send.tap = timeline::AudioSendTap::PostFader;
+                    } else {
+                        throwJson(ProjectErrorCode::InvalidValue, project_path,
+                                  "Project JSON contains an unsupported audio send tap.");
+                    }
+                    track.audio_sends.push_back(send);
+                }
             }
             const auto track_clips = track_object.value("clips");
             if (!track_clips.isArray()) {

@@ -16,7 +16,7 @@ Versions 1–33 migrate their visual clip `effects` array into a serial graph,
 preserving order, values and enabled state. Clips without effects receive
 Input → Output. v34 writes the graph as the canonical correction data; Edit
 Inspector changes and Color topology/layout edits share Timeline Undo/Redo.
-Hub accepts CSP through v40 and copies the existing Color Gallery sidecar.
+Hub accepts CSP through v41 and copies the existing Color Gallery sidecar.
 
 ## Expanded Primary Grade (version 35)
 
@@ -42,7 +42,7 @@ apply after the primary correction, weighted by soft tonal ranges derived from
 Rec. 709 luminance in the current normalized RGB signal. They do not decode
 camera log formats or introduce camera transforms. v1-v35 projects initialize
 the new values to neutral and preserve all existing graph data and Gallery
-sidecars. Hub accepts v40 and rejects v41.
+sidecars. Hub accepts CSP v1-v41 and rejects v42.
 
 ## Grade versions (version 37)
 
@@ -59,7 +59,7 @@ Timeline Undo/Redo. Applying a snapshot changes only the current graph. Split
 and Duplicate Adjustment operations copy a clip's snapshots along with its
 current graph. Versions 1–36 open with no saved grade versions; Save As,
 autosave, recovery, and Hub backup preserve the snapshots in the CSP JSON.
-Hub accepts v40 and rejects v41.
+Hub accepts CSP v1-v41 and rejects v42.
 
 ## Color Curves (version 38)
 
@@ -73,7 +73,7 @@ project data.
 
 Projects v1–v37 open without Curves nodes and retain their existing Color
 graphs and grade versions. Save As, autosave, recovery, and Hub backup keep the
-v38 JSON data and Gallery sidecar together. Hub accepts v40 and rejects v41.
+v38 JSON data and Gallery sidecar together. Hub accepts CSP v1-v41 and rejects v42.
 
 ## Qualifier matte refinement (version 39)
 
@@ -85,7 +85,7 @@ The matte pipeline applies the tonal qualifier, a 3×3 median mix, clean-level
 remapping, coverage shift, then a separable Gaussian blur. Alpha is preserved.
 Versions 1–38 load the new values at their neutral defaults. Save As, autosave,
 recovery, grade snapshots, grade copy/apply, and Hub backup retain the fields;
-the Gallery PNG sidecar is unchanged. Hub accepts v40 and rejects v41.
+the Gallery PNG sidecar is unchanged. Hub accepts CSP v1-v41 and rejects v42.
 
 ## Power Windows and tracking (version 40)
 
@@ -103,7 +103,23 @@ Confidence loss keeps only valid samples; a tracking run is one undoable edit.
 Projects through v39 open with no Power Windows. Split and trim rebase their
 geometry curves; duplicate, grade copy/apply, named versions, Save As, autosave,
 recovery, and Hub backup/restoration retain them. Gallery sidecars remain
-unchanged. Hub accepts v40 and rejects v41.
+unchanged. Hub accepts CSP v1-v41 and rejects v42.
+
+## Audio mixer (version 41)
+
+CSP v41 stores a `timeline.audio_buses` array with stable positive IDs, names,
+gain, mute, and pan. Each bus outputs directly to Master. `timeline.master_audio`
+stores Master gain and mute. Every track stores pan, `output_bus_id` (null for
+Master), and `audio_sends`; each send identifies a destination bus, gain, and
+`pre_fader` or `post_fader` tap. Gain values use `0.0` to `2.0`, pan uses
+`-1.0` to `1.0`, and defaults are unity, unmuted, centered, no buses/sends,
+and a Master route.
+
+Projects v1-v40 migrate to no buses or sends, centered track pan, and neutral
+Master settings. Invalid bus references, duplicate sends, and sends to the
+track's main output bus are rejected. Solo is Preview-only transient state and
+is never serialized. The Hub preserves the v41 fields, accepts CSP v1-v41, and
+rejects future v42.
 
 ## Color Gallery (version 33)
 
@@ -151,8 +167,7 @@ Fusion Composition clips may store UTF-8 `display_name`. Background presets use
 this field while retaining `kind: "fusion_composition"` and the existing graph.
 Missing/empty names reconstruct Fusion Composition. Custom names on other clip
 kinds or in older root versions are refused. Mapping, opening, autosave and
-recovery preserve names, node data and input offsets. Hub supports v40 and
-rejects future v41. See [Background Generator](../features/BACKGROUND_GENERATOR.md).
+recovery preserve names, node data and input offsets. Hub supports CSP v1-v41 and rejects v42. See [Background Generator](../features/BACKGROUND_GENERATOR.md).
 
 ## Fusion masks (version 28)
 
@@ -162,8 +177,7 @@ The `mask_keyframes` object contains five named scalar arrays with the existing
 frame/value/interpolation/easing representation. Mask connections use input 2;
 image input indices remain unchanged. Mask data is accepted only in v28 and
 later. Versions 1–27 retain their previous reader behavior. Generated composition
-input offsets, autosave and recovery remain intact. Hub supports v40 and rejects
-future v41. See [Fusion Masks](../features/FUSION_MASKS.md).
+input offsets, autosave and recovery remain intact. Hub supports CSP v1-v41 and rejects v42. See [Fusion Masks](../features/FUSION_MASKS.md).
 
 ## Fusion Composition and generators (version 27)
 
@@ -191,12 +205,12 @@ retain it, and project-rate conversion leaves this absolute time unchanged.
 Version 24 links migrate with zero offset, matching their previous initial
 playback. Older readers reject v25 instead of silently restarting split renders.
 
-The current root uses `version: 39`. Versions 1 through 38 remain readable.
+The current root uses `version: 41`. Versions 1 through 40 remain readable.
 Version 24 adds optional Motion Studio links to Media Pool items and Timeline
 clips, retaining the previous Image Editor link fields. A Motion link stores
 its ID, editable document, published output, original source, source kind, and
 export profile. Paths use the same relative-within-project rules. Versions
-1–23 open without Motion links. Ordinary saves write version 40; references to
+1–23 open without Motion links. Ordinary saves write version 41; references to
 older field versions below describe when those fields were introduced.
 Version 20 introduced optional Fusion node graphs on visual Timeline clips;
 version 21 adds existing video effects as graph nodes; version 22 adds local
@@ -259,7 +273,7 @@ stores the existing effect `id`, `enabled` state, and a `parameters` array of
 `video.brightness`, `video.contrast`, and `video.saturation`; parameter ranges
 and defaults match the Effects panel. Version 20 graph node types remain
 unchanged when read; readers accept effect nodes only in version 21 or newer.
-Saving any project writes the current version 40 format. Version 22
+Saving any project writes the current version 41 format. Version 22
 may store `transform_keyframes` on Transform nodes, with curves for `position_x`,
 `position_y`, `scale`, `rotation`, and `opacity`. Effect nodes may store an
 `effect_parameter_keyframes` array of `{id, keyframes}` entries; this phase
@@ -283,12 +297,12 @@ ends. Still images remain available for the whole clip. Merge uses straight
 alpha source-over. The duration, Timeline position, and audio stay owned by the
 selected clip. Graph edits are normal Timeline commands and participate in
 Undo/Redo. Versions 1 through 19 load with no graph and keep their previous
-rendering behavior; their next save writes version 40.
+rendering behavior; their next save writes version 41.
 
 ## Version 11 Timeline timebase
 
 Version 11 introduced the Timeline timebase; the current root uses
-`version: 37`. The Timeline object stores a reduced
+`version: 41`. The Timeline object stores a reduced
 rational `frame_rate` as a positive `numerator` and `denominator`. New projects
 default to 30/1 FPS. Media clips store `source_duration_frames` separately from
 their Timeline `duration_frames`; `source_duration_migration_pending` marks an
@@ -309,7 +323,7 @@ restored from the Media Pool in an active session. It is recorded in Timeline
 history, marks the project dirty through the normal edit flow, and is applied
 only once to each pending clip. Migration while opening an old project does
 not by itself mark the project dirty; the next ordinary save writes the
-normalized version 40 document.
+normalized version 41 document.
 
 ## Version 19 project canvas choices
 
@@ -324,7 +338,7 @@ versions 1 through 10 are opened.
 Versions 1 through 18 remain 1920×1080 when opened. Versions 1 and 2 omit the
 canvas and receive that default; versions 3 through 18 require the existing
 1920×1080 canvas values. Version 19 rejects other dimensions. Opening an older
-project does not dirty it; its next save writes version 40.
+project does not dirty it; its next save writes version 41.
 
 `File > Project Settings` edits the current canvas and Timeline frame rate
 using these existing fields; it does not introduce a new format version.
@@ -336,7 +350,7 @@ audio source ranges stay in microseconds. A rate outside the New Project list
 is shown as the current rate so it can be retained. The prepared change is
 applied atomically as one Undo/Redo edit and marks the document dirty. If any
 clip would become zero-length or a Timeline invariant would fail, the complete
-change is rejected. Saving still writes version 40.
+change is rejected. Saving still writes version 41.
 
 ## Version 12 Cross Dissolve overlap
 
@@ -349,7 +363,7 @@ left by D frames. `fade_to_black` remains at the original contiguous cut.
 When opening versions 1 through 11, each legacy Cross Dissolve is migrated by
 shifting its incoming clip and the later clips on that track left by its
 duration. Fade to Black is unchanged. The migration does not mark the project
-dirty by itself; the next ordinary save writes version 40. Saving and
+dirty by itself; the next ordinary save writes version 41. Saving and
 reopening a migrated project preserves the new overlap geometry.
 
 ## Version 13 independent audio tracks
@@ -364,7 +378,7 @@ video tracks; audio-only clips cannot be stored on video tracks, and visual
 clips cannot be stored on audio tracks.
 
 Versions 1 through 12 load existing tracks as video tracks. Their next save
-writes version 40 with explicit track kinds. Version 13 validates media, clip,
+writes version 41 with explicit track kinds. Version 13 validates media, clip,
 and track kinds and rejects incompatible clip/track combinations and
 overlapping audio clips within one audio track. Clips on separate audio tracks
 may overlap.
@@ -386,7 +400,7 @@ whose media has an audio stream. Offline video clips are marked pending and
 receive a companion when their media is restored. Version 14 opens preserve
 existing linked or unlinked state and do not generate duplicate companions.
 Migration on open alone does not dirty the project; the next ordinary save
-writes the normalized version 40 document.
+writes the normalized version 41 document.
 
 ## Version 15 audio volume envelopes
 
@@ -396,7 +410,7 @@ duration boundary; gains are finite linear multipliers from `0.0` to `2.0`.
 Points must be strictly ordered and unique. The empty array means a constant
 `1.0` gain. Visual clips cannot contain audio envelope points. Versions 1
 through 14 load without explicit points and retain constant 100% volume; their
-next save writes version 40.
+next save writes version 41.
 
 ## Version 16 Audio Crossfades
 
@@ -424,7 +438,7 @@ duplicate effect instances are allowed.
 
 Versions 1 through 16 load without visual effect stacks and continue to render
 at their existing color values. Version 17 stacks load with every effect
-enabled. The next ordinary save writes version 40. Opening a legacy project
+enabled. The next ordinary save writes version 41. Opening a legacy project
 without editing does not dirty the project.
 
 ## Version 18 visual effect enable state
@@ -448,7 +462,7 @@ stable string `id`, a path to the editable `.cimg` document, and a path to the
 published raster output. Paths follow the same relative-within-project and
 absolute-outside-project rule as source media. Video and text records cannot
 carry these references. Version 1 through 9 projects remain readable and load
-without linked-image references; their next save writes the current version 40
+without linked-image references; their next save writes the current version 41
 format, including Timeline timebase, Cross Dissolve, audio-track, and linked
 video-audio migrations.
 
@@ -541,7 +555,7 @@ keyframes. Version 2 files receive the identity transform, an empty keyframe
 set, and the 1920x1080 canvas when opened. Version 1 files containing
 `timeline.clips` remain supported; they are converted to a single Video 1
 track with sequential timeline starts computed from clip durations. The next
-successful save writes version 40 and includes the timeline zoom, group row
+successful save writes version 41 and includes the timeline zoom, group row
 heights, explicit media/clip kinds, optional linked-image references, and the rational
 Timeline rate with separate source durations. Existing version 1 through 10 projects continue
 to load; their media entries default to video unless a version 8 image kind is

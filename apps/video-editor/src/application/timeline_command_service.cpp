@@ -89,6 +89,21 @@ EditReason reasonForAudio(timeline::AudioParameterResult result) noexcept {
     return EditReason::InvalidTarget;
 }
 
+EditReason reasonForAudioBus(timeline::AudioBusMutationResult result) noexcept {
+    switch (result) {
+    case timeline::AudioBusMutationResult::InvalidTarget:
+        return EditReason::InvalidTarget;
+    case timeline::AudioBusMutationResult::InvalidName:
+        return EditReason::InvalidName;
+    case timeline::AudioBusMutationResult::InvalidValue:
+        return EditReason::InvalidValue;
+    case timeline::AudioBusMutationResult::Changed:
+    case timeline::AudioBusMutationResult::NoChange:
+        return EditReason::None;
+    }
+    return EditReason::InvalidTarget;
+}
+
 EditReason reasonForTransform(timeline::TransformParameterResult result) noexcept {
     switch (result) {
     case timeline::TransformParameterResult::InvalidIndex:
@@ -1533,6 +1548,121 @@ TimelineEditResult TimelineCommandService::execute(const SetTrackAudioCommand& c
     recordSuccessfulEdit(before);
     auto output = result(EditStatus::Applied);
     output.affected_track_ids = {command.track_id};
+    return output;
+}
+
+TimelineEditResult TimelineCommandService::execute(
+    const SetTrackAudioMixCommand& command) {
+    if (!session_.timeline_.locateTrack(command.track_id).has_value()) {
+        return result(EditStatus::Rejected, EditReason::InvalidTarget);
+    }
+    const auto before = session_.captureEditState();
+    const auto mutation = session_.timeline_.setTrackAudioMix(
+        command.track_id, command.gain, command.muted, command.pan,
+        command.output_bus_id, command.sends);
+    if (mutation == timeline::AudioParameterResult::NoChange) {
+        return result(EditStatus::NoChange);
+    }
+    if (mutation != timeline::AudioParameterResult::Changed) {
+        return result(EditStatus::Rejected, reasonForAudio(mutation));
+    }
+    recordSuccessfulEdit(before);
+    auto output = result(EditStatus::Applied);
+    output.affected_track_ids = {command.track_id};
+    output.invalidate_playback = true;
+    return output;
+}
+
+TimelineEditResult TimelineCommandService::execute(
+    const SetAudioBusMixCommand& command) {
+    const auto before = session_.captureEditState();
+    const auto mutation = session_.timeline_.setAudioBusMix(
+        command.bus_id, command.gain, command.muted, command.pan);
+    if (mutation == timeline::AudioParameterResult::NoChange) {
+        return result(EditStatus::NoChange);
+    }
+    if (mutation != timeline::AudioParameterResult::Changed) {
+        return result(EditStatus::Rejected, reasonForAudio(mutation));
+    }
+    recordSuccessfulEdit(before);
+    auto output = result(EditStatus::Applied);
+    output.affected_audio_bus_ids = {command.bus_id};
+    output.invalidate_playback = true;
+    return output;
+}
+
+TimelineEditResult TimelineCommandService::execute(
+    const AddAudioBusCommand& command) {
+    const auto before = session_.captureEditState();
+    timeline::AudioBusId bus_id = 0;
+    const auto mutation = session_.timeline_.addAudioBus(command.name, &bus_id);
+    if (mutation != timeline::AudioBusMutationResult::Changed) {
+        return result(EditStatus::Rejected, reasonForAudioBus(mutation));
+    }
+    recordSuccessfulEdit(before);
+    auto output = result(EditStatus::Applied);
+    output.affected_audio_bus_ids = {bus_id};
+    output.invalidate_playback = true;
+    return output;
+}
+
+TimelineEditResult TimelineCommandService::execute(
+    const RenameAudioBusCommand& command) {
+    const auto before = session_.captureEditState();
+    const auto mutation = session_.timeline_.renameAudioBus(
+        command.bus_id, command.name);
+    if (mutation == timeline::AudioBusMutationResult::NoChange) {
+        return result(EditStatus::NoChange);
+    }
+    if (mutation != timeline::AudioBusMutationResult::Changed) {
+        return result(EditStatus::Rejected, reasonForAudioBus(mutation));
+    }
+    recordSuccessfulEdit(before);
+    auto output = result(EditStatus::Applied);
+    output.affected_audio_bus_ids = {command.bus_id};
+    output.invalidate_playback = true;
+    return output;
+}
+
+TimelineEditResult TimelineCommandService::execute(
+    const RemoveAudioBusCommand& command) {
+    const auto before = session_.captureEditState();
+    std::vector<timeline::TrackId> affected_tracks;
+    for (const auto& track : session_.timeline_.tracks()) {
+        const bool routed = track.output_bus_id == command.bus_id;
+        const bool sends_to_bus = std::any_of(
+            track.audio_sends.begin(), track.audio_sends.end(),
+            [&command](const timeline::AudioSend& send) {
+                return send.destination_bus_id == command.bus_id;
+            });
+        if (routed || sends_to_bus) affected_tracks.push_back(track.track_id);
+    }
+    const auto mutation = session_.timeline_.removeAudioBus(command.bus_id);
+    if (mutation != timeline::AudioBusMutationResult::Changed) {
+        return result(EditStatus::Rejected, reasonForAudioBus(mutation));
+    }
+    recordSuccessfulEdit(before);
+    auto output = result(EditStatus::Applied);
+    output.affected_track_ids = std::move(affected_tracks);
+    output.affected_audio_bus_ids = {command.bus_id};
+    output.invalidate_playback = true;
+    return output;
+}
+
+TimelineEditResult TimelineCommandService::execute(
+    const SetMasterAudioMixCommand& command) {
+    const auto before = session_.captureEditState();
+    const auto mutation = session_.timeline_.setMasterAudioMix(
+        command.gain, command.muted);
+    if (mutation == timeline::AudioParameterResult::NoChange) {
+        return result(EditStatus::NoChange);
+    }
+    if (mutation != timeline::AudioParameterResult::Changed) {
+        return result(EditStatus::Rejected, reasonForAudio(mutation));
+    }
+    recordSuccessfulEdit(before);
+    auto output = result(EditStatus::Applied);
+    output.invalidate_playback = true;
     return output;
 }
 

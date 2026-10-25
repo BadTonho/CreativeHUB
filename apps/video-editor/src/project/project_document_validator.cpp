@@ -22,6 +22,10 @@ bool validAudioGain(double gain) {
     return std::isfinite(gain) && gain >= 0.0 && gain <= 2.0;
 }
 
+bool validAudioPan(double pan) {
+    return std::isfinite(pan) && pan >= -1.0 && pan <= 1.0;
+}
+
 bool validTextStyle(const timeline::TextStyle& text) {
     if (text.font_family.empty() || !std::isfinite(text.font_size_pixels) ||
         text.font_size_pixels <= 0.0 || text.font_size_pixels > 512.0) {
@@ -281,6 +285,25 @@ void validateDocument(const ProjectDocument& document,
             throwJson(ProjectErrorCode::InvalidValue, project_path, "Project JSON contains invalid clip transform or keyframes.");
         }
     };
+    if (!validAudioGain(document.master_audio_mix.audio_gain)) {
+        throwJson(ProjectErrorCode::InvalidValue, project_path,
+                  "Project JSON contains invalid Master audio gain.");
+    }
+    std::unordered_set<timeline::AudioBusId> audio_bus_ids;
+    for (const auto& bus : document.audio_buses) {
+        if (bus.bus_id == 0 ||
+            bus.bus_id > static_cast<timeline::AudioBusId>(
+                std::numeric_limits<std::int64_t>::max()) ||
+            !audio_bus_ids.insert(bus.bus_id).second ||
+            bus.name.find_first_not_of(" \t\r\n") == std::string::npos) {
+            throwJson(ProjectErrorCode::InvalidTimeline, project_path,
+                      "Project JSON contains a missing, duplicate, or unnamed audio bus.");
+        }
+        if (!validAudioGain(bus.audio_gain) || !validAudioPan(bus.audio_pan)) {
+            throwJson(ProjectErrorCode::InvalidValue, project_path,
+                      "Project JSON contains invalid audio bus mix settings.");
+        }
+    }
     std::unordered_set<timeline::TrackId> track_ids;
     std::unordered_set<timeline::ClipId> clip_ids;
     const auto media_kind_for_path = [&document](const std::filesystem::path& path)
@@ -307,6 +330,25 @@ void validateDocument(const ProjectDocument& document,
         }
         if (!validAudioGain(track.audio_gain)) {
             throwJson(ProjectErrorCode::InvalidValue, project_path, "Project JSON contains an invalid track audio gain.");
+        }
+        if (!validAudioPan(track.audio_pan) ||
+            (track.output_bus_id.has_value() &&
+             !audio_bus_ids.contains(*track.output_bus_id))) {
+            throwJson(ProjectErrorCode::InvalidValue, project_path,
+                      "Project JSON contains invalid track audio routing settings.");
+        }
+        std::unordered_set<timeline::AudioBusId> send_bus_ids;
+        for (const auto& send : track.audio_sends) {
+            if (!audio_bus_ids.contains(send.destination_bus_id) ||
+                (track.output_bus_id.has_value() &&
+                 *track.output_bus_id == send.destination_bus_id) ||
+                !send_bus_ids.insert(send.destination_bus_id).second ||
+                !validAudioGain(send.gain) ||
+                (send.tap != timeline::AudioSendTap::PreFader &&
+                 send.tap != timeline::AudioSendTap::PostFader)) {
+                throwJson(ProjectErrorCode::InvalidValue, project_path,
+                          "Project JSON contains an invalid or duplicate audio send.");
+            }
         }
         for (const auto& clip : track.clips) {
             if (clip.clip_id == 0 ||

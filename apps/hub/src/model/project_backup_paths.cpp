@@ -167,7 +167,7 @@ bool prepareProjectBackup(const QByteArray& original, const QString& originalPat
         return true;
     }
     const int version = root.value("version").toInt(-1);
-    const int maximum = image ? 28 : video ? 40 : 18;
+    const int maximum = image ? 28 : video ? 41 : 18;
     if (version < 1 || version > maximum)
         return fail(QStringLiteral("A versão %1 do formato '%2' não é suportada para backup.").arg(version).arg(format));
     const QFileInfo source(originalPath);

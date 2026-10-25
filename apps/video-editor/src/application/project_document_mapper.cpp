@@ -17,6 +17,8 @@ project::ProjectDocument ProjectDocumentMapper::toDocument(
     document.timeline_zoom = presentation.zoom;
     document.timeline_video_row_height = presentation.video_row_height;
     document.timeline_audio_row_height = presentation.audio_row_height;
+    document.audio_buses = session.timeline().audioBuses();
+    document.master_audio_mix = session.timeline().masterAudioMix();
     document.color_gallery_stills = session.colorGalleryStills();
     const auto& library = session.mediaLibrary();
     document.media.reserve(library.size());
@@ -40,6 +42,9 @@ project::ProjectDocument ProjectDocumentMapper::toDocument(
         project_track.name = track.name;
         project_track.audio_gain = track.audio_gain;
         project_track.audio_muted = track.audio_muted;
+        project_track.audio_pan = track.audio_pan;
+        project_track.output_bus_id = track.output_bus_id;
+        project_track.audio_sends = track.audio_sends;
         project_track.kind = track.kind;
         project_track.clips.reserve(track.clips.size());
         for (const auto& clip : track.clips) {
@@ -55,8 +60,10 @@ project::ProjectDocument ProjectDocumentMapper::toDocument(
             project_clip.audio_muted = clip.audio_muted;
             project_clip.audio_gain_keyframes = clip.audio_gain_keyframes;
             project_clip.effects = clip.effects;
-            project_clip.color_graph = clip.color_graph.value_or(
-                color::fromEffectStack(clip.effects));
+            if (timeline::supportsClipEffects(clip.kind)) {
+                project_clip.color_graph = clip.color_graph.value_or(
+                    color::fromEffectStack(clip.effects));
+            }
             project_clip.color_grade_versions = clip.color_grade_versions;
             project_clip.node_graph = clip.node_graph;
             project_clip.composition_input_offset_frames = clip.composition_input_offset_frames;

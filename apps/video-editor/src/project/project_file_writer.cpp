@@ -414,6 +414,24 @@ void save(const std::filesystem::path& project_path, const ProjectDocument& docu
         track.insert("name", QString::fromStdString(track_source.name));
         track.insert("audio_gain", track_source.audio_gain);
         track.insert("audio_muted", track_source.audio_muted);
+        track.insert("audio_pan", track_source.audio_pan);
+        if (track_source.output_bus_id.has_value()) {
+            track.insert("output_bus_id",
+                         static_cast<qint64>(*track_source.output_bus_id));
+        } else {
+            track.insert("output_bus_id", QJsonValue::Null);
+        }
+        QJsonArray audio_sends;
+        for (const auto& send : track_source.audio_sends) {
+            QJsonObject send_item;
+            send_item.insert("destination_bus_id",
+                             static_cast<qint64>(send.destination_bus_id));
+            send_item.insert("gain", send.gain);
+            send_item.insert("tap", send.tap == timeline::AudioSendTap::PreFader
+                ? "pre_fader" : "post_fader");
+            audio_sends.append(send_item);
+        }
+        track.insert("audio_sends", audio_sends);
         track.insert("kind", trackKindName(track_source.kind));
         QJsonArray clips;
         for (const auto& clip : track_source.clips) {
@@ -549,6 +567,21 @@ void save(const std::filesystem::path& project_path, const ProjectDocument& docu
 
     QJsonObject timeline;
     timeline.insert("tracks", track_array);
+    QJsonArray audio_buses;
+    for (const auto& bus_source : document.audio_buses) {
+        QJsonObject bus;
+        bus.insert("bus_id", static_cast<qint64>(bus_source.bus_id));
+        bus.insert("name", QString::fromStdString(bus_source.name));
+        bus.insert("audio_gain", bus_source.audio_gain);
+        bus.insert("audio_muted", bus_source.audio_muted);
+        bus.insert("audio_pan", bus_source.audio_pan);
+        audio_buses.append(bus);
+    }
+    timeline.insert("audio_buses", audio_buses);
+    QJsonObject master_audio;
+    master_audio.insert("audio_gain", document.master_audio_mix.audio_gain);
+    master_audio.insert("audio_muted", document.master_audio_mix.audio_muted);
+    timeline.insert("master_audio", master_audio);
     QJsonObject frame_rate;
     frame_rate.insert("numerator",
                       static_cast<qint64>(document.timeline_frame_rate.numerator));

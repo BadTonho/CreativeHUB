@@ -746,6 +746,13 @@ public:
                             application::AddMediaClipCommand{
                                 audio_source, track_id, 0}).changed(),
                     "The Audio workspace fixture could not add its source clip.");
+            require(window.timeline_command_service_.execute(
+                        application::AddAudioBusCommand{"Dialogue"}).changed() &&
+                    window.timeline_command_service_.execute(
+                        application::AddAudioBusCommand{"Reverb"}).changed(),
+                    "The Audio mixer fixture could not add its submix buses.");
+            const auto dialogue_bus = window.timeline_model_.audioBuses().at(0).bus_id;
+            const auto reverb_bus = window.timeline_model_.audioBuses().at(1).bus_id;
             window.updateTimelineState();
             const auto clip_id = window.timeline_model_.tracks()
                 [*window.timeline_model_.locateTrack(track_id)].clips.front().clip_id;
@@ -783,24 +790,50 @@ public:
                 ->findChild<QSlider*>("audioTrackGain");
             auto* mute = window.audio_workspace_->mixerPanel()
                 ->findChild<QCheckBox*>("audioTrackMute");
+            auto* pan = window.audio_workspace_->mixerPanel()
+                ->findChild<QSlider*>("audioTrackPan");
+            auto* output_route = window.audio_workspace_->mixerPanel()
+                ->findChild<QComboBox*>("audioTrackOutput");
+            auto* send_target = window.audio_workspace_->mixerPanel()
+                ->findChild<QComboBox*>("audioTrackSendDestination");
+            auto* add_send = window.audio_workspace_->mixerPanel()
+                ->findChild<QPushButton*>("audioTrackAddSend");
+            auto* master_gain = window.audio_workspace_->mixerPanel()
+                ->findChild<QSlider*>("audioMasterGain");
+            auto* bus_solo = window.audio_workspace_->mixerPanel()
+                ->findChild<QCheckBox*>("audioBusSolo");
+            auto* bus_rename = window.audio_workspace_->mixerPanel()
+                ->findChild<QPushButton*>("audioBusRename");
+            auto* bus_remove = window.audio_workspace_->mixerPanel()
+                ->findChild<QPushButton*>("audioBusRemove");
             require(gain != nullptr && mute != nullptr && gain->value() == 100 &&
-                        !mute->isChecked(),
-                    "The Audio mixer must reflect the persisted track settings.");
+                        pan != nullptr && pan->value() == 0 &&
+                        output_route != nullptr && send_target != nullptr &&
+                        add_send != nullptr && master_gain != nullptr &&
+                        master_gain->value() == 100 && !mute->isChecked() &&
+                        bus_solo != nullptr && bus_rename != nullptr &&
+                        bus_remove != nullptr,
+                    "The Audio mixer must expose neutral track mix and routing controls.");
             auto* track_meter = window.audio_workspace_->meterPage()
                 ->findChild<QProgressBar*>("audioTrackMeter");
             auto* output_meter = window.audio_workspace_->meterPage()
                 ->findChild<QProgressBar*>("audioOutputMeter");
             auto* mixer_output_meter = window.audio_workspace_->mixerPanel()
                 ->findChild<QProgressBar*>("audioOutputMixerMeter");
-            window.audio_workspace_->setPeaks({{track_id, 0.4F}}, 0.7F);
+            window.audio_workspace_->setPeaks(
+                {{track_id, 0.4F}}, {{dialogue_bus, 0.3F}}, 0.7F);
+            auto* bus_meter = window.audio_workspace_->mixerPanel()
+                ->findChild<QProgressBar*>("audioBusMixerMeter");
             require(track_meter != nullptr && output_meter != nullptr &&
                         mixer_output_meter != nullptr &&
+                        bus_meter != nullptr && bus_meter->value() == 30 &&
                         track_meter->value() == 40 &&
                         output_meter->value() == 70 &&
                         mixer_output_meter->value() == 70,
                     "Audio meters must show the matching track and summed output.");
             window.audio_workspace_->clearPeaks();
             require(track_meter->value() == 0 && output_meter->value() == 0 &&
+                        bus_meter->value() == 0 &&
                         mixer_output_meter->value() == 0,
                     "Audio meters must clear after playback stops.");
             gain->setValue(65);
@@ -815,6 +848,41 @@ public:
                     "Audio gain Undo must use the shared history.");
             require(window.edit_workspace_->controller()->redo().changed(),
                     "Audio gain Redo must use the shared history.");
+            pan->setValue(-25);
+            require(std::abs(window.timeline_model_.tracks()
+                        [*window.timeline_model_.locateTrack(track_id)]
+                        .audio_pan + 0.25) < 1.0e-6,
+                    "The Audio mixer must apply pan by stable track ID.");
+            output_route->setCurrentIndex(output_route->findData(
+                QVariant::fromValue<qulonglong>(dialogue_bus)));
+            send_target->setCurrentIndex(send_target->findData(
+                QVariant::fromValue<qulonglong>(reverb_bus)));
+            add_send->click();
+            const auto routed_track_index = window.timeline_model_.locateTrack(track_id);
+            require(routed_track_index.has_value() &&
+                        window.timeline_model_.tracks()[*routed_track_index].output_bus_id ==
+                            dialogue_bus &&
+                        window.timeline_model_.tracks()[*routed_track_index].audio_sends.size() == 1 &&
+                        window.timeline_model_.tracks()[*routed_track_index].audio_sends.front()
+                            .destination_bus_id == reverb_bus,
+                    "Track output and sends must update the saved timeline model.");
+            auto* send_pre_fader = window.audio_workspace_->mixerPanel()
+                ->findChild<QCheckBox*>("audioTrackSendPreFader");
+            require(send_pre_fader != nullptr,
+                    "The Audio mixer must expose the send tap mode.");
+            send_pre_fader->setChecked(true);
+            require(window.timeline_model_.tracks()[*routed_track_index]
+                        .audio_sends.front().tap == timeline::AudioSendTap::PreFader,
+                    "The send tap control must update the timeline model.");
+            master_gain->setValue(80);
+            require(std::abs(window.timeline_model_.masterAudioMix().audio_gain - 0.8) <
+                        1.0e-6,
+                    "The Audio mixer must edit the Master gain.");
+            auto* solo = window.audio_workspace_->mixerPanel()
+                ->findChild<QCheckBox*>("audioTrackSolo");
+            require(solo != nullptr, "The Audio mixer must expose temporary solo.");
+            solo->setChecked(true);
+            bus_solo->setChecked(true);
             mute->setChecked(true);
             const auto project_path = directory / "audio-workspace.csp";
             require(window.saveProjectTo(project_path, "save"),
@@ -827,7 +895,14 @@ public:
                 });
             require(saved_track != saved.timeline_tracks.end() &&
                         std::abs(saved_track->audio_gain - 0.65) < 1.0e-6 &&
-                        saved_track->audio_muted,
+                        saved_track->audio_muted &&
+                        std::abs(saved_track->audio_pan + 0.25) < 1.0e-6 &&
+                        saved_track->output_bus_id == dialogue_bus &&
+                        saved_track->audio_sends.size() == 1 &&
+                        saved_track->audio_sends.front().tap ==
+                            timeline::AudioSendTap::PreFader &&
+                        saved.audio_buses.size() == 2 &&
+                        std::abs(saved.master_audio_mix.audio_gain - 0.8) < 1.0e-6,
                     "Audio mixer settings must survive a project round trip.");
             setWorkspacePageImmediately(window, ui::WorkspacePageId::Edit);
             bool restored_docks = true;
@@ -861,13 +936,35 @@ public:
                 ->findChild<QSlider*>("audioTrackGain");
             auto* reopened_mute = window.audio_workspace_->mixerPanel()
                 ->findChild<QCheckBox*>("audioTrackMute");
+            auto* reopened_pan = window.audio_workspace_->mixerPanel()
+                ->findChild<QSlider*>("audioTrackPan");
+            auto* reopened_output = window.audio_workspace_->mixerPanel()
+                ->findChild<QComboBox*>("audioTrackOutput");
+            auto* reopened_send_pre = window.audio_workspace_->mixerPanel()
+                ->findChild<QCheckBox*>("audioTrackSendPreFader");
+            auto* reopened_master_gain = window.audio_workspace_->mixerPanel()
+                ->findChild<QSlider*>("audioMasterGain");
             require(reopened_track.has_value() &&
                         std::abs(window.timeline_model_.tracks()[*reopened_track]
                             .audio_gain - 0.65) < 1.0e-6 &&
                         window.timeline_model_.tracks()[*reopened_track].audio_muted &&
                         reopened_gain != nullptr && reopened_mute != nullptr &&
-                        reopened_gain->value() == 65 && reopened_mute->isChecked(),
+                        reopened_gain->value() == 65 && reopened_mute->isChecked() &&
+                        reopened_pan != nullptr && reopened_pan->value() == -25 &&
+                        reopened_output != nullptr &&
+                        reopened_output->currentData().toULongLong() == dialogue_bus &&
+                        reopened_send_pre != nullptr && reopened_send_pre->isChecked() &&
+                        reopened_master_gain != nullptr &&
+                        reopened_master_gain->value() == 80,
                     "Reopening must synchronize the Audio mixer with the saved project.");
+            auto* reopened_solo = window.audio_workspace_->mixerPanel()
+                ->findChild<QCheckBox*>("audioTrackSolo");
+            auto* reopened_bus_solo = window.audio_workspace_->mixerPanel()
+                ->findChild<QCheckBox*>("audioBusSolo");
+            require(reopened_solo != nullptr && !reopened_solo->isChecked() &&
+                        reopened_bus_solo != nullptr &&
+                        !reopened_bus_solo->isChecked(),
+                    "Solo must remain transient and clear when a project is reopened.");
         }
         std::filesystem::remove_all(directory);
     }

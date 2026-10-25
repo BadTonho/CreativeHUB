@@ -951,6 +951,10 @@ bool TimelineModel::validAudioGain(double gain) noexcept {
     return std::isfinite(gain) && gain >= 0.0 && gain <= 2.0;
 }
 
+bool TimelineModel::validAudioPan(double pan) noexcept {
+    return std::isfinite(pan) && pan >= -1.0 && pan <= 1.0;
+}
+
 bool TimelineModel::validTextStyle(const TextStyle& text) noexcept {
     return timeline::isValidTextStyle(text);
 }
@@ -2714,6 +2718,9 @@ TimelineModel::Snapshot TimelineModel::snapshot() const {
     result.next_track_id = next_track_id_;
     result.next_clip_id = next_clip_id_;
     result.frame_rate = frame_rate_;
+    result.audio_buses = audio_buses_;
+    result.master_audio_mix = master_audio_mix_;
+    result.next_audio_bus_id = next_audio_bus_id_;
     return result;
 }
 
@@ -2869,6 +2876,12 @@ void TimelineModel::ensureIdentifiers() {
     }
     next_track_id_ = std::max(next_track_id_, max_track + 1);
     next_clip_id_ = std::max(next_clip_id_, max_clip + 1);
+    AudioBusId max_bus = 0;
+    for (auto& bus : audio_buses_) {
+        if (bus.bus_id == 0) bus.bus_id = next_audio_bus_id_++;
+        max_bus = std::max(max_bus, bus.bus_id);
+    }
+    next_audio_bus_id_ = std::max(next_audio_bus_id_, max_bus + 1);
 }
 
 void TimelineModel::restore(Snapshot snapshot) {
@@ -2878,6 +2891,9 @@ void TimelineModel::restore(Snapshot snapshot) {
         : FrameRate{};
     next_track_id_ = snapshot.next_track_id;
     next_clip_id_ = snapshot.next_clip_id;
+    audio_buses_ = std::move(snapshot.audio_buses);
+    master_audio_mix_ = snapshot.master_audio_mix;
+    next_audio_bus_id_ = snapshot.next_audio_bus_id;
     ensureIdentifiers();
     if (tracks_.empty()) {
         appendDefaultTracks(tracks_, next_track_id_);
@@ -2899,9 +2915,24 @@ void TimelineModel::assertIdentityInvariants() const {
 #ifndef NDEBUG
     std::unordered_set<TrackId> track_ids;
     std::unordered_set<ClipId> clip_ids;
+    std::unordered_set<AudioBusId> bus_ids;
+    for (const auto& bus : audio_buses_) {
+        assert(bus.bus_id != 0);
+        assert(bus_ids.insert(bus.bus_id).second);
+    }
     for (const auto& track : tracks_) {
         assert(track.track_id != 0);
         assert(track_ids.insert(track.track_id).second);
+        assert(!track.output_bus_id.has_value() ||
+               bus_ids.contains(*track.output_bus_id));
+        std::unordered_set<AudioBusId> send_bus_ids;
+        for (const auto& send : track.audio_sends) {
+            assert(send.destination_bus_id != 0);
+            assert(bus_ids.contains(send.destination_bus_id));
+            assert(!track.output_bus_id.has_value() ||
+                   *track.output_bus_id != send.destination_bus_id);
+            assert(send_bus_ids.insert(send.destination_bus_id).second);
+        }
         for (const auto& clip : track.clips) {
             assert(clip.clip_id != 0);
             assert(clip.track_id == track.track_id);
@@ -3136,6 +3167,140 @@ AudioParameterResult TimelineModel::setTrackAudio(
     track->audio_gain = gain;
     track->audio_muted = muted;
     return AudioParameterResult::Changed;
+}
+
+AudioParameterResult TimelineModel::setTrackAudioMix(
+    TrackId track_id,
+    double gain,
+    bool muted,
+    double pan,
+    std::optional<AudioBusId> output_bus_id,
+    std::vector<AudioSend> sends) {
+    const auto track_index = locateTrack(track_id);
+    if (!track_index.has_value()) return AudioParameterResult::InvalidIndex;
+    if (!validAudioGain(gain) || !validAudioPan(pan)) {
+        return AudioParameterResult::InvalidValue;
+    }
+    if (output_bus_id.has_value() && !locateAudioBus(*output_bus_id).has_value()) {
+        return AudioParameterResult::InvalidValue;
+    }
+    std::unordered_set<AudioBusId> destinations;
+    for (const auto& send : sends) {
+        if (send.destination_bus_id == 0 ||
+            !locateAudioBus(send.destination_bus_id).has_value() ||
+            (output_bus_id.has_value() &&
+             *output_bus_id == send.destination_bus_id) ||
+            !destinations.insert(send.destination_bus_id).second ||
+            !validAudioGain(send.gain) ||
+            (send.tap != AudioSendTap::PreFader &&
+             send.tap != AudioSendTap::PostFader)) {
+            return AudioParameterResult::InvalidValue;
+        }
+    }
+    auto& track = tracks_[*track_index];
+    if (track.audio_gain == gain && track.audio_muted == muted &&
+        track.audio_pan == pan && track.output_bus_id == output_bus_id &&
+        track.audio_sends == sends) {
+        return AudioParameterResult::NoChange;
+    }
+    track.audio_gain = gain;
+    track.audio_muted = muted;
+    track.audio_pan = pan;
+    track.output_bus_id = output_bus_id;
+    track.audio_sends = std::move(sends);
+    assertIdentityInvariants();
+    return AudioParameterResult::Changed;
+}
+
+AudioParameterResult TimelineModel::setAudioBusMix(
+    AudioBusId bus_id,
+    double gain,
+    bool muted,
+    double pan) {
+    const auto bus_index = locateAudioBus(bus_id);
+    if (!bus_index.has_value()) return AudioParameterResult::InvalidIndex;
+    if (!validAudioGain(gain) || !validAudioPan(pan)) {
+        return AudioParameterResult::InvalidValue;
+    }
+    auto& bus = audio_buses_[*bus_index];
+    if (bus.audio_gain == gain && bus.audio_muted == muted &&
+        bus.audio_pan == pan) {
+        return AudioParameterResult::NoChange;
+    }
+    bus.audio_gain = gain;
+    bus.audio_muted = muted;
+    bus.audio_pan = pan;
+    return AudioParameterResult::Changed;
+}
+
+AudioParameterResult TimelineModel::setMasterAudioMix(double gain, bool muted) {
+    if (!validAudioGain(gain)) return AudioParameterResult::InvalidValue;
+    if (master_audio_mix_.audio_gain == gain &&
+        master_audio_mix_.audio_muted == muted) {
+        return AudioParameterResult::NoChange;
+    }
+    master_audio_mix_ = {gain, muted};
+    return AudioParameterResult::Changed;
+}
+
+AudioBusMutationResult TimelineModel::addAudioBus(
+    std::string name,
+    AudioBusId* created_bus_id) {
+    if (!validName(name)) return AudioBusMutationResult::InvalidName;
+    constexpr auto max_project_id = static_cast<AudioBusId>(
+        std::numeric_limits<std::int64_t>::max());
+    if (next_audio_bus_id_ == 0 || next_audio_bus_id_ > max_project_id) {
+        return AudioBusMutationResult::InvalidValue;
+    }
+    const auto id = next_audio_bus_id_++;
+    audio_buses_.push_back({id, std::move(name), 1.0, false, 0.0});
+    if (created_bus_id != nullptr) *created_bus_id = id;
+    assertIdentityInvariants();
+    return AudioBusMutationResult::Changed;
+}
+
+AudioBusMutationResult TimelineModel::renameAudioBus(
+    AudioBusId bus_id,
+    std::string name) {
+    const auto bus_index = locateAudioBus(bus_id);
+    if (!bus_index.has_value()) return AudioBusMutationResult::InvalidTarget;
+    if (!validName(name)) return AudioBusMutationResult::InvalidName;
+    auto& bus = audio_buses_[*bus_index];
+    if (bus.name == name) return AudioBusMutationResult::NoChange;
+    bus.name = std::move(name);
+    return AudioBusMutationResult::Changed;
+}
+
+AudioBusMutationResult TimelineModel::removeAudioBus(AudioBusId bus_id) {
+    const auto bus_index = locateAudioBus(bus_id);
+    if (!bus_index.has_value()) return AudioBusMutationResult::InvalidTarget;
+    audio_buses_.erase(audio_buses_.begin() +
+        static_cast<std::ptrdiff_t>(*bus_index));
+    for (auto& track : tracks_) {
+        if (track.output_bus_id == bus_id) track.output_bus_id.reset();
+        std::erase_if(track.audio_sends, [bus_id](const AudioSend& send) {
+            return send.destination_bus_id == bus_id;
+        });
+    }
+    assertIdentityInvariants();
+    return AudioBusMutationResult::Changed;
+}
+
+const std::vector<AudioBus>& TimelineModel::audioBuses() const noexcept {
+    return audio_buses_;
+}
+
+const MasterAudioMix& TimelineModel::masterAudioMix() const noexcept {
+    return master_audio_mix_;
+}
+
+std::optional<std::size_t> TimelineModel::locateAudioBus(
+    AudioBusId bus_id) const noexcept {
+    if (bus_id == 0) return std::nullopt;
+    for (std::size_t index = 0; index < audio_buses_.size(); ++index) {
+        if (audio_buses_[index].bus_id == bus_id) return index;
+    }
+    return std::nullopt;
 }
 
 AudioParameterResult TimelineModel::setClipAudioGainKeyframes(

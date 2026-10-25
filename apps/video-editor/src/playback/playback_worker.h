@@ -103,6 +103,10 @@ struct CompositionLayerSpec {
     qint64 linked_render_start_time_us = 0;
     qint64 composition_input_offset_frames = 0;
     std::optional<color::Graph> color_graph;
+    double track_audio_pan = 0.0;
+    std::optional<timeline::AudioBusId> output_bus_id;
+    std::vector<timeline::AudioSend> audio_sends;
+    int source_audio_channel_count = 2;
 };
 
 struct CompositionTransitionSpec {
@@ -159,6 +163,8 @@ public slots:
         bool clip_audio_muted);
     virtual void setMonitorVolume(double gain);
     virtual void setAudioMeteringEnabled(bool enabled);
+    virtual void setAudioMixConfiguration(
+        media::TimelineAudioMixConfiguration configuration);
     virtual void setPreviewQuality(PreviewQuality quality);
     virtual void setCompositionCanvasSize(int width, int height);
     virtual void setGpuCompositionEnabled(bool enabled, QOffscreenSurface* surface);
@@ -218,7 +224,10 @@ signals:
     void audioWarning(QString message, qint64 error_code, quint64 generation);
     void compositionWarning(QString message, qint64 error_code, quint64 generation);
     void audioLevelsReady(QVector<quint64> track_ids,
-                          QVector<float> track_peaks, float master_peak,
+                          QVector<float> track_peaks,
+                          QVector<quint64> bus_ids,
+                          QVector<float> bus_peaks,
+                          float master_peak,
                           quint64 generation);
     void stillCaptureReady(
         quint64 request_id,
@@ -515,6 +524,7 @@ private:
     std::vector<CompositionSession> composition_sessions_;
     std::vector<media::TimelineAudioMixClip> composition_audio_mix_clips_;
     std::vector<media::TimelineAudioMixTransition> composition_audio_mix_transitions_;
+    media::TimelineAudioMixConfiguration composition_audio_mix_configuration_;
     std::shared_ptr<TransitionPrerollState> transition_preroll_state_;
     std::thread transition_preroll_thread_;
     std::size_t last_transition_preroll_session_index_ =

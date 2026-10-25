@@ -28,6 +28,34 @@ namespace timeline {
 
 using TrackId = std::uint64_t;
 using ClipId = std::uint64_t;
+using AudioBusId = std::uint64_t;
+
+enum class AudioSendTap { PreFader, PostFader };
+
+struct AudioSend {
+    AudioBusId destination_bus_id = 0;
+    double gain = 1.0;
+    AudioSendTap tap = AudioSendTap::PostFader;
+
+    friend bool operator==(const AudioSend&, const AudioSend&) = default;
+};
+
+struct AudioBus {
+    AudioBusId bus_id = 0;
+    std::string name;
+    double audio_gain = 1.0;
+    bool audio_muted = false;
+    double audio_pan = 0.0;
+
+    friend bool operator==(const AudioBus&, const AudioBus&) = default;
+};
+
+struct MasterAudioMix {
+    double audio_gain = 1.0;
+    bool audio_muted = false;
+
+    friend bool operator==(const MasterAudioMix&, const MasterAudioMix&) = default;
+};
 
 enum class ClipKind {
     Video,
@@ -237,6 +265,9 @@ struct TimelineTrack {
     std::vector<TimelineClip> clips;
     std::vector<TimelineTransition> transitions;
     TrackKind kind = TrackKind::Video;
+    double audio_pan = 0.0;
+    std::optional<AudioBusId> output_bus_id;
+    std::vector<AudioSend> audio_sends;
 
     friend bool operator==(const TimelineTrack&, const TimelineTrack&) = default;
 };
@@ -307,6 +338,13 @@ struct RippleDeleteOutcome {
 };
 enum class TrimClipResult { Trimmed, NoChange, InvalidIndex, InvalidRange };
 enum class AudioParameterResult { Changed, InvalidIndex, InvalidValue, NoChange };
+enum class AudioBusMutationResult {
+    Changed,
+    InvalidTarget,
+    InvalidName,
+    InvalidValue,
+    NoChange,
+};
 enum class TransformParameterResult { Changed, InvalidIndex, InvalidValue, NoChange };
 enum class TextParameterResult { Changed, InvalidIndex, InvalidValue, NoChange };
 enum class EffectMutationResult { Changed, InvalidIndex, InvalidValue, IncompatibleClip, NoChange };
@@ -339,6 +377,9 @@ public:
         TrackId next_track_id = 1;
         ClipId next_clip_id = 1;
         FrameRate frame_rate;
+        std::vector<AudioBus> audio_buses;
+        MasterAudioMix master_audio_mix;
+        AudioBusId next_audio_bus_id = 1;
 
         friend bool operator==(const Snapshot&, const Snapshot&) = default;
     };
@@ -414,6 +455,28 @@ public:
         std::size_t track_index,
         double gain,
         bool muted);
+    AudioParameterResult setTrackAudioMix(
+        TrackId track_id,
+        double gain,
+        bool muted,
+        double pan,
+        std::optional<AudioBusId> output_bus_id,
+        std::vector<AudioSend> sends);
+    AudioParameterResult setAudioBusMix(
+        AudioBusId bus_id,
+        double gain,
+        bool muted,
+        double pan);
+    AudioParameterResult setMasterAudioMix(double gain, bool muted);
+    AudioBusMutationResult addAudioBus(
+        std::string name,
+        AudioBusId* created_bus_id = nullptr);
+    AudioBusMutationResult renameAudioBus(AudioBusId bus_id, std::string name);
+    AudioBusMutationResult removeAudioBus(AudioBusId bus_id);
+    [[nodiscard]] const std::vector<AudioBus>& audioBuses() const noexcept;
+    [[nodiscard]] const MasterAudioMix& masterAudioMix() const noexcept;
+    [[nodiscard]] std::optional<std::size_t> locateAudioBus(
+        AudioBusId bus_id) const noexcept;
     AudioParameterResult setClipAudioGainKeyframes(
         std::size_t track_index,
         std::size_t clip_index,
@@ -531,6 +594,7 @@ public:
         const std::string& display_name);
 
     [[nodiscard]] static bool validAudioGain(double gain) noexcept;
+    [[nodiscard]] static bool validAudioPan(double pan) noexcept;
     [[nodiscard]] static bool validTextStyle(const TextStyle& text) noexcept;
 
 private:
@@ -567,9 +631,12 @@ private:
     void assertIdentityInvariants() const;
 
     std::vector<TimelineTrack> tracks_;
+    std::vector<AudioBus> audio_buses_;
+    MasterAudioMix master_audio_mix_;
     FrameRate frame_rate_;
     TrackId next_track_id_ = 1;
     ClipId next_clip_id_ = 1;
+    AudioBusId next_audio_bus_id_ = 1;
 };
 
 } // namespace timeline

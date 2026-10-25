@@ -24,6 +24,22 @@
         <source>Mute</source>
         <translation>Silenciar</translation>
     </message>
+    <message><source>Master</source><translation>Master</translation></message>
+    <message><source>Center</source><translation>Centro</translation></message>
+    <message><source>L</source><translation>E</translation></message>
+    <message><source>R</source><translation>D</translation></message>
+    <message><source>Submix buses</source><translation>Buses de submix</translation></message>
+    <message><source>Add bus</source><translation>Adicionar bus</translation></message>
+    <message><source>Bus name</source><translation>Nome do bus</translation></message>
+    <message><source>Submix</source><translation>Submix</translation></message>
+    <message><source>Audio tracks</source><translation>Faixas de áudio</translation></message>
+    <message><source>Solo</source><translation>Solo</translation></message>
+    <message><source>Sends</source><translation>Envios</translation></message>
+    <message><source>Add send</source><translation>Adicionar envio</translation></message>
+    <message><source>Pre</source><translation>Pré</translation></message>
+    <message><source>Rename</source><translation>Renomear</translation></message>
+    <message><source>Remove</source><translation>Remover</translation></message>
+    <message><source>Rename bus</source><translation>Renomear bus</translation></message>
 </context>
 <context>
     <name>ColorWorkspace</name>

@@ -1088,6 +1088,48 @@ void validateEmbeddedAudioMixing(
     require(audible_rms > 0.025 && audible_rms < 0.05,
             "Embedded video audio was not mixed with the configured track and clip gains.");
 
+    auto pan_job = job;
+    pan_job.id = 409;
+    pan_job.settings.output_path = pathToQString(
+        root / ("audio-pan." + extension));
+    pan_job.project_snapshot.timeline_tracks.front().audio_pan = 1.0;
+    renderJob(pan_job, canceled);
+    const auto pan_rms = decodedAudioRms(
+        pathFromQString(pan_job.settings.output_path));
+    require(std::abs(pan_rms - audible_rms * std::sqrt(0.5)) < 0.003,
+            "Export pan did not balance the stereo source to the selected side.");
+
+    auto routed_job = job;
+    routed_job.id = 410;
+    routed_job.settings.output_path = pathToQString(
+        root / ("audio-route-sends." + extension));
+    routed_job.project_snapshot.audio_buses = {
+        {501, "Dialogue", 0.5, false, 0.0},
+        {502, "Send", 1.0, false, 0.0},
+    };
+    routed_job.project_snapshot.master_audio_mix = {0.5, false};
+    auto& routed_track = routed_job.project_snapshot.timeline_tracks.front();
+    routed_track.output_bus_id = 501;
+    routed_track.audio_sends = {{502, 0.5,
+        timeline::AudioSendTap::PostFader}};
+    renderJob(routed_job, canceled);
+    const auto routed_rms = decodedAudioRms(
+        pathFromQString(routed_job.settings.output_path));
+    require(std::abs(routed_rms - audible_rms * 0.5) < 0.003,
+            "Export did not apply the saved bus route, post-fader send, and Master gain.");
+
+    auto pre_fader_job = routed_job;
+    pre_fader_job.id = 411;
+    pre_fader_job.settings.output_path = pathToQString(
+        root / ("audio-pre-fader-send." + extension));
+    pre_fader_job.project_snapshot.timeline_tracks.front().audio_sends.front().tap =
+        timeline::AudioSendTap::PreFader;
+    renderJob(pre_fader_job, canceled);
+    const auto pre_fader_rms = decodedAudioRms(
+        pathFromQString(pre_fader_job.settings.output_path));
+    require(std::abs(pre_fader_rms - audible_rms * 0.75) < 0.004,
+            "A pre-fader export send did not bypass the track fader.");
+
     auto linked_job = makeImageJob(
         output, source, root / ("linked-video-audio." + extension), 407, 24);
     linked_job.project_snapshot.timeline_frame_rate = {24, 1};

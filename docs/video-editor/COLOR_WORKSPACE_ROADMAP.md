@@ -251,7 +251,7 @@ rectangular and elliptical Power Windows, softness and inversion, and
 clip-local geometry tracks on correction and Curves nodes. Projects through
 v39 open without windows. Splitting and trimming rebase the window tracks;
 copy/apply, grade snapshots, autosave, recovery, Save As, and Hub backups retain
-them. The Hub accepts v40 and rejects v41. Projects through v37 open without
+them. The Hub accepts CSP v1-v41 and rejects v42. Projects through v37 open without
 Curves nodes; v1–v38 receive neutral refinement values. Preview
 offers grayscale Matte and Highlight modes local to the Inspector; it does not
 replace the Viewer. Spatial matte refinements currently use the CPU frame

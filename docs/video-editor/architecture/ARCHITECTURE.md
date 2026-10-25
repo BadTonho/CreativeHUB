@@ -1,6 +1,6 @@
 # Application Architecture
 
-[Composition interchange](../../COMPOSITION_INTERCHANGE.md) uses a shared format/presentation library with application-owned converters and worker-backed UI commands. Native CSP schema is v40: v33 added Color Gallery metadata and PNG sidecars, v34 stores the Color correction graph, v35 expanded Primary Grade, v36 adds independent Log controls, v37 stores named per-clip Color graph snapshots, v38 adds Color Curves and tonal qualifiers, v39 adds spatial qualifier matte refinement, and v40 adds Color Power Windows and tracking curves. Primary Grade was introduced in v32 and Gaussian Blur in v31. Blur transfers through cscomp v3.
+[Composition interchange](../../COMPOSITION_INTERCHANGE.md) uses a shared format/presentation library with application-owned converters and worker-backed UI commands. Native CSP schema is v41: v33 added Color Gallery metadata and PNG sidecars, v34 stores the Color correction graph, v35 expanded Primary Grade, v36 adds independent Log controls, v37 stores named per-clip Color graph snapshots, v38 adds Color Curves and tonal qualifiers, v39 adds spatial qualifier matte refinement, v40 adds Color Power Windows and tracking curves, and v41 adds one-level audio buses, track routes and sends, pan, and Master mix settings. Primary Grade was introduced in v32 and Gaussian Blur in v31. Blur transfers through cscomp v3.
 
 Color owns a graph model and evaluator separate from Fusion. The render order
 is Fusion graph evaluation, Color graph evaluation, then clip transform and
@@ -37,6 +37,7 @@ under `docs/video-editor/architecture/` so each document can remain focused and 
 | UI | [UI Boundary](UI.md) | Qt Widgets, desktop interaction, and UI-only responsibilities |
 | Media | [Media Boundary](MEDIA.md) | FFmpeg probing, decoding, playback sessions, and ownership |
 | Timeline | [Timeline Boundary](TIMELINE.md) | Timeline model, visual timeline, seeking, and media insertion |
+| Audio | [Audio Boundary](AUDIO.md) | Shared Preview/export mixing, track routes, buses, sends, and Audio workspace behavior |
 | Rendering | [Rendering Boundary](RENDERING.md) | CPU default, shared experimental GPU preview/export, texture delivery, 4K geometry and resource ownership |
 | Logging | [Logging Boundary](LOGGING.md) | Structured diagnostics, retention, and error policy |
 | Build | [Build and Dependencies](BUILD_AND_DEPENDENCIES.md) | CMake, vcpkg, deployment, and licensing tracking |
@@ -62,7 +63,7 @@ under `docs/video-editor/architecture/` so each document can remain focused and 
 The Color workspace owns a per-clip correction graph with Input, effect,
 Parallel Mixer and Output nodes. Its connections define processing, and the
 graph, named per-clip versions, Power Windows and their geometry tracks are
-saved in CSP v40. Serial graphs without Power Windows use the existing GPU effect pipeline
+saved in CSP v41. Serial graphs without Power Windows use the existing GPU effect pipeline
 when available; branched graphs use Color's CPU RGBA evaluator after Fusion.
 Edit Inspector edits the same effect nodes' parameters and enabled state, while
 Color owns topology and layout. Primary Grade offers Wheels and Bars views over
@@ -94,13 +95,13 @@ on first entry and the prior native dock layout is restored on exit. See the
 The Audio workspace is an application-owned view of the same timeline and
 command history as Edit. The Timeline widget switches to an audio-only
 presentation while Audio is active; it does not filter the project model or
-change persisted track indexes. The mixer writes existing track gain/mute
-through `TimelineCommandService`. Optional per-track meter buffers are derived
-from the live playback mix before monitor gain and clipping; generation-gated
-level messages reach the UI, and the buffer path is disabled outside Audio.
-The Audio panels are created on first entry so startup does not load their UI.
-The Video Editor project schema is unchanged. See the
-[Audio Workspace Roadmap](../AUDIO_WORKSPACE_ROADMAP.md).
+change persisted track indexes. Track routing, sends, flat buses, pan, solo,
+mute, and Master controls use `TimelineCommandService`. The playback worker and
+offline renderer share the sample mixer; solo is temporary and Preview-only.
+Generation-gated level messages provide track, bus, and Master meters, and the
+meter path is disabled outside Audio. Panels are created on first entry. CSP
+v41 stores the mixer state; the Hub accepts it and rejects v42. See the
+[Audio Boundary](AUDIO.md) and [Audio Workspace Roadmap](../AUDIO_WORKSPACE_ROADMAP.md).
 
 The Video Editor is the suite's audiovisual application under
 `apps/video-editor/`. Motion Studio and Image Editor are also implemented as

@@ -5,20 +5,23 @@
 #include <QObject>
 #include <QWidget>
 
+#include <optional>
 #include <vector>
 #include <utility>
 
+class QCheckBox;
+class QComboBox;
 class QHBoxLayout;
 class QLabel;
 class QProgressBar;
+class QPushButton;
 class QSlider;
-class QCheckBox;
 class QVBoxLayout;
 
 namespace ui {
 
-// Presentation for the app-owned audio tracks. All edits go through the
-// existing TimelineCommandService; this class owns no project state.
+// Presentation for the app-owned audio mixer. All persistent edits go through
+// the existing TimelineCommandService; solo state remains transient.
 class AudioWorkspace final : public QObject {
     Q_OBJECT
 public:
@@ -26,18 +29,44 @@ public:
     void createPanels(QWidget* parent);
     [[nodiscard]] QWidget* meterPage() const noexcept { return meter_page_; }
     [[nodiscard]] QWidget* mixerPanel() const noexcept { return mixer_panel_; }
-    void refreshTracks(const std::vector<timeline::TimelineTrack>& tracks);
-    void setPeaks(const std::vector<std::pair<timeline::TrackId, float>>& peaks,
-                  float master_peak);
+    void refreshTracks(
+        const std::vector<timeline::TimelineTrack>& tracks,
+        const std::vector<timeline::AudioBus>& buses,
+        const timeline::MasterAudioMix& master);
+    void setPeaks(
+        const std::vector<std::pair<timeline::TrackId, float>>& track_peaks,
+        const std::vector<std::pair<timeline::AudioBusId, float>>& bus_peaks,
+        float master_peak);
     void clearPeaks();
+    void clearSoloState();
 
 signals:
     void gainEditStarted();
-    void gainChanged(timeline::TrackId track_id, double gain, bool muted);
     void gainEditFinished();
-    void muteChanged(timeline::TrackId track_id, double gain, bool muted);
+    void trackMixChanged(
+        timeline::TrackId track_id, double gain, bool muted, double pan,
+        std::optional<timeline::AudioBusId> output_bus_id,
+        std::vector<timeline::AudioSend> sends);
+    void busMixChanged(
+        timeline::AudioBusId bus_id, double gain, bool muted, double pan);
+    void masterMixChanged(double gain, bool muted);
+    void createBusRequested(QString name);
+    void renameBusRequested(timeline::AudioBusId bus_id, QString name);
+    void removeBusRequested(timeline::AudioBusId bus_id);
+    void soloStateChanged(
+        std::vector<timeline::TrackId> track_ids,
+        std::vector<timeline::AudioBusId> bus_ids);
 
 private:
+    struct SendRow {
+        QWidget* widget = nullptr;
+        QComboBox* destination = nullptr;
+        QSlider* gain = nullptr;
+        QLabel* gain_value = nullptr;
+        QCheckBox* pre_fader = nullptr;
+        QPushButton* remove = nullptr;
+        timeline::AudioBusId bus_id = 0;
+    };
     struct Strip {
         timeline::TrackId id = 0;
         QWidget* meter_card = nullptr;
@@ -45,17 +74,57 @@ private:
         QProgressBar* meter = nullptr;
         QWidget* mixer_card = nullptr;
         QLabel* mixer_name = nullptr;
+        QProgressBar* mixer_meter = nullptr;
         QSlider* gain = nullptr;
         QLabel* gain_value = nullptr;
+        QSlider* pan = nullptr;
+        QLabel* pan_value = nullptr;
         QCheckBox* mute = nullptr;
+        QCheckBox* solo = nullptr;
+        QComboBox* output = nullptr;
+        QComboBox* send_destination = nullptr;
+        QPushButton* add_send = nullptr;
+        QVBoxLayout* sends_layout = nullptr;
+        std::vector<SendRow> sends;
     };
+    struct BusStrip {
+        timeline::AudioBusId id = 0;
+        QWidget* meter_card = nullptr;
+        QLabel* meter_name = nullptr;
+        QProgressBar* meter = nullptr;
+        QWidget* mixer_card = nullptr;
+        QLabel* mixer_name = nullptr;
+        QProgressBar* mixer_meter = nullptr;
+        QSlider* gain = nullptr;
+        QLabel* gain_value = nullptr;
+        QSlider* pan = nullptr;
+        QLabel* pan_value = nullptr;
+        QCheckBox* mute = nullptr;
+        QCheckBox* solo = nullptr;
+    };
+
+    void emitTrackMix(timeline::TrackId track_id);
+    void emitBusMix(timeline::AudioBusId bus_id);
+    void emitSoloState();
+    void rebuildTrackSendRows(Strip& strip, const timeline::TimelineTrack& track,
+                              const std::vector<timeline::AudioBus>& buses);
+
     QWidget* meter_page_ = nullptr;
     QWidget* mixer_panel_ = nullptr;
     QHBoxLayout* meter_layout_ = nullptr;
     QVBoxLayout* mixer_layout_ = nullptr;
+    QVBoxLayout* bus_mixer_layout_ = nullptr;
+    QVBoxLayout* track_mixer_layout_ = nullptr;
     QProgressBar* master_meter_ = nullptr;
     QProgressBar* mixer_master_meter_ = nullptr;
+    QSlider* master_gain_ = nullptr;
+    QLabel* master_gain_value_ = nullptr;
+    QCheckBox* master_mute_ = nullptr;
+    QPushButton* add_bus_button_ = nullptr;
     std::vector<Strip> strips_;
+    std::vector<BusStrip> bus_strips_;
+    std::vector<timeline::TrackId> solo_track_ids_;
+    std::vector<timeline::AudioBusId> solo_bus_ids_;
 };
 
 }  // namespace ui

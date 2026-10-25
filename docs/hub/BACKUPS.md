@@ -1,13 +1,13 @@
 # Hub Project Backups
 
-Image `.cimg` v28 is accepted, including independent Hue/Saturation Colorize values; future v29 is rejected. Glow extends native backup support to Motion v18; CSP v32 adds the Video Editor Primary Grade effect, v33 adds the Color Gallery, v34 stores the Color correction graph, v35 expands primary controls, v36 adds independent Log adjustments, v37 stores named per-clip grade graph snapshots, v38 adds Color Curves and tonal qualifiers, v39 adds qualifier matte refinement, and v40 adds animated Color Power Windows. Gallery PNG sidecars are copied beside each backup snapshot so Gallery items remain available after restore. Color graph nodes, windows, and geometry tracks, matte bindings and visibility, blend mode, Scale Y, link state, affine compensation, Anchor bases and curves, parent IDs and pose-preserving compensation, Null control layers, optional presentation metadata, shared mask definitions, stage associations, and effect parameter keyframes are retained unchanged; external media/Input paths are rebased. Future CSP v41 and Motion v19 remain unsupported. The referenced `.cscomp` file is not required to reopen an imported native project. See [contract](../COMPOSITION_INTERCHANGE.md).
+Image `.cimg` v28 is accepted, including independent Hue/Saturation Colorize values; future v29 is rejected. Glow extends native backup support to Motion v18; CSP v32 adds the Video Editor Primary Grade effect, v33 adds the Color Gallery, v34 stores the Color correction graph, v35 expands primary controls, v36 adds independent Log adjustments, v37 stores named per-clip grade graph snapshots, v38 adds Color Curves and tonal qualifiers, v39 adds qualifier matte refinement, v40 adds animated Color Power Windows, and v41 adds Audio mixer buses, routes, sends, pan, and Master settings. Gallery PNG sidecars are copied beside each backup snapshot so Gallery items remain available after restore. Color graphs, windows and geometry, matte bindings and visibility, blend mode, Scale Y, link state, affine compensation, Anchor bases and curves, parent IDs and pose-preserving compensation, Null control layers, optional presentation metadata, shared mask definitions, stage associations, effect parameter keyframes, and v41 audio mix data are retained; external media/Input paths are rebased. Future CSP v42 and Motion v19 remain unsupported. The referenced `.cscomp` file is not required to reopen an imported native project. See [contract](../COMPOSITION_INTERCHANGE.md).
 
 ## Video Editor v29 Background presets
 
 Named Fusion Compositions retain optional `display_name`, including Background
 presets, through snapshot and restored projects. The existing graph/media path
 adapter preserves node colors, masks and input offsets while relocating external
-Input sources. Formats 1–40 are supported; future v41 is refused. The actual
+Input sources. The current range is CSP v1-v41; future v42 is refused. The actual
 Video Editor reader verifies the Hub restore in `hub-backup-format-test`.
 
 ## Video Editor v28 masks
@@ -15,7 +15,7 @@ Video Editor reader verifies the Hub restore in `hub-backup-format-test`.
 The backup adapter preserves Rectangle/Ellipse node types, geometry, curves and
 Mask input 2 alongside generators and composition input offsets. Masks carry no
 media references; external Input paths continue to be rewritten on snapshot and
-restore. Supported Video Editor schemas are 1–40; future v41 is rejected.
+restore. Current Video Editor schemas v1-v41 are supported; future v42 is rejected.
 The Video Editor reader reopens restored fixtures in `hub-backup-format-test`.
 
 ## Video Editor v27 compositions
@@ -56,13 +56,13 @@ producer/consumer regression coverage when supported schemas gain path fields.
 | Format identifier | Supported versions | References rewritten |
 | --- | --- | --- |
 | `creative-suite-image-document` | 1–23 | v1 `source.path`; v2+ source-image `base.path`; v11+ raster-image operation `path` in legacy operations and layers, including group children. |
-| `creative-suite.main-editor` | 1–40 | `media[].path`; clip `source` in v1 flat clips or v2+ tracks; v10+ Image Editor link/variant `document` and `output`; v20+ Fusion Input `source`; v24+ Motion link `document`, `output`, and `source`. CSP v33 Gallery sidecar files are copied beside each backup snapshot; v34 Color graphs, v35 expanded Primary Grade controls, v36 Log values, v37 named per-clip graph snapshots, v38 Curves, v39 matte refinement, and v40 Power Windows and geometry tracks remain in project JSON. |
+| `creative-suite.main-editor` | 1–41 | `media[].path`; clip `source` in v1 flat clips or v2+ tracks; v10+ Image Editor link/variant `document` and `output`; v20+ Fusion Input `source`; v24+ Motion link `document`, `output`, and `source`. CSP v33 Gallery sidecar files are copied beside each backup snapshot; v34 Color graphs, v35 expanded Primary Grade controls, v36 Log values, v37 named per-clip graph snapshots, v38 Curves, v39 matte refinement, v40 Power Windows and geometry tracks, and v41 audio mixer state remain in project JSON. |
 | `creative-suite.motion-studio` | 1–18 | `media_pool.items[].path`; layer `source_path`; v6 linked-image `document_path`, `published_output_path`, and `source_snapshot_path`. |
 
 Video v26 adjustment clips have no source path. Their duration, effects and
 transform curves are preserved by backup and restoration. They do not cause
-media lookup or path rewriting. Versions 1–40 are accepted, and versions
-newer than 40 are rejected until their reference contracts are supported.
+media lookup or path rewriting. Versions 1–41 are accepted, and versions
+newer than 41 are rejected until their reference contracts are supported.
 
 Image paths use the original document directory. Video and Motion paths use
 the weakly canonical original document location, matching their readers.

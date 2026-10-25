@@ -849,6 +849,13 @@ std::vector<media::TimelineAudioMixClip> audioMixClips(
             clip.source_duration_time_us,
             clip.audio_extracted,
             clip.audio_gain_keyframes});
+        auto& audio_clip = result.back();
+        audio_clip.track_id = render_clip.track->track_id;
+        audio_clip.track_pan = render_clip.track->audio_pan;
+        audio_clip.output_bus_id = render_clip.track->output_bus_id;
+        audio_clip.audio_sends = render_clip.track->audio_sends;
+        audio_clip.source_channel_count = render_clip.audio != nullptr
+            ? render_clip.audio->source_channel_count() : 2;
     }
     return result;
 }
@@ -873,13 +880,15 @@ void mixAudioBlock(
     std::vector<RenderClip>& clips,
     const std::vector<media::TimelineAudioMixClip>& audio_clips,
     const std::vector<media::TimelineAudioMixTransition>& transitions,
+    const media::TimelineAudioMixConfiguration& audio_mix_configuration,
     double timeline_fps,
     std::int64_t block_start,
     int sample_count,
     std::vector<float>& mixed,
     const std::atomic_bool& canceled) {
     constexpr int sample_rate = 48000;
-    mixed.assign(static_cast<std::size_t>(sample_count) * 2U, 0.0F);
+    media::TimelineAudioMixAccumulator audio_mixer(
+        static_cast<std::size_t>(sample_count), 2, audio_mix_configuration);
     const auto spans = media::planTimelineAudioMix(
         audio_clips, transitions, timeline_fps, sample_rate,
         block_start, sample_count);
@@ -897,7 +906,7 @@ void mixAudioBlock(
                 std::min<std::size_t>(remaining + 2048, 8192),
                 [&canceled] { return canceled.load(std::memory_order_acquire); });
             if (!chunk.has_value() || chunk->sampleCount() == 0) break;
-            media::accumulateTimelineAudioChunk(span, *chunk, mixed, 2);
+            audio_mixer.accumulate(span, audio_clips[span.source_index], *chunk);
             const auto chunk_end = chunk->first_sample_index +
                 static_cast<std::int64_t>(chunk->sampleCount());
             const auto consumed_end = std::min(source_end, chunk_end);
@@ -908,6 +917,7 @@ void mixAudioBlock(
             source_cursor = consumed_end;
         }
     }
+    mixed = audio_mixer.finish().samples;
 }
 
 bool verifyOutput(const std::filesystem::path& path, bool expect_audio) {
@@ -978,6 +988,10 @@ void OfflineExportRenderer::render(
         const auto transitions = collectTransitions(job.project_snapshot);
         const auto audio_clips = audioMixClips(clips);
         const auto audio_transitions = audioMixTransitions(transitions);
+        media::TimelineAudioMixConfiguration audio_mix_configuration;
+        audio_mix_configuration.buses = job.project_snapshot.audio_buses;
+        audio_mix_configuration.master = job.project_snapshot.master_audio_mix;
+        audio_mix_configuration.apply_solo = false;
         const auto duration_frames = timelineDuration(job.project_snapshot);
         if (duration_frames <= 0) throw std::runtime_error("The project timeline has no renderable duration.");
         const long double duration_seconds = static_cast<long double>(duration_frames) / timeline_fps;
@@ -1097,7 +1111,8 @@ void OfflineExportRenderer::render(
                 const auto block_count = encoder.nextAudioInputSampleCount();
                 {
                     detail::ExportTimedScope audio(metrics.audio_nanoseconds);
-                    mixAudioBlock(clips, audio_clips, audio_transitions, timeline_fps,
+                    mixAudioBlock(clips, audio_clips, audio_transitions,
+                                  audio_mix_configuration, timeline_fps,
                                   sample, block_count, mixed, cancel_requested);
                 }
                 {

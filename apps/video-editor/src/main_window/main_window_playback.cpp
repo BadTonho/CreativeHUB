@@ -1258,7 +1258,8 @@ void MainWindow::handlePlaybackEvent(
         } else if constexpr (std::is_same_v<Event, playback::PlaybackAudioLevelsEvent>) {
             if (audio_workspace_ != nullptr && workspace_host_ != nullptr &&
                 workspace_host_->currentPage() == ui::WorkspacePageId::Audio) {
-                audio_workspace_->setPeaks(value.track_peaks, value.master_peak);
+                audio_workspace_->setPeaks(
+                    value.track_peaks, value.bus_peaks, value.master_peak);
             }
         } else if constexpr (std::is_same_v<Event, playback::PlaybackStillCaptureEvent>) {
             handleColorStillCapture(value);

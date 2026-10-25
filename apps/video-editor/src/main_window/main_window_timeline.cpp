@@ -333,7 +333,8 @@ void MainWindow::updatePlaybackAudioParameters() {
 void MainWindow::updateTimelineState() {
     if (color_workspace_ != nullptr) refreshColorSelection();
     if (audio_workspace_ != nullptr)
-        audio_workspace_->refreshTracks(timeline_model_.tracks());
+        audio_workspace_->refreshTracks(timeline_model_.tracks(),
+            timeline_model_.audioBuses(), timeline_model_.masterAudioMix());
     if (edit_workspace_ != nullptr && edit_workspace_->controller() != nullptr) {
         edit_workspace_->controller()->updateTimelineState();
         synchronizeActiveTimelineSelection();
@@ -349,10 +350,13 @@ void MainWindow::updateTimelineState() {
 }
 
 void MainWindow::applyAudioTrackMix(
-    timeline::TrackId track_id, double gain, bool muted) {
+    timeline::TrackId track_id, double gain, bool muted, double pan,
+    std::optional<timeline::AudioBusId> output_bus_id,
+    std::vector<timeline::AudioSend> sends) {
     try {
         const auto result = timeline_command_service_.execute(
-            application::SetTrackAudioCommand{track_id, gain, muted});
+            application::SetTrackAudioMixCommand{
+                track_id, gain, muted, pan, output_bus_id, std::move(sends)});
         if (!result.changed()) return;
         applyTimelineEditResult(result, false);
         updateTimelineState();
@@ -363,6 +367,96 @@ void MainWindow::applyAudioTrackMix(
             error.what(), {{"track_id", std::to_string(track_id)}});
         statusBar()->showMessage(
             QCoreApplication::translate("MainWindow", "Could not change the audio track."));
+    }
+}
+
+void MainWindow::applyAudioBusMix(
+    timeline::AudioBusId bus_id, double gain, bool muted, double pan) {
+    try {
+        const auto result = timeline_command_service_.execute(
+            application::SetAudioBusMixCommand{bus_id, gain, muted, pan});
+        if (!result.changed()) return;
+        applyTimelineEditResult(result, false);
+        updateTimelineState();
+        refreshPlaybackComposition();
+    } catch (const std::exception& error) {
+        logging::Logger::instance().log(logging::Level::Error, "audio_workspace",
+            "set_bus_mix", error.what(), {{"bus_id", std::to_string(bus_id)}});
+        statusBar()->showMessage(
+            QCoreApplication::translate("MainWindow", "Could not change the audio bus."));
+    }
+}
+
+void MainWindow::applyAudioMasterMix(double gain, bool muted) {
+    try {
+        const auto result = timeline_command_service_.execute(
+            application::SetMasterAudioMixCommand{gain, muted});
+        if (!result.changed()) return;
+        applyTimelineEditResult(result, false);
+        updateTimelineState();
+        refreshPlaybackComposition();
+    } catch (const std::exception& error) {
+        logging::Logger::instance().log(logging::Level::Error, "audio_workspace",
+            "set_master_mix", error.what());
+        statusBar()->showMessage(
+            QCoreApplication::translate("MainWindow", "Could not change the master output."));
+    }
+}
+
+void MainWindow::createAudioBus(const QString& name) {
+    try {
+        const auto result = timeline_command_service_.execute(
+            application::AddAudioBusCommand{name.toStdString()});
+        if (!result.changed()) return;
+        applyTimelineEditResult(result, false);
+        updateTimelineState();
+        refreshPlaybackComposition();
+    } catch (const std::exception& error) {
+        logging::Logger::instance().log(logging::Level::Error, "audio_workspace",
+            "add_bus", error.what());
+        statusBar()->showMessage(
+            QCoreApplication::translate("MainWindow", "Could not add the audio bus."));
+    }
+}
+
+void MainWindow::renameAudioBus(
+    timeline::AudioBusId bus_id, const QString& name) {
+    try {
+        const auto result = timeline_command_service_.execute(
+            application::RenameAudioBusCommand{bus_id, name.toStdString()});
+        if (!result.changed()) return;
+        applyTimelineEditResult(result, false);
+        updateTimelineState();
+        refreshPlaybackComposition();
+    } catch (const std::exception& error) {
+        logging::Logger::instance().log(logging::Level::Error, "audio_workspace",
+            "rename_bus", error.what(), {{"bus_id", std::to_string(bus_id)}});
+        statusBar()->showMessage(
+            QCoreApplication::translate("MainWindow", "Could not rename the audio bus."));
+    }
+}
+
+void MainWindow::removeAudioBus(timeline::AudioBusId bus_id) {
+    try {
+        const auto result = timeline_command_service_.execute(
+            application::RemoveAudioBusCommand{bus_id});
+        if (!result.changed()) return;
+        applyTimelineEditResult(result, false);
+        updateTimelineState();
+        refreshPlaybackComposition();
+    } catch (const std::exception& error) {
+        logging::Logger::instance().log(logging::Level::Error, "audio_workspace",
+            "remove_bus", error.what(), {{"bus_id", std::to_string(bus_id)}});
+        statusBar()->showMessage(
+            QCoreApplication::translate("MainWindow", "Could not remove the audio bus."));
+    }
+}
+
+void MainWindow::setAudioSoloState(
+    std::vector<timeline::TrackId> track_ids,
+    std::vector<timeline::AudioBusId> bus_ids) {
+    if (playback_controller_ != nullptr) {
+        playback_controller_->setAudioSoloState(std::move(track_ids), std::move(bus_ids));
     }
 }
 

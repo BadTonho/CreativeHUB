@@ -320,6 +320,15 @@ int main(int argc, char** argv) {
         original.timeline_tracks.push_back(
             {"Video 2", 1.0, false, {second_track_title}, {}});
         original.timeline_tracks.back().track_id = 2;
+        original.audio_buses = {
+            {41, "Music", 0.85, false, -0.1},
+            {42, "Room", 1.25, true, 0.2},
+        };
+        original.master_audio_mix = {0.75, false};
+        original.timeline_tracks.front().audio_pan = -0.35;
+        original.timeline_tracks.front().output_bus_id = 41;
+        original.timeline_tracks.front().audio_sends = {{
+            42, 0.6, timeline::AudioSendTap::PreFader}};
         original.color_gallery_stills.push_back({"still-test-1", "Still 1", 1, 42,
             "still-test-1.png",
             std::make_shared<const std::vector<std::uint8_t>>(
@@ -397,6 +406,66 @@ int main(int argc, char** argv) {
             std::istreambuf_iterator<char>(saved_file),
             std::istreambuf_iterator<char>()};
         saved_file.close();
+        {
+            auto legacy_v40 = QJsonDocument::fromJson(
+                QByteArray::fromStdString(saved_json)).object();
+            legacy_v40.insert("version", 40);
+            auto timeline_object = legacy_v40.value("timeline").toObject();
+            timeline_object.remove("audio_buses");
+            timeline_object.remove("master_audio");
+            auto tracks = timeline_object.value("tracks").toArray();
+            for (qsizetype index = 0; index < tracks.size(); ++index) {
+                auto track = tracks[index].toObject();
+                track.remove("audio_pan");
+                track.remove("output_bus_id");
+                track.remove("audio_sends");
+                tracks[index] = track;
+            }
+            timeline_object.insert("tracks", tracks);
+            legacy_v40.insert("timeline", timeline_object);
+            const auto legacy_path = directory / "audio-mix-v40.csp";
+            writeText(legacy_path,
+                QJsonDocument(legacy_v40).toJson().toStdString());
+            const auto migrated = project::load(legacy_path);
+            require(migrated.audio_buses.empty() &&
+                        migrated.master_audio_mix == timeline::MasterAudioMix{} &&
+                        std::all_of(migrated.timeline_tracks.begin(),
+                            migrated.timeline_tracks.end(), [](const auto& track) {
+                                return track.audio_pan == 0.0 &&
+                                    !track.output_bus_id.has_value() &&
+                                    track.audio_sends.empty();
+                            }),
+                    "CSP v1-v40 migration did not default to the neutral Master mix.");
+        }
+        {
+            auto invalid_route = QJsonDocument::fromJson(
+                QByteArray::fromStdString(saved_json)).object();
+            auto timeline_object = invalid_route.value("timeline").toObject();
+            auto tracks = timeline_object.value("tracks").toArray();
+            auto first_track = tracks.first().toObject();
+            first_track.insert("output_bus_id", 999);
+            tracks[0] = first_track;
+            timeline_object.insert("tracks", tracks);
+            invalid_route.insert("timeline", timeline_object);
+            const auto invalid_path = directory / "audio-mix-invalid-route.csp";
+            writeText(invalid_path,
+                QJsonDocument(invalid_route).toJson().toStdString());
+            bool rejected = false;
+            try { static_cast<void>(project::load(invalid_path)); }
+            catch (const project::ProjectError&) { rejected = true; }
+            require(rejected, "CSP v41 accepted a route to a missing bus.");
+        }
+        {
+            auto future = QJsonDocument::fromJson(
+                QByteArray::fromStdString(saved_json)).object();
+            future.insert("version", 42);
+            const auto future_path = directory / "future-v42.csp";
+            writeText(future_path, QJsonDocument(future).toJson().toStdString());
+            bool rejected = false;
+            try { static_cast<void>(project::load(future_path)); }
+            catch (const project::ProjectError&) { rejected = true; }
+            require(rejected, "A project version newer than CSP v41 was accepted.");
+        }
         {
             auto graded = loaded;
             auto grade = creative_suite::effects::makeDefaultInstance("video.primary_grade");
@@ -722,7 +791,7 @@ int main(int argc, char** argv) {
         require(saved_json.find("\"track_id\": 1") != std::string::npos &&
                     saved_json.find("\"clip_id\": 1") != std::string::npos,
                 "Stable track and clip identifiers were not written to the project.");
-        require(saved_json.find("\"version\": 40") != std::string::npos &&
+        require(saved_json.find("\"version\": 41") != std::string::npos &&
                     saved_json.find("\"render_start_time_us\": 1234567") != std::string::npos &&
                     saved_json.find("\"frame_rate\"") != std::string::npos &&
                     saved_json.find("\"numerator\": 30000") != std::string::npos &&
@@ -1567,10 +1636,10 @@ int main(int argc, char** argv) {
 
         writeText(
             project_path,
-            R"({"format":"creative-suite.main-editor","version":41,"media":[],"timeline":{"clips":[]}})");
+            R"({"format":"creative-suite.main-editor","version":42,"media":[],"timeline":{"clips":[]}})");
         try {
             static_cast<void>(project::load(project_path));
-            throw std::runtime_error("CSP v41 was accepted by the v40 reader.");
+            throw std::runtime_error("CSP v42 was accepted by the v41 reader.");
         } catch (const project::ProjectError& error) {
             require(error.code() == project::ProjectErrorCode::UnsupportedVersion,
                     "Unsupported version returned the wrong error category.");

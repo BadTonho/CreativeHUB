@@ -128,7 +128,19 @@ private:
     void createWorkspace();
     void setWorkspacePage(ui::WorkspacePageId page);
     void handleWorkspacePageChanged(ui::WorkspacePageId page);
-    void applyAudioTrackMix(timeline::TrackId track_id, double gain, bool muted);
+    void applyAudioTrackMix(
+        timeline::TrackId track_id, double gain, bool muted, double pan,
+        std::optional<timeline::AudioBusId> output_bus_id,
+        std::vector<timeline::AudioSend> sends);
+    void applyAudioBusMix(
+        timeline::AudioBusId bus_id, double gain, bool muted, double pan);
+    void applyAudioMasterMix(double gain, bool muted);
+    void createAudioBus(const QString& name);
+    void renameAudioBus(timeline::AudioBusId bus_id, const QString& name);
+    void removeAudioBus(timeline::AudioBusId bus_id);
+    void setAudioSoloState(
+        std::vector<timeline::TrackId> track_ids,
+        std::vector<timeline::AudioBusId> bus_ids);
     void refreshEffectsContext();
     void registerWorkspaceMenuAction(
         QAction* action, settings::ShortcutScope scope);

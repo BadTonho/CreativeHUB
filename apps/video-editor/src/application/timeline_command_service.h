@@ -39,6 +39,7 @@ struct TimelineEditResult {
     bool invalidate_playback = false;
     bool stopped_at_collision = false;
     bool project_settings_changed = false;
+    std::vector<timeline::AudioBusId> affected_audio_bus_ids;
 
     [[nodiscard]] bool changed() const noexcept {
         return status == EditStatus::Applied;
@@ -212,6 +213,30 @@ struct SetTrackAudioCommand {
     double gain = 1.0;
     bool muted = false;
 };
+struct SetTrackAudioMixCommand {
+    timeline::TrackId track_id = 0;
+    double gain = 1.0;
+    bool muted = false;
+    double pan = 0.0;
+    std::optional<timeline::AudioBusId> output_bus_id;
+    std::vector<timeline::AudioSend> sends;
+};
+struct SetAudioBusMixCommand {
+    timeline::AudioBusId bus_id = 0;
+    double gain = 1.0;
+    bool muted = false;
+    double pan = 0.0;
+};
+struct AddAudioBusCommand { std::string name; };
+struct RenameAudioBusCommand {
+    timeline::AudioBusId bus_id = 0;
+    std::string name;
+};
+struct RemoveAudioBusCommand { timeline::AudioBusId bus_id = 0; };
+struct SetMasterAudioMixCommand {
+    double gain = 1.0;
+    bool muted = false;
+};
 struct SetClipTextCommand {
     timeline::ClipId clip_id = 0;
     timeline::TextStyle text;
@@ -271,6 +296,15 @@ public:
     [[nodiscard]] TimelineEditResult execute(
         const ApplyClipAttributesBatchCommand& command);
     [[nodiscard]] TimelineEditResult execute(const SetTrackAudioCommand& command);
+    [[nodiscard]] TimelineEditResult execute(
+        const SetTrackAudioMixCommand& command);
+    [[nodiscard]] TimelineEditResult execute(
+        const SetAudioBusMixCommand& command);
+    [[nodiscard]] TimelineEditResult execute(const AddAudioBusCommand& command);
+    [[nodiscard]] TimelineEditResult execute(const RenameAudioBusCommand& command);
+    [[nodiscard]] TimelineEditResult execute(const RemoveAudioBusCommand& command);
+    [[nodiscard]] TimelineEditResult execute(
+        const SetMasterAudioMixCommand& command);
     [[nodiscard]] TimelineEditResult execute(const SetClipTextCommand& command);
     [[nodiscard]] TimelineEditResult execute(const SetTransformPropertyCommand& command);
     [[nodiscard]] TimelineEditResult execute(const ToggleTransformKeyframeCommand& command);

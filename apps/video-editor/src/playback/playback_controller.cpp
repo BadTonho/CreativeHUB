@@ -122,7 +122,8 @@ PlaybackController::PlaybackController(
         }, Qt::QueuedConnection);
     QObject::connect(worker_, &PlaybackWorker::audioLevelsReady, this,
         [this](const QVector<quint64>& ids, const QVector<float>& levels,
-               float master_peak,
+               const QVector<quint64>& bus_ids,
+               const QVector<float>& bus_peaks, float master_peak,
                quint64 generation) {
             if (generation != generation_ || !playing_) return;
             PlaybackAudioLevelsEvent event;
@@ -130,6 +131,10 @@ PlaybackController::PlaybackController(
             for (qsizetype index = 0; index < ids.size() &&
                  index < levels.size(); ++index) {
                 event.track_peaks.emplace_back(ids[index], levels[index]);
+            }
+            for (qsizetype index = 0; index < bus_ids.size() &&
+                 index < bus_peaks.size(); ++index) {
+                event.bus_peaks.emplace_back(bus_ids[index], bus_peaks[index]);
             }
             emitEvent(std::move(event));
         }, Qt::QueuedConnection);
@@ -354,6 +359,14 @@ void PlaybackController::refreshComposition() {
                 clip.motion_link.has_value() ? clip.motion_link->render_start_time_us : 0,
                 clip.composition_input_offset_frames});
             layers.back().color_graph = color_graph;
+            auto& audio_layer = layers.back();
+            audio_layer.track_audio_pan = track.audio_pan;
+            audio_layer.output_bus_id = track.output_bus_id;
+            audio_layer.audio_sends = track.audio_sends;
+            if (imported != nullptr && imported->metadata.audio.has_value()) {
+                audio_layer.source_audio_channel_count = std::max(
+                    1, imported->metadata.audio->channel_count);
+            }
         }
 
         for (const auto& transition : track.transitions) {
@@ -393,9 +406,15 @@ void PlaybackController::refreshComposition() {
     const int canvas_width = session_.canvasWidth();
     const int canvas_height = session_.canvasHeight();
     const auto global_timeline_frame = timelineFrame();
+    media::TimelineAudioMixConfiguration audio_mix_configuration;
+    audio_mix_configuration.buses = model.audioBuses();
+    audio_mix_configuration.master = model.masterAudioMix();
+    audio_mix_configuration.solo_track_ids = solo_track_ids_;
+    audio_mix_configuration.solo_bus_ids = solo_bus_ids_;
     queueWorker([this, revision, active_track, active_clip, preview_quality,
                  canvas_width, canvas_height,
                  global_timeline_frame,
+                 audio_mix_configuration = std::move(audio_mix_configuration),
                  layers = std::move(layers),
                  transitions = std::move(transitions)]
                 (PlaybackWorker& worker) mutable {
@@ -403,6 +422,7 @@ void PlaybackController::refreshComposition() {
         const auto generation = published_generation_.load(std::memory_order_acquire);
         worker.setPreviewQuality(preview_quality);
         worker.setCompositionCanvasSize(canvas_width, canvas_height);
+        worker.setAudioMixConfiguration(std::move(audio_mix_configuration));
         worker.setComposition(std::move(layers), std::move(transitions), generation);
         worker.setActiveCompositionClip(
             active_track, active_clip, static_cast<qint64>(global_timeline_frame));
@@ -632,6 +652,22 @@ void PlaybackController::setMonitorVolume(double gain) {
 void PlaybackController::setAudioMeteringEnabled(bool enabled) {
     queueWorker([enabled](PlaybackWorker& worker) {
         worker.setAudioMeteringEnabled(enabled);
+    });
+}
+
+void PlaybackController::setAudioSoloState(
+    std::vector<timeline::TrackId> solo_track_ids,
+    std::vector<timeline::AudioBusId> solo_bus_ids) {
+    solo_track_ids_ = std::move(solo_track_ids);
+    solo_bus_ids_ = std::move(solo_bus_ids);
+    media::TimelineAudioMixConfiguration configuration;
+    configuration.buses = session_.timeline().audioBuses();
+    configuration.master = session_.timeline().masterAudioMix();
+    configuration.solo_track_ids = solo_track_ids_;
+    configuration.solo_bus_ids = solo_bus_ids_;
+    queueWorker([configuration = std::move(configuration)](
+                    PlaybackWorker& worker) mutable {
+        worker.setAudioMixConfiguration(std::move(configuration));
     });
 }
 

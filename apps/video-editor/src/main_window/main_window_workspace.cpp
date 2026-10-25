@@ -582,10 +582,9 @@ void MainWindow::createWorkspace() {
     audio_workspace_ = new ui::AudioWorkspace(this);
     connect(audio_workspace_, &ui::AudioWorkspace::gainEditStarted,
             this, [this] {
-                audio_gain_batch_id_ = timeline_command_service_.beginEditBatch();
+                if (!audio_gain_batch_id_.has_value())
+                    audio_gain_batch_id_ = timeline_command_service_.beginEditBatch();
             });
-    connect(audio_workspace_, &ui::AudioWorkspace::gainChanged,
-            this, &MainWindow::applyAudioTrackMix);
     connect(audio_workspace_, &ui::AudioWorkspace::gainEditFinished,
             this, [this] {
                 if (!audio_gain_batch_id_.has_value()) return;
@@ -597,8 +596,20 @@ void MainWindow::createWorkspace() {
                     updateProjectDirtyState();
                 }
             });
-    connect(audio_workspace_, &ui::AudioWorkspace::muteChanged,
+    connect(audio_workspace_, &ui::AudioWorkspace::trackMixChanged,
             this, &MainWindow::applyAudioTrackMix);
+    connect(audio_workspace_, &ui::AudioWorkspace::busMixChanged,
+            this, &MainWindow::applyAudioBusMix);
+    connect(audio_workspace_, &ui::AudioWorkspace::masterMixChanged,
+            this, &MainWindow::applyAudioMasterMix);
+    connect(audio_workspace_, &ui::AudioWorkspace::createBusRequested,
+            this, &MainWindow::createAudioBus);
+    connect(audio_workspace_, &ui::AudioWorkspace::renameBusRequested,
+            this, &MainWindow::renameAudioBus);
+    connect(audio_workspace_, &ui::AudioWorkspace::removeBusRequested,
+            this, &MainWindow::removeAudioBus);
+    connect(audio_workspace_, &ui::AudioWorkspace::soloStateChanged,
+            this, &MainWindow::setAudioSoloState);
     applyMonitorVolumePercent(edit_workspace_->ui().monitor_volume->value());
 
     auto* preview_dock_contents = new QWidget(this);
@@ -712,7 +723,8 @@ void MainWindow::createWorkspace() {
         if (audio_workspace_ == nullptr || workspace_host_ == nullptr ||
             audio_workspace_->meterPage() != nullptr) return;
         audio_workspace_->createPanels(this);
-        audio_workspace_->refreshTracks(timeline_model_.tracks());
+        audio_workspace_->refreshTracks(timeline_model_.tracks(),
+            timeline_model_.audioBuses(), timeline_model_.masterAudioMix());
         workspace_host_->setAudioPanels(
             audio_workspace_->meterPage(), audio_workspace_->mixerPanel());
     });
@@ -1241,7 +1253,8 @@ void MainWindow::handleWorkspacePageChanged(ui::WorkspacePageId page) {
             page == ui::WorkspacePageId::Audio);
     }
     if (audio_workspace_ != nullptr) {
-        audio_workspace_->refreshTracks(timeline_model_.tracks());
+        audio_workspace_->refreshTracks(timeline_model_.tracks(),
+            timeline_model_.audioBuses(), timeline_model_.masterAudioMix());
         if (page != ui::WorkspacePageId::Audio) audio_workspace_->clearPeaks();
     }
     refreshEffectsContext();

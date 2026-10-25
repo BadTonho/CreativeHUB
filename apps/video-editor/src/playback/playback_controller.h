@@ -87,6 +87,7 @@ struct PlaybackAudioWarningEvent {
 
 struct PlaybackAudioLevelsEvent {
     std::vector<std::pair<timeline::TrackId, float>> track_peaks;
+    std::vector<std::pair<timeline::AudioBusId, float>> bus_peaks;
     float master_peak = 0.0F;
 };
 
@@ -235,6 +236,9 @@ public:
     [[nodiscard]] bool hardwareDecodingEnabled() const noexcept { return hardware_decoding_enabled_; }
     void setMonitorVolume(double gain);
     void setAudioMeteringEnabled(bool enabled);
+    void setAudioSoloState(
+        std::vector<timeline::TrackId> solo_track_ids,
+        std::vector<timeline::AudioBusId> solo_bus_ids);
     void setAudioParametersForActiveClip();
     void invalidate(bool stop_worker);
     void pause();
@@ -334,6 +338,8 @@ private:
     std::atomic<quint64> published_generation_{0};
     std::atomic_bool shutting_down_{false};
     bool playing_ = false;
+    std::vector<timeline::TrackId> solo_track_ids_;
+    std::vector<timeline::AudioBusId> solo_bus_ids_;
 };
 
 } // namespace playback

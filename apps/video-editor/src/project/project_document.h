@@ -15,7 +15,8 @@
 
 namespace project {
 
-inline constexpr int current_format_version = 40;
+inline constexpr int current_format_version = 41;
+inline constexpr int audio_mixing_format_version = 41;
 inline constexpr int color_power_windows_format_version = 40;
 inline constexpr int color_curves_format_version = 38;
 inline constexpr int color_matte_refinement_format_version = 39;
@@ -141,6 +142,9 @@ struct ProjectTrack {
     std::vector<ProjectTransition> transitions;
     timeline::TrackId track_id = 0;
     timeline::TrackKind kind = timeline::TrackKind::Video;
+    double audio_pan = 0.0;
+    std::optional<timeline::AudioBusId> output_bus_id;
+    std::vector<timeline::AudioSend> audio_sends;
 
     friend bool operator==(const ProjectTrack&, const ProjectTrack&) = default;
 };
@@ -193,6 +197,8 @@ struct ProjectDocument {
     std::vector<ColorGalleryStill> color_gallery_stills;
     std::vector<std::string> bins;
     std::vector<ProjectTrack> timeline_tracks;
+    std::vector<timeline::AudioBus> audio_buses;
+    timeline::MasterAudioMix master_audio_mix;
     // Set by the reader for formats before v14; the project opener creates
     // audio companions for online video clips and defers offline sources.
     bool audio_companion_migration_required = false;

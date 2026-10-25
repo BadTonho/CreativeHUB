@@ -6,6 +6,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <span>
+#include <unordered_map>
 #include <vector>
 
 namespace media {
@@ -35,6 +36,11 @@ struct TimelineAudioMixClip {
     // by a linked Audio clip elsewhere on the timeline.
     bool audio_extracted = false;
     std::vector<timeline::AudioGainKeyframe> audio_gain_keyframes;
+    timeline::TrackId track_id = 0;
+    double track_pan = 0.0;
+    std::optional<timeline::AudioBusId> output_bus_id;
+    std::vector<timeline::AudioSend> audio_sends;
+    int source_channel_count = 2;
 };
 
 struct TimelineAudioMixTransition {
@@ -63,6 +69,52 @@ struct TimelineAudioMixSpan {
     std::vector<timeline::AudioGainKeyframe> audio_gain_keyframes;
     std::int64_t timeline_start_sample = 0;
     std::vector<TimelineAudioMixFade> transition_fades;
+    double track_gain = 1.0;
+    double clip_gain = 1.0;
+};
+
+struct TimelineAudioMixConfiguration {
+    std::vector<timeline::AudioBus> buses;
+    timeline::MasterAudioMix master;
+    std::vector<timeline::TrackId> solo_track_ids;
+    std::vector<timeline::AudioBusId> solo_bus_ids;
+    bool apply_solo = true;
+};
+
+struct TimelineAudioMixResult {
+    std::vector<float> samples;
+    std::vector<std::pair<timeline::TrackId, float>> track_peaks;
+    std::vector<std::pair<timeline::AudioBusId, float>> bus_peaks;
+    float master_peak = 0.0F;
+};
+
+// Accumulates clip samples through track routes, sends, buses and the Master.
+// The same class is used for real-time Preview and offline export.
+class TimelineAudioMixAccumulator final {
+public:
+    TimelineAudioMixAccumulator(
+        std::size_t sample_count,
+        int channel_count,
+        TimelineAudioMixConfiguration configuration);
+
+    void accumulate(
+        const TimelineAudioMixSpan& span,
+        const TimelineAudioMixClip& clip,
+        const AudioPcmChunk& chunk);
+    [[nodiscard]] TimelineAudioMixResult finish();
+
+private:
+    [[nodiscard]] bool trackSoloed(timeline::TrackId track_id) const noexcept;
+    [[nodiscard]] bool busSoloed(timeline::AudioBusId bus_id) const noexcept;
+    [[nodiscard]] std::vector<float>& busBuffer(timeline::AudioBusId bus_id);
+
+    std::size_t sample_count_ = 0;
+    int channel_count_ = 0;
+    TimelineAudioMixConfiguration configuration_;
+    bool any_solo_ = false;
+    std::vector<float> master_samples_;
+    std::unordered_map<timeline::AudioBusId, std::vector<float>> bus_samples_;
+    std::unordered_map<timeline::TrackId, std::vector<float>> track_samples_;
 };
 
 [[nodiscard]] std::vector<TimelineAudioMixSpan> planTimelineAudioMix(

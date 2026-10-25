@@ -1864,6 +1864,73 @@ void runProjectSettingsCommands() {
             "A frame-rate conversion that collapsed a clip partially changed the project.");
 }
 
+void runAudioBusCommands() {
+    application::EditorSession session;
+    require(session.legacyTimelineForUi().addTrack(
+                "Audio", timeline::TrackKind::Audio) ==
+                timeline::AddTrackResult::Added,
+            "Could not create the Audio track for mixer command tests.");
+    application::TimelineCommandService service(session);
+    const auto track_id = session.timeline().tracks().back().track_id;
+    const auto first_bus_result = service.execute(
+        application::AddAudioBusCommand{"Music"});
+    const auto second_bus_result = service.execute(
+        application::AddAudioBusCommand{"Room"});
+    require(first_bus_result.changed() && second_bus_result.changed() &&
+                first_bus_result.affected_audio_bus_ids.size() == 1 &&
+                second_bus_result.affected_audio_bus_ids.size() == 1,
+            "Bus creation commands did not return stable affected bus IDs.");
+    const auto music_bus = first_bus_result.affected_audio_bus_ids.front();
+    const auto room_bus = second_bus_result.affected_audio_bus_ids.front();
+    const std::vector<timeline::AudioSend> sends{{
+        room_bus, 0.8, timeline::AudioSendTap::PreFader}};
+    const auto batch = service.beginEditBatch();
+    const auto first_mix = service.execute(application::SetTrackAudioMixCommand{
+        track_id, 0.5, false, -0.2, music_bus, sends});
+    const auto second_mix = service.execute(application::SetTrackAudioMixCommand{
+        track_id, 0.65, true, 0.4, music_bus, sends});
+    const auto finished_batch = service.finishEditBatch(batch);
+    require(first_mix.changed() && second_mix.changed() && finished_batch.changed() &&
+                service.undoCount() == 3,
+            "Track fader and pan changes did not group into a single history edit.");
+    const auto removed = service.execute(application::RemoveAudioBusCommand{music_bus});
+    require(removed.changed() && removed.affected_track_ids ==
+                std::vector<timeline::TrackId>{track_id} &&
+                !session.timeline().tracks().back().output_bus_id.has_value() &&
+                session.timeline().tracks().back().audio_sends == sends,
+            "Removing a bus did not update its main routes in one command.");
+    require(service.undo().changed() &&
+                session.timeline().tracks().back().output_bus_id == music_bus &&
+                session.timeline().tracks().back().audio_sends == sends,
+            "Undo did not restore the removed bus and its track routing.");
+    require(service.redo().changed() &&
+                !session.timeline().tracks().back().output_bus_id.has_value() &&
+                session.timeline().tracks().back().audio_sends == sends,
+            "Redo did not repeat bus removal and return the main route to Master.");
+    const auto invalid_route = service.execute(application::SetTrackAudioMixCommand{
+        track_id, 1.0, false, 0.0, 999, {}});
+    const auto invalid_pan = service.execute(application::SetTrackAudioMixCommand{
+        track_id, 1.0, false, 1.1, std::nullopt, {}});
+    const auto invalid_master = service.execute(
+        application::SetMasterAudioMixCommand{2.1, false});
+    require(invalid_route.reason == application::EditReason::InvalidValue &&
+                invalid_pan.reason == application::EditReason::InvalidValue &&
+                invalid_master.reason == application::EditReason::InvalidValue,
+            "Mixer commands accepted invalid route, pan, or Master gain values.");
+    const auto renamed = service.execute(
+        application::RenameAudioBusCommand{room_bus, "Room Verb"});
+    const auto bus_mix = service.execute(
+        application::SetAudioBusMixCommand{room_bus, 1.25, false, 0.3});
+    const auto master_mix = service.execute(
+        application::SetMasterAudioMixCommand{0.75, true});
+    require(renamed.changed() && bus_mix.changed() && master_mix.changed() &&
+                session.timeline().audioBuses().front().name == "Room Verb" &&
+                session.timeline().masterAudioMix().audio_muted,
+            "Bus rename, bus mix, or Master mix command did not change project state.");
+    require(service.undo().changed() && !session.timeline().masterAudioMix().audio_muted,
+            "Undo did not restore Master mix state.");
+}
+
 } // namespace
 
 int main() {
@@ -1880,6 +1947,7 @@ int main() {
         runRippleDeleteCommands();
         runClipAttributeCommands();
         runProjectSettingsCommands();
+        runAudioBusCommands();
         return 0;
     } catch (const std::exception& error) {
         std::cerr << error.what() << '\n';

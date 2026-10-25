@@ -3,6 +3,7 @@
 
 #include "logging/logger.h"
 #include "ui/preview/preview_widget.h"
+#include "workspaces/audio/ui/audio_workspace.h"
 #include "workspaces/render/ui/render_workspace.h"
 #include "workspaces/color/ui/color_workspace.h"
 #include "project/project_file.h"
@@ -546,6 +547,7 @@ void MainWindow::clearProjectState(
     if (playback_controller_ != nullptr) {
         playback_controller_->invalidate(true);
     }
+    if (audio_workspace_ != nullptr) audio_workspace_->clearSoloState();
     playback_is_playing_ = false;
 
     project_controller_.reset(canvas_width, canvas_height, frame_rate);
@@ -916,6 +918,7 @@ void MainWindow::applyLoadedProject(application::PreparedProject prepared) {
     if (playback_controller_ != nullptr) {
         playback_controller_->invalidate(true);
     }
+    if (audio_workspace_ != nullptr) audio_workspace_->clearSoloState();
     playback_is_playing_ = false;
 
     project_controller_.commitPrepared(

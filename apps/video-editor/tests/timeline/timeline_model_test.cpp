@@ -86,6 +86,57 @@ void testIndependentAudioTrackEditing(const std::filesystem::path& directory) {
                 model.addClip(2, audio, 15) == timeline::AddClipResult::Added,
             "Audio clips could not overlap across separate tracks.");
 
+    timeline::AudioBusId music_bus = 0;
+    timeline::AudioBusId reverb_bus = 0;
+    require(model.addAudioBus("Music", &music_bus) ==
+                timeline::AudioBusMutationResult::Changed &&
+                model.addAudioBus("Reverb", &reverb_bus) ==
+                timeline::AudioBusMutationResult::Changed &&
+                music_bus != reverb_bus,
+            "Audio buses were not created with distinct stable IDs.");
+    const auto first_track_id = model.tracks()[1].track_id;
+    const std::vector<timeline::AudioSend> sends{{
+        reverb_bus, 0.75, timeline::AudioSendTap::PreFader}};
+    require(model.setTrackAudioMix(first_track_id, 0.5, true, -0.25,
+                music_bus, sends) == timeline::AudioParameterResult::Changed &&
+                model.tracks()[1].audio_pan == -0.25 &&
+                model.tracks()[1].output_bus_id == music_bus &&
+                model.tracks()[1].audio_sends == sends,
+            "Track pan, output routing, and sends were not stored together.");
+    const auto mix_snapshot = model.snapshot();
+    require(model.removeAudioBus(music_bus) ==
+                timeline::AudioBusMutationResult::Changed &&
+                !model.tracks()[1].output_bus_id.has_value() &&
+                model.tracks()[1].audio_sends == sends,
+            "Removing a bus did not return its main-routed tracks to Master.");
+    model.restore(mix_snapshot);
+    require(model.removeAudioBus(reverb_bus) ==
+                timeline::AudioBusMutationResult::Changed &&
+                model.tracks()[1].output_bus_id == music_bus &&
+                model.tracks()[1].audio_sends.empty(),
+            "Removing a bus did not remove sends that target it.");
+    model.restore(mix_snapshot);
+    require(model.tracks()[1].output_bus_id == music_bus &&
+                model.tracks()[1].audio_sends == sends &&
+                model.renameAudioBus(reverb_bus, "Room") ==
+                    timeline::AudioBusMutationResult::Changed &&
+                model.audioBuses()[1].name == "Room",
+            "Audio routing snapshots or bus renaming did not preserve stable state.");
+    require(model.setTrackAudioMix(first_track_id, 1.0, false, 1.01,
+                std::nullopt, {}) == timeline::AudioParameterResult::InvalidValue &&
+                model.setTrackAudioMix(first_track_id, 1.0, false, 0.0,
+                    999, {}) == timeline::AudioParameterResult::InvalidValue &&
+                model.setTrackAudioMix(first_track_id, 1.0, false, 0.0,
+                    music_bus, {{music_bus, 1.0,
+                        timeline::AudioSendTap::PostFader}}) ==
+                    timeline::AudioParameterResult::InvalidValue &&
+                model.setAudioBusMix(music_bus, 2.01, false, 0.0) ==
+                    timeline::AudioParameterResult::InvalidValue &&
+                model.setMasterAudioMix(2.0, true) ==
+                    timeline::AudioParameterResult::Changed &&
+                model.masterAudioMix().audio_muted,
+            "Invalid pan, gain, route references, or same-bus sends were accepted.");
+
     require(model.splitClip(2, 0, 10) == timeline::SplitClipResult::Split,
             "An Audio clip could not be split.");
     require(model.tracks()[2].clips[0].source_duration_time_us == 333333 &&

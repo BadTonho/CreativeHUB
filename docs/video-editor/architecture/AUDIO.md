@@ -85,14 +85,49 @@ keeps the project clean, and repeated open/save cycles do not duplicate
 companions. Older projects use gain `1.0` and mute `false` when those optional
 fields are absent.
 
+## Mixer routing (CSP v41)
+
+The project owns stable-ID audio buses and one Master mix. A track routes its
+main output either to Master or one bus. Buses are flat and always feed Master;
+there are no nested buses or cycles. A track may send to buses other than its
+main output bus. Each send has a `0.0` to `2.0` level and a pre-fader or
+post-fader tap; it starts at unity and post-fader. Track mute silences both its
+main route and all sends. Pre-fader sends retain clip gain, envelope, and
+crossfade behavior, while bypassing track gain and pan.
+
+Track and bus pan range from `-1.0` to `1.0`; zero is centered. Mono sources use
+an equal-power pan law. Stereo sources keep their stereo width and use balance.
+On multichannel Preview output the track pan affects the first front pair, and
+remaining channels pass through unchanged. Buses apply gain, mute, and balance
+to their summed input. Master applies gain and mute after all bus and direct
+track routes are summed. Track, bus, send, and Master gain values range from
+`0.0` to `2.0`; defaults are unity, unmuted, and centered where pan exists.
+
+Multiple tracks and buses can be soloed for Preview. Solo state is transient,
+does not enter project files or history, and is applied after mute. Preview and
+offline export share `TimelineAudioMixAccumulator` for route, send, pan, gain,
+bus, and Master sample processing. Export disables solo and renders the
+complete saved mix. Track and bus meters are measured after their local
+processing; the Master meter is measured after Master gain/mute and before
+monitor gain and output clipping.
+
+Removing a bus sends its main-routed tracks to Master and removes sends that
+target it. The operation is one undoable timeline edit. Fader and pan drags are
+grouped into one edit per gesture. CSP v41 requires bus and Master settings and
+track pan, route, and send data; projects v1-v40 load with no buses or sends,
+centered pan, Master defaults, and tracks routed to Master. The Hub accepts v41
+and rejects v42.
+
 Video export remains a video file. Its duration reaches the end of the longest
 Timeline clip. If audio extends beyond visual content, the renderer emits black
 frames until the audio ends. Disabling export audio omits the output audio
 stream and skips audio-only source preparation, including offline audio files.
 The complete Timeline still determines video duration and its black tail. With
 audio enabled, an offline audio source fails with a detailed log and preserves
-the previous destination. Preview and export share sample scheduling for embedded and
-independent audio sources, including trims, gains, mutes, and silence.
+the previous destination. Preview and export share sample scheduling and
+mixing for embedded and independent audio sources, including trims, clip
+envelopes, crossfades, track routes and sends, bus processing, Master gain/mute,
+and silence. Solo is Preview only. Monitoring volume affects Preview only.
 
 Audio clip waveforms are derived after insertion and displayed from separate
 left/right channel peaks. The global Mono/Stereo preference lives in
@@ -106,8 +141,8 @@ Crossfade at an adjacent cut. It overlaps the incoming clip by D Timeline
 frames and uses equal-power cosine/sine gains per sample in the shared Preview
 and export mixer. The transition gain multiplies track gain, clip gain, mute,
 and the clip's existing volume envelope. Clips linked to video must be
-unlinked before adding the transition. Recording, track automation, advanced
-mixing, and audio-only file export remain future work.
+unlinked before adding the transition. Recording, audio effects, track
+automation, and audio-only file export remain future work.
 
 A visual Cross Dissolve changes video timing but keeps embedded video audio as
 a hard cut at the original cut: outgoing audio continues through the visual

@@ -633,11 +633,19 @@ ProjectOpenResult ProjectOpenService::prepare(
         migrateAudioCompanions(document, loaded_library);
         normalized_document.timeline_frame_rate = document.timeline_frame_rate;
         normalized_document.timeline_tracks = document.timeline_tracks;
+        normalized_document.audio_buses = document.audio_buses;
+        normalized_document.master_audio_mix = document.master_audio_mix;
         normalized_document.timing_migration_required = false;
         normalized_document.audio_companion_migration_required = false;
 
         timeline::TimelineModel::Snapshot snapshot;
         snapshot.frame_rate = document.timeline_frame_rate;
+        snapshot.audio_buses = document.audio_buses;
+        snapshot.master_audio_mix = document.master_audio_mix;
+        for (const auto& bus : document.audio_buses) {
+            snapshot.next_audio_bus_id = std::max(
+                snapshot.next_audio_bus_id, bus.bus_id + 1);
+        }
         timeline::TrackId next_track_id = 1;
         timeline::ClipId next_clip_id = 1;
         for (std::size_t track_index = 0;
@@ -660,6 +668,9 @@ ProjectOpenResult ProjectOpenService::prepare(
                 project_track.audio_muted,
                 {}};
             prepared_track.kind = project_track.kind;
+            prepared_track.audio_pan = project_track.audio_pan;
+            prepared_track.output_bus_id = project_track.output_bus_id;
+            prepared_track.audio_sends = project_track.audio_sends;
             snapshot.tracks.push_back(std::move(prepared_track));
 
             for (std::size_t clip_index = 0;

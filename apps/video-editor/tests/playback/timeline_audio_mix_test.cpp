@@ -6,6 +6,7 @@
 #include <limits>
 #include <stdexcept>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace {
@@ -282,6 +283,175 @@ void testAudioCrossfadeUsesEqualPowerAndExistingGainControls() {
             "Muting one crossfade endpoint incorrectly muted the other endpoint.");
 }
 
+media::TimelineAudioMixResult renderMix(
+    const std::vector<media::TimelineAudioMixClip>& clips,
+    media::TimelineAudioMixConfiguration configuration,
+    std::int16_t sample = 8192) {
+    const auto spans = media::planTimelineAudioMix(
+        clips, {}, 30.0, 30, 0, 4);
+    media::TimelineAudioMixAccumulator accumulator(4, 2,
+        std::move(configuration));
+    for (const auto& span : spans) {
+        accumulator.accumulate(span, clips.at(span.source_index),
+            constantChunk(span.source_start_sample, sample, 4));
+    }
+    return accumulator.finish();
+}
+
+void testTrackRoutesAndPrePostSends() {
+    auto clip = media::TimelineAudioMixClip{
+        0, 0, 0, timeline::ClipKind::Video, true,
+        0, 4, 0, 30.0, 0.5, 1.0, false, false};
+    clip.track_id = 11;
+    clip.output_bus_id = 101;
+    clip.audio_sends = {{202, 1.0, timeline::AudioSendTap::PostFader}};
+    media::TimelineAudioMixConfiguration configuration;
+    configuration.buses = {{101, "Submix", 1.0, false, 0.0},
+                           {202, "Send", 1.0, false, 0.0}};
+    auto post = renderMix({clip}, configuration);
+    const auto busPeak = [](const auto& result, timeline::AudioBusId id) {
+        const auto found = std::find_if(result.bus_peaks.begin(), result.bus_peaks.end(),
+            [id](const auto& peak) { return peak.first == id; });
+        return found == result.bus_peaks.end() ? -1.0F : found->second;
+    };
+    require(std::abs(post.samples.front() - 0.25F) < 1.0e-5F &&
+                post.bus_peaks.size() == 2 &&
+                std::abs(busPeak(post, 101) - 0.125F) < 1.0e-5F &&
+                std::abs(busPeak(post, 202) - 0.125F) < 1.0e-5F,
+            "The main bus route or post-fader send did not use the track fader.");
+
+    auto preview_configuration = configuration;
+    preview_configuration.apply_solo = true;
+    auto export_configuration = configuration;
+    export_configuration.apply_solo = false;
+    const auto preview_mix = renderMix({clip}, preview_configuration);
+    const auto export_mix = renderMix({clip}, export_configuration);
+    require(preview_mix.samples == export_mix.samples,
+            "Preview and export did not produce the same saved mix without solo state.");
+
+    clip.audio_sends.front().tap = timeline::AudioSendTap::PreFader;
+    const auto pre = renderMix({clip}, configuration);
+    require(std::abs(pre.samples.front() - 0.375F) < 1.0e-5F &&
+                std::abs(busPeak(pre, 202) - 0.25F) < 1.0e-5F,
+            "A pre-fader send did not bypass the track fader while reaching Master.");
+
+    clip.track_gain = 0.0;
+    const auto zero_fader_pre = renderMix({clip}, configuration);
+    require(std::abs(zero_fader_pre.samples.front() - 0.25F) < 1.0e-5F,
+            "A pre-fader send was lost when the track fader was at zero.");
+}
+
+void testPanSoloMuteAndMasterMix() {
+    auto mono = media::TimelineAudioMixClip{
+        0, 0, 0, timeline::ClipKind::Video, true,
+        0, 4, 0, 30.0, 1.0, 1.0, false, false};
+    mono.track_id = 1;
+    mono.source_channel_count = 1;
+    mono.track_pan = -1.0;
+    auto left = renderMix({mono}, {});
+    require(std::abs(left.samples[0] - 0.25F) < 1.0e-5F &&
+                std::abs(left.samples[1]) < 1.0e-6F,
+            "Mono equal-power pan did not place a source on the selected front channel.");
+    mono.track_pan = 0.0;
+    const auto centered = renderMix({mono}, {});
+    const auto equal_power_center = 0.25F * std::sqrt(0.5F);
+    require(std::abs(centered.samples[0] - equal_power_center) < 1.0e-5F &&
+                std::abs(centered.samples[1] - equal_power_center) < 1.0e-5F,
+            "Mono center pan did not use the equal-power law.");
+
+    auto second = mono;
+    second.source_index = 1;
+    second.track_id = 2;
+    second.source_channel_count = 1;
+    second.track_pan = 0.0;
+    std::vector<media::TimelineAudioMixClip> tracks{mono, second};
+    media::TimelineAudioMixConfiguration configuration;
+    configuration.solo_track_ids = {1};
+    const auto solo_one = renderMix(tracks, configuration);
+    configuration.apply_solo = false;
+    const auto export_ignores_solo = renderMix(tracks, configuration);
+    require(std::abs(solo_one.samples[0] - equal_power_center) < 1.0e-5F &&
+                std::abs(export_ignores_solo.samples[0] -
+                         2.0F * equal_power_center) < 1.0e-5F,
+            "Solo must affect Preview while the saved export mix includes all tracks.");
+
+    configuration.apply_solo = true;
+    configuration.solo_track_ids = {1, 2};
+    tracks[0].track_muted = true;
+    const auto mute_wins = renderMix(tracks, configuration);
+    require(std::abs(mute_wins.samples[0] - equal_power_center) < 1.0e-5F,
+            "A muted track remained audible while multiple tracks were soloed.");
+
+    tracks[0].track_muted = false;
+    tracks[0].track_pan = 0.0;
+    configuration.solo_track_ids.clear();
+    configuration.buses = {{303, "Muted", 1.0, true, 0.0}};
+    tracks[0].output_bus_id = 303;
+    tracks[1].track_muted = true;
+    configuration.solo_bus_ids = {303};
+    configuration.buses.front().audio_muted = false;
+    const auto bus_solo = renderMix(tracks, configuration);
+    require(std::abs(bus_solo.samples[0] - equal_power_center) < 1.0e-5F,
+            "Soloing a bus did not audition its routed track input.");
+    configuration.buses.front().audio_pan = -1.0;
+    const auto bus_pan = renderMix(tracks, configuration);
+    require(std::abs(bus_pan.samples[0] - equal_power_center) < 1.0e-5F &&
+                std::abs(bus_pan.samples[1]) < 1.0e-6F,
+            "Bus pan did not balance the summed signal.");
+    configuration.buses.front().audio_pan = 0.0;
+    configuration.buses.front().audio_muted = true;
+    const auto muted_bus = renderMix(tracks, configuration);
+    require(std::abs(muted_bus.master_peak) < 1.0e-6F,
+            "A muted bus still contributed to the Master output.");
+
+    configuration.buses.front().audio_muted = false;
+    configuration.master.audio_gain = 0.5;
+    tracks[1].track_muted = true;
+    tracks[0].track_pan = -1.0;
+    const auto master_gain = renderMix(tracks, configuration);
+    require(std::abs(master_gain.samples[0] - 0.125F) < 1.0e-5F,
+            "Master gain was not applied after bus summing.");
+    configuration.master.audio_muted = true;
+    const auto master_mute = renderMix(tracks, configuration);
+    require(std::abs(master_mute.master_peak) < 1.0e-6F,
+            "Master mute did not silence the final output.");
+}
+
+void testStereoBalanceAndMultichannelPassThrough() {
+    auto clip = media::TimelineAudioMixClip{
+        0, 0, 0, timeline::ClipKind::Video, true,
+        0, 1, 0, 30.0, 1.0, 1.0, false, false};
+    clip.track_id = 7;
+    clip.track_pan = 0.5;
+    const auto spans = media::planTimelineAudioMix(
+        std::span<const media::TimelineAudioMixClip>(&clip, 1), {},
+        30.0, 30, 0, 1);
+    media::AudioPcmChunk stereo;
+    stereo.sample_rate = 30;
+    stereo.channel_count = 2;
+    stereo.samples = {8192, 4096};
+    media::TimelineAudioMixAccumulator stereo_mix(1, 2, {});
+    stereo_mix.accumulate(spans.front(), clip, stereo);
+    const auto stereo_result = stereo_mix.finish();
+    require(std::abs(stereo_result.samples[0] - 0.125F) < 1.0e-5F &&
+                std::abs(stereo_result.samples[1] - 0.125F) < 1.0e-5F,
+            "Stereo pan did not preserve its source width while applying balance.");
+
+    clip.track_pan = 1.0;
+    media::AudioPcmChunk surround;
+    surround.sample_rate = 30;
+    surround.channel_count = 4;
+    surround.samples = {8192, 4096, 2048, 1024};
+    media::TimelineAudioMixAccumulator surround_mix(1, 4, {});
+    surround_mix.accumulate(spans.front(), clip, surround);
+    const auto surround_result = surround_mix.finish();
+    require(std::abs(surround_result.samples[0]) < 1.0e-6F &&
+                std::abs(surround_result.samples[1] - 0.125F) < 1.0e-5F &&
+                std::abs(surround_result.samples[2] - 0.0625F) < 1.0e-5F &&
+                std::abs(surround_result.samples[3] - 0.03125F) < 1.0e-5F,
+            "Multichannel pan changed channels outside the front pair.");
+}
+
 } // namespace
 
 int main() {
@@ -295,6 +465,9 @@ int main() {
         testExternalizedVideoAudioIsMixedOnlyFromItsCompanion();
         testAudioEnvelopeIsAppliedPerSample();
         testAudioCrossfadeUsesEqualPowerAndExistingGainControls();
+        testTrackRoutesAndPrePostSends();
+        testPanSoloMuteAndMasterMix();
+        testStereoBalanceAndMultichannelPassThrough();
         std::cout << "timeline audio mix tests passed\n";
         return 0;
     } catch (const std::exception& error) {

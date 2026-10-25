@@ -517,6 +517,15 @@ void PlaybackWorker::setAudioMeteringEnabled(bool enabled) {
     audio_metering_enabled_ = enabled;
 }
 
+void PlaybackWorker::setAudioMixConfiguration(
+    media::TimelineAudioMixConfiguration configuration) {
+    composition_audio_mix_configuration_ = std::move(configuration);
+    pending_audio_bytes_.clear();
+    composition_audio_cursor_valid_ = false;
+    if (audio_output_ != nullptr) audio_output_->stop();
+    if (playing_ && composition_enabled_) restartCompositionAudioOutput();
+}
+
 void PlaybackWorker::setGpuCompositionEnabled(bool enabled, QOffscreenSurface* surface) {
     if (enabled == gpu_composition_enabled_ && surface == gpu_surface_) return;
     clearCompositionCache();
@@ -919,6 +928,12 @@ void PlaybackWorker::setComposition(
                 prepared.source_duration_time_us,
                 prepared.audio_extracted,
                 prepared.audio_gain_keyframes});
+            auto& audio_clip = composition_audio_mix_clips_.back();
+            audio_clip.track_id = prepared.track_id;
+            audio_clip.track_pan = prepared.track_audio_pan;
+            audio_clip.output_bus_id = prepared.output_bus_id;
+            audio_clip.audio_sends = prepared.audio_sends;
+            audio_clip.source_channel_count = prepared.source_audio_channel_count;
         }
 
         composition_audio_mix_transitions_.reserve(
@@ -2887,15 +2902,13 @@ void PlaybackWorker::fillCompositionAudioOutput() {
             if (!source.audio_open_failed) source.audio_open_attempted = false;
         }
 
-        std::vector<float> mixed(
-            static_cast<std::size_t>(block_samples) *
-                static_cast<std::size_t>(output.channel_count),
-            0.0F);
+        media::TimelineAudioMixAccumulator audio_mixer(
+            static_cast<std::size_t>(block_samples), output.channel_count,
+            composition_audio_mix_configuration_);
         const auto meter_now = std::chrono::steady_clock::now();
         const bool meter_this_block = audio_metering_enabled_ &&
             (last_audio_meter_emit_ == std::chrono::steady_clock::time_point{} ||
              meter_now - last_audio_meter_emit_ >= std::chrono::milliseconds(50));
-        std::unordered_map<timeline::TrackId, std::vector<float>> track_mixes;
         const auto spans = media::planTimelineAudioMix(
             composition_audio_mix_clips_,
             composition_audio_mix_transitions_,
@@ -2930,6 +2943,10 @@ void PlaybackWorker::fillCompositionAudioOutput() {
                 }
             }
             if (source.audio_session == nullptr) continue;
+            if (span.source_index < composition_audio_mix_clips_.size()) {
+                composition_audio_mix_clips_[span.source_index].source_channel_count =
+                    source.audio_session->source_channel_count();
+            }
 
             try {
                 if (source.audio_session->current_sample_index() !=
@@ -2945,13 +2962,10 @@ void PlaybackWorker::fillCompositionAudioOutput() {
                     auto chunk = source.audio_session->decode_samples(
                         std::min<std::size_t>(remaining, 8192U));
                     if (!chunk.has_value() || chunk->sampleCount() == 0) break;
-                    media::accumulateTimelineAudioChunk(
-                        span, *chunk, mixed, output.channel_count);
-                    if (meter_this_block && source.spec.track_id != 0) {
-                        auto& track_mix = track_mixes[source.spec.track_id];
-                        if (track_mix.empty()) track_mix.resize(mixed.size(), 0.0F);
-                        media::accumulateTimelineAudioChunk(
-                            span, *chunk, track_mix, output.channel_count);
+                    if (span.source_index < composition_audio_mix_clips_.size()) {
+                        audio_mixer.accumulate(
+                            span, composition_audio_mix_clips_[span.source_index],
+                            *chunk);
                     }
                     const auto chunk_end = chunk->first_sample_index +
                         static_cast<std::int64_t>(chunk->sampleCount());
@@ -2973,26 +2987,36 @@ void PlaybackWorker::fillCompositionAudioOutput() {
             }
         }
 
+        auto mixed = audio_mixer.finish();
         if (meter_this_block) {
             last_audio_meter_emit_ = meter_now;
             QVector<quint64> track_ids;
             QVector<float> levels;
-            track_ids.reserve(static_cast<qsizetype>(track_mixes.size()));
-            levels.reserve(static_cast<qsizetype>(track_mixes.size()));
-            for (const auto& [id, samples] : track_mixes) {
+            track_ids.reserve(static_cast<qsizetype>(mixed.track_peaks.size()));
+            levels.reserve(static_cast<qsizetype>(mixed.track_peaks.size()));
+            for (const auto& [id, peak] : mixed.track_peaks) {
                 track_ids.push_back(id);
-                levels.push_back(media::timelineAudioPeak(samples));
+                levels.push_back(peak);
+            }
+            QVector<quint64> bus_ids;
+            QVector<float> bus_peaks;
+            bus_ids.reserve(static_cast<qsizetype>(mixed.bus_peaks.size()));
+            bus_peaks.reserve(static_cast<qsizetype>(mixed.bus_peaks.size()));
+            for (const auto& [id, peak] : mixed.bus_peaks) {
+                bus_ids.push_back(id);
+                bus_peaks.push_back(peak);
             }
             emit audioLevelsReady(
                 std::move(track_ids), std::move(levels),
-                media::timelineAudioPeak(mixed), generation_);
+                std::move(bus_ids), std::move(bus_peaks),
+                mixed.master_peak, generation_);
         }
 
         std::vector<std::int16_t> pcm(
             static_cast<std::size_t>(block_samples) *
                 static_cast<std::size_t>(output.channel_count));
-        for (std::size_t index = 0; index < mixed.size(); ++index) {
-            const auto value = static_cast<double>(mixed[index]) * monitor_gain * 32768.0;
+        for (std::size_t index = 0; index < mixed.samples.size(); ++index) {
+            const auto value = static_cast<double>(mixed.samples[index]) * monitor_gain * 32768.0;
             pcm[index] = static_cast<std::int16_t>(std::clamp(
                 value,
                 static_cast<double>(std::numeric_limits<std::int16_t>::min()),

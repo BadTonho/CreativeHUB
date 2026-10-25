@@ -5,6 +5,7 @@
 #include <limits>
 #include <numbers>
 #include <optional>
+#include <unordered_set>
 #include <utility>
 
 namespace media {
@@ -17,6 +18,44 @@ float timelineAudioPeak(std::span<const float> samples) noexcept {
     return peak;
 }
 namespace {
+
+void applyTrackGainAndPan(
+    float* frame,
+    int channel_count,
+    int source_channel_count,
+    double gain,
+    double pan) noexcept {
+    if (frame == nullptr || channel_count <= 0) return;
+    for (int channel = 0; channel < channel_count; ++channel) {
+        frame[channel] = static_cast<float>(frame[channel] * gain);
+    }
+    if (channel_count < 2 || (pan == 0.0 && source_channel_count > 1)) return;
+    const auto normalized_pan = std::clamp(pan, -1.0, 1.0);
+    if (source_channel_count <= 1) {
+        // FFmpeg has already expanded a mono source to the device layout. Fold
+        // the duplicated front pair back to mono before applying the pan law.
+        const auto mono = (frame[0] + frame[1]) * 0.5F;
+        const auto angle = (normalized_pan + 1.0) * std::numbers::pi / 4.0;
+        frame[0] = mono * static_cast<float>(std::cos(angle));
+        frame[1] = mono * static_cast<float>(std::sin(angle));
+        return;
+    }
+    if (normalized_pan > 0.0) {
+        frame[0] *= static_cast<float>(1.0 - normalized_pan);
+    } else if (normalized_pan < 0.0) {
+        frame[1] *= static_cast<float>(1.0 + normalized_pan);
+    }
+}
+
+void applyBusPan(float* frame, int channel_count, double gain, double pan) noexcept {
+    if (frame == nullptr || channel_count <= 0) return;
+    for (int channel = 0; channel < channel_count; ++channel) {
+        frame[channel] = static_cast<float>(frame[channel] * gain);
+    }
+    if (channel_count < 2 || pan == 0.0) return;
+    if (pan > 0.0) frame[0] *= static_cast<float>(1.0 - pan);
+    else if (pan < 0.0) frame[1] *= static_cast<float>(1.0 + pan);
+}
 
 std::optional<std::int64_t> sampleAtTimelineFrame(
     std::int64_t frame,
@@ -102,7 +141,15 @@ std::vector<TimelineAudioMixSpan> planTimelineAudioMix(
         }
 
         const auto gain = std::clamp(clip.track_gain * clip.clip_gain, 0.0, 16.0);
-        if (!std::isfinite(gain) || gain <= 0.0) continue;
+        const bool has_audible_pre_fader_send = std::any_of(
+            clip.audio_sends.begin(), clip.audio_sends.end(),
+            [](const timeline::AudioSend& send) {
+                return send.tap == timeline::AudioSendTap::PreFader &&
+                    send.gain > 0.0;
+            });
+        if (!std::isfinite(gain) ||
+            (gain <= 0.0 && !has_audible_pre_fader_send) ||
+            clip.clip_gain <= 0.0) continue;
 
         auto audio_start_frame = clip.timeline_start_frame;
         for (const auto& transition : transitions) {
@@ -177,6 +224,8 @@ std::vector<TimelineAudioMixSpan> planTimelineAudioMix(
         span.destination_start_sample = overlap_start - block_start_sample;
         span.sample_count = span_sample_count;
         span.gain = gain;
+        span.track_gain = clip.track_gain;
+        span.clip_gain = clip.clip_gain;
         span.local_frame_at_destination_start = local_frame_at_overlap;
         span.frames_per_sample = timeline_frame_rate / sample_rate;
         span.audio_gain_keyframes = clip.audio_gain_keyframes;
@@ -208,6 +257,169 @@ std::vector<TimelineAudioMixSpan> planTimelineAudioMix(
         spans.push_back(std::move(span));
     }
     return spans;
+}
+
+TimelineAudioMixAccumulator::TimelineAudioMixAccumulator(
+    std::size_t sample_count,
+    int channel_count,
+    TimelineAudioMixConfiguration configuration)
+    : sample_count_(sample_count),
+      channel_count_(channel_count),
+      configuration_(std::move(configuration)),
+      any_solo_(configuration_.apply_solo &&
+          (!configuration_.solo_track_ids.empty() ||
+           !configuration_.solo_bus_ids.empty())),
+      master_samples_(sample_count * static_cast<std::size_t>(
+          std::max(channel_count, 0)), 0.0F) {
+    for (const auto& bus : configuration_.buses) {
+        bus_samples_.try_emplace(bus.bus_id,
+            sample_count_ * static_cast<std::size_t>(std::max(channel_count_, 0)),
+            0.0F);
+    }
+}
+
+bool TimelineAudioMixAccumulator::trackSoloed(
+    timeline::TrackId track_id) const noexcept {
+    return std::find(configuration_.solo_track_ids.begin(),
+                     configuration_.solo_track_ids.end(), track_id) !=
+        configuration_.solo_track_ids.end();
+}
+
+bool TimelineAudioMixAccumulator::busSoloed(
+    timeline::AudioBusId bus_id) const noexcept {
+    return std::find(configuration_.solo_bus_ids.begin(),
+                     configuration_.solo_bus_ids.end(), bus_id) !=
+        configuration_.solo_bus_ids.end();
+}
+
+std::vector<float>& TimelineAudioMixAccumulator::busBuffer(
+    timeline::AudioBusId bus_id) {
+    auto found = bus_samples_.find(bus_id);
+    if (found == bus_samples_.end()) {
+        found = bus_samples_.try_emplace(
+            bus_id, sample_count_ * static_cast<std::size_t>(
+                std::max(channel_count_, 0)), 0.0F).first;
+    }
+    return found->second;
+}
+
+void TimelineAudioMixAccumulator::accumulate(
+    const TimelineAudioMixSpan& span,
+    const TimelineAudioMixClip& clip,
+    const AudioPcmChunk& chunk) {
+    if (channel_count_ <= 0 || sample_count_ == 0 || clip.track_muted ||
+        clip.clip_muted || span.destination_start_sample < 0 ||
+        static_cast<std::uint64_t>(span.destination_start_sample) >= sample_count_) {
+        return;
+    }
+    const bool track_solo = any_solo_ && trackSoloed(clip.track_id);
+    const bool main_route_solo = !any_solo_ || track_solo ||
+        (clip.output_bus_id.has_value() && busSoloed(*clip.output_bus_id));
+    bool has_audible_route = main_route_solo;
+    for (const auto& send : clip.audio_sends) {
+        if (send.gain > 0.0 && (!any_solo_ || track_solo ||
+                busSoloed(send.destination_bus_id))) {
+            has_audible_route = true;
+            break;
+        }
+    }
+    if (!has_audible_route) return;
+
+    std::vector<float> pre_fader(
+        sample_count_ * static_cast<std::size_t>(channel_count_), 0.0F);
+    auto pre_span = span;
+    pre_span.gain = span.clip_gain;
+    accumulateTimelineAudioChunk(pre_span, chunk, pre_fader, channel_count_);
+
+    std::vector<float> post_fader = pre_fader;
+    auto track_buffer = track_samples_.try_emplace(
+        clip.track_id, pre_fader.size(), 0.0F).first;
+    const bool include_main_route = main_route_solo;
+    const bool include_any_send = std::any_of(
+        clip.audio_sends.begin(), clip.audio_sends.end(),
+        [this, track_solo, any_solo = any_solo_](const timeline::AudioSend& send) {
+            return send.gain > 0.0 && (!any_solo || track_solo ||
+                busSoloed(send.destination_bus_id));
+        });
+    const auto frames = std::min(sample_count_, pre_fader.size() /
+        static_cast<std::size_t>(channel_count_));
+    for (std::size_t frame_index = 0; frame_index < frames; ++frame_index) {
+        const auto offset = frame_index * static_cast<std::size_t>(channel_count_);
+        applyTrackGainAndPan(
+            post_fader.data() + offset, channel_count_, clip.source_channel_count,
+            clip.track_gain, clip.track_pan);
+        for (int channel = 0; channel < channel_count_; ++channel) {
+            const auto sample_offset = offset + static_cast<std::size_t>(channel);
+            if (include_main_route || include_any_send) {
+                track_buffer->second[sample_offset] += post_fader[sample_offset];
+            }
+            if (include_main_route && !clip.output_bus_id.has_value()) {
+                master_samples_[sample_offset] += post_fader[sample_offset];
+            }
+            if (include_main_route && clip.output_bus_id.has_value()) {
+                busBuffer(*clip.output_bus_id)[sample_offset] += post_fader[sample_offset];
+            }
+        }
+    }
+
+    for (const auto& send : clip.audio_sends) {
+        const bool send_solo = !any_solo_ || track_solo ||
+            busSoloed(send.destination_bus_id);
+        if (!send_solo || send.gain <= 0.0) continue;
+        auto& destination = busBuffer(send.destination_bus_id);
+        const auto& source = send.tap == timeline::AudioSendTap::PreFader
+            ? pre_fader : post_fader;
+        for (std::size_t sample_index = 0; sample_index < source.size(); ++sample_index) {
+            destination[sample_index] += static_cast<float>(
+                source[sample_index] * send.gain);
+        }
+    }
+}
+
+TimelineAudioMixResult TimelineAudioMixAccumulator::finish() {
+    TimelineAudioMixResult result;
+    if (channel_count_ <= 0) {
+        result.samples = std::move(master_samples_);
+        return result;
+    }
+    for (auto& [bus_id, samples] : bus_samples_) {
+        const auto bus = std::find_if(
+            configuration_.buses.begin(), configuration_.buses.end(),
+            [bus_id](const timeline::AudioBus& value) {
+                return value.bus_id == bus_id;
+            });
+        if (bus == configuration_.buses.end()) continue;
+        if (bus->audio_muted) {
+            std::fill(samples.begin(), samples.end(), 0.0F);
+        } else {
+            for (std::size_t offset = 0; offset < samples.size();
+                 offset += static_cast<std::size_t>(channel_count_)) {
+                applyBusPan(samples.data() + offset, channel_count_,
+                            bus->audio_gain, bus->audio_pan);
+            }
+        }
+        result.bus_peaks.emplace_back(bus_id, timelineAudioPeak(samples));
+        for (std::size_t index = 0;
+             index < std::min(master_samples_.size(), samples.size()); ++index) {
+            master_samples_[index] += samples[index];
+        }
+    }
+
+    result.track_peaks.reserve(track_samples_.size());
+    for (const auto& [track_id, samples] : track_samples_) {
+        result.track_peaks.emplace_back(track_id, timelineAudioPeak(samples));
+    }
+    if (configuration_.master.audio_muted) {
+        std::fill(master_samples_.begin(), master_samples_.end(), 0.0F);
+    } else {
+        const auto master_gain = configuration_.master.audio_gain;
+        for (auto& sample : master_samples_) {
+            sample = static_cast<float>(sample * master_gain);
+        }
+    }
+    result.master_peak = timelineAudioPeak(master_samples_);
+    result.samples = std::move(master_samples_);
+    return result;
 }
 
 void accumulateTimelineAudioChunk(

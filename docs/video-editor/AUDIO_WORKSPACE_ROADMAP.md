@@ -1,46 +1,60 @@
 # Audio Workspace Roadmap
 
-Status: **first editing and mixing stage implemented; further capabilities are candidates, not release commitments**.
+Status: **the editable Audio workspace and one-level mixer are implemented; device and native UI acceptance remain pending**.
 
 The Audio workspace is a fourth view of the Video Editor's current project. It
-uses the same timeline document, clip and track identities, edit history,
-playhead, playback and export mix as Edit. Its first stage places live meters
-beside the shared video Preview, shows only Audio tracks in the editable
-Timeline, and provides a mixer for each Audio track's existing gain and mute.
-The output meter displays the summed floating-point mix before monitor volume
-and output clipping. Track meters display each track's post-gain, post-mute
-mix. Meter work is enabled only while Audio is selected and never writes to the
-project. Level delivery is limited to 20 updates per second. The layout is
-original and takes workflow guidance, not assets or
-branding, from the supplied reference.
+uses the Edit timeline document, stable clip and track identities, shared edit
+history, playhead, Preview and export. The page shows an audio-only editable
+Timeline beside the shared video Preview and provides live track, bus and
+Master meters.
 
-## First-stage acceptance
+## Implemented mixer
 
-- Edit audio clips through the existing move, trim, split, volume-envelope,
-  Audio Crossfade, selection and Undo/Redo paths. Switching between Edit and
-  Audio must retain clip identity and playhead position.
-- Mixer gain and mute must affect the same track fields used by Preview and
-  export, survive save/reopen, and participate in Undo/Redo. The first stage
-  has a fixed summed output; it adds no buses or project schema fields.
-- Empty and muted tracks show zero. Overlapping tracks contribute separately
-  to their meters and together to the output meter. Pausing, stopping, seeking,
-  changing project or leaving Audio clears stale readings.
+- Create, rename, and remove one-level buses. Buses feed the Master; they
+  cannot contain other buses.
+- Route each track to the Master or one bus. Add sends from a track to other
+  buses, with a level and pre-fader or post-fader tap. Sends start at unity,
+  post-fader. Track mute silences the main route and every send.
+- Adjust track and bus gain from `0.0` to `2.0`, pan from `-1.0` to `1.0`,
+  mute, and temporary multi-solo. The Master has gain and mute. Defaults are
+  unity gain, centered pan, and mute off.
+- Mono track sources use equal-power pan. Stereo sources retain their width
+  with balance. Multichannel Preview pan affects the first front pair and
+  leaves remaining channels unchanged.
+- Solo changes Preview audition only. Mutes still apply. Export ignores solo
+  and uses the full saved mix.
+- Preview and export use the shared sample mixer for clip gains and envelopes,
+  crossfades, track routes, sends, bus processing, and Master processing.
+- Bus removal returns routed tracks to the Master and removes sends to that
+  bus as one undoable edit. Fader and pan drags on tracks, buses, sends, and
+  Master form one history edit per gesture.
+- CSP v41 stores buses, Master settings, track pan and routes, and sends.
+  Projects v1-v40 load with no buses or sends, centered pan, all tracks routed
+  to Master, and a neutral Master.
+
+## Audio workspace acceptance
+
+- Automated regressions cover mixer model/commands, Undo/Redo, routing and
+  sends, solo and mute rules, sample processing, meters, CSP v41 migration,
+  Preview/export mix parity, UI controls, and Hub backup/restore.
+- The reproducible manual mixer workflow is documented in the
+  [Video Editor regression guide](validation/REGRESSION_TESTING.md#audio-workspace).
+  Device playback and native visual acceptance remain pending for Windows,
+  macOS, and Linux environments.
 - Keep Edit as startup. Restore the previous dock arrangement after leaving
-  Audio; preserve the project dirty state during workspace navigation.
+  Audio and preserve project dirty state during workspace navigation.
 
-## Candidate expansion, no committed dates
+## Remaining candidates
 
-1. **Mixing controls:** solo, pan, track routing, buses, submixes and sends.
-   Design the routing contract and persisted format before implementation.
-2. **Processing:** track and clip EQ, dynamics, effect chains, dialogue
-   cleanup, noise reduction, repair and ducking. Keep preview and export equal.
-3. **Measurement and automation:** loudness, true-peak analysis,
-   normalization, track automation and richer clip automation.
-4. **Production workflows:** recording, voiceover/ADR and a locally managed
-   sound library. Define device, permission, latency and asset ownership rules.
-5. **Delivery and formats:** audio-only export and, after a separate format and
+1. **Processing:** track and clip EQ, dynamics, effect chains, dialogue
+   cleanup, noise reduction, repair, and ducking. Keep Preview and export equal.
+2. **Measurement and automation:** loudness, true-peak analysis, normalization,
+   track automation, and richer clip automation.
+3. **Production workflows:** recording, voiceover/ADR, and a locally managed
+   sound library. Define device, permission, latency, and asset ownership rules.
+4. **Delivery and formats:** audio-only export and, after a separate format and
    device review, surround workflows.
 
-Each expansion requires a small validated workflow, format-compatibility
-assessment if persistence changes, playback/export parity tests and relevant
-device acceptance. Existing Video Editor stability remains a release gate.
+Future work needs a scoped workflow, compatibility assessment for persisted
+changes, playback/export parity coverage, and relevant device acceptance.
+Existing Video Editor stability remains a release gate.
