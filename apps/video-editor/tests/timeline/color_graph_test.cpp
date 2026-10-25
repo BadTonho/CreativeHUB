@@ -296,6 +296,111 @@ int main() {
                     color::linearEffectStack(curves_graph)->empty(),
                 "Removing a Curves node must reconnect the serial graph.");
 
+        auto window_graph = color::fromEffectStack(std::vector{
+            creative_suite::effects::makeDefaultInstance("video.brightness")});
+        const auto window_node = color::effectNodesInOrder(window_graph).front();
+        const auto first_window = color::addPowerWindow(window_graph, window_node,
+            creative_suite::composition::ShapeMaskKind::Rectangle);
+        const auto second_window = color::addPowerWindow(window_graph, window_node,
+            creative_suite::composition::ShapeMaskKind::Ellipse);
+        require(first_window && second_window && color::validate(window_graph) &&
+                    !color::linearEffectStack(window_graph),
+                "An effect node must store multiple Power Windows and require graph evaluation.");
+        auto* effect_node = color::findNode(window_graph, window_node);
+        auto first_geometry = effect_node->power_windows[0].parameters;
+        first_geometry.width = 1.0;
+        first_geometry.height = 1.0;
+        auto second_geometry = first_geometry;
+        second_geometry.width = .4;
+        second_geometry.height = .4;
+        require(color::setPowerWindowGeometry(window_graph, window_node, *first_window, 0,
+                    first_geometry) &&
+                color::setPowerWindowGeometry(window_graph, window_node, *second_window, 0,
+                    second_geometry) &&
+                color::setPowerWindowSettings(window_graph, window_node, *second_window,
+                    .02, false, color::WindowCombineMode::Subtract),
+                "Power Window geometry, softness and ordered combine settings must be editable.");
+        require(color::setEffectParameter(window_graph, window_node, "amount", 100.0),
+                "The Power Window correction fixture could not be configured.");
+        auto window_source = media::VideoFrame{5, 5, 20,
+            std::vector<std::uint8_t>(5 * 5 * 4)};
+        for (std::size_t pixel = 0; pixel < 25; ++pixel) {
+            window_source.rgba_pixels[pixel * 4] = 100;
+            window_source.rgba_pixels[pixel * 4 + 1] = 80;
+            window_source.rgba_pixels[pixel * 4 + 2] = 60;
+            window_source.rgba_pixels[pixel * 4 + 3] = 173;
+        }
+        const auto subtracted = color::evaluateAtFrame(window_graph, window_source, 0);
+        require(subtracted && subtracted->rgba_pixels[2 * 20] > 100 &&
+                    subtracted->rgba_pixels[2 * 20 + 3] == 173 &&
+                    subtracted->rgba_pixels[(2 * 5 + 2) * 4] == 100,
+                "Subtracted Power Windows must preserve correction outside the cutout and retain source alpha.");
+        require(color::setPowerWindowSettings(window_graph, window_node, *second_window,
+                    .02, true, color::WindowCombineMode::Subtract),
+                "Power Window inversion must be editable.");
+        const auto inverted_subtraction = color::evaluateAtFrame(window_graph,
+            window_source, 0);
+        require(inverted_subtraction &&
+                    inverted_subtraction->rgba_pixels[(2 * 5 + 2) * 4] > 100,
+                "An inverted subtraction must use the inverted window coverage.");
+        require(color::setPowerWindowSettings(window_graph, window_node, *second_window,
+                    .02, false, color::WindowCombineMode::Intersect),
+                "Intersect must be a valid ordered combine operation.");
+        const auto intersected = color::evaluateAtFrame(window_graph, window_source, 0);
+        require(intersected && intersected->rgba_pixels[(2 * 5 + 2) * 4] > 100 &&
+                    intersected->rgba_pixels[0] == 100 &&
+                    intersected->rgba_pixels[(2 * 5 + 2) * 4 + 3] == 173,
+                "Intersect must constrain correction to the overlap and preserve alpha.");
+        require(color::reorderPowerWindow(window_graph, window_node, 1, 0) &&
+                    color::findNode(window_graph, window_node)->power_windows.front().combine_mode ==
+                        color::WindowCombineMode::Add && color::validate(window_graph),
+                "Reordering windows must make the first operation Add and preserve a valid graph.");
+        auto tracked_geometry = first_geometry;
+        auto tracked_keys = creative_suite::composition::ShapeMaskKeyframes{};
+        tracked_keys[0] = {{0, .25}, {10, .75}};
+        require(color::setPowerWindowTrack(window_graph, window_node, *first_window,
+                    tracked_geometry, tracked_keys),
+                "Power Window geometry keyframes must be stored in the node graph.");
+        const auto frame_zero = color::evaluateAtFrame(window_graph, window_source, 0);
+        const auto frame_ten = color::evaluateAtFrame(window_graph, window_source, 10);
+        require(frame_zero && frame_ten && frame_zero->rgba_pixels.size() ==
+                    frame_ten->rgba_pixels.size(),
+                "Animated window geometry must evaluate on the clip-local frame.");
+        require(color::clearPowerWindowTrack(window_graph, window_node, *first_window) &&
+                    color::removePowerWindow(window_graph, window_node, *first_window) &&
+                    color::validate(window_graph),
+                "A tracked window must support clearing its animation and removal.");
+
+        auto qualified_graph = color::makePassthroughGraph();
+        require(color::insertCurvesAfter(qualified_graph, 1),
+                "The qualifier Power Window fixture could not add Curves.");
+        const auto qualified_node = std::find_if(qualified_graph.nodes.begin(),
+            qualified_graph.nodes.end(), [](const auto& item) {
+                return item.type == color::NodeType::Curves;
+            })->id;
+        const auto qualified_window = color::addPowerWindow(qualified_graph,
+            qualified_node, creative_suite::composition::ShapeMaskKind::Ellipse);
+        auto qualified_curves = color::findNode(qualified_graph, qualified_node)->curves->parameters;
+        qualified_curves.rgb.points = {{0, 0}, {128, 210}, {255, 255}};
+        auto red_qualifier = qualified_curves.qualifier;
+        red_qualifier.enabled = true;
+        red_qualifier.hue_min = 345;
+        red_qualifier.hue_max = 15;
+        require(qualified_window &&
+                    color::setCurvePoints(qualified_graph, qualified_node,
+                        color::CurveKind::Master, qualified_curves.rgb.points) &&
+                    color::setCurvesQualifier(qualified_graph, qualified_node,
+                        red_qualifier),
+                "Power Windows must coexist with Curves qualifier controls.");
+        const auto qualified_frame = color::evaluateAtFrame(qualified_graph,
+            media::VideoFrame{2, 2, 8, {210, 40, 30, 111, 30, 40, 210, 92,
+                80, 20, 12, 201, 40, 40, 40, 54}}, 0);
+        require(qualified_frame && qualified_frame->rgba_pixels[3] == 111 &&
+                    qualified_frame->rgba_pixels[7] == 92 &&
+                    qualified_frame->rgba_pixels[11] == 201 &&
+                    qualified_frame->rgba_pixels[15] == 54,
+                "Power Window and qualifier evaluation must preserve source alpha.");
+
         const media::VideoFrame no_frame{};
         require(!color::evaluate(graph, no_frame),
                 "The evaluator must reject a missing source frame.");

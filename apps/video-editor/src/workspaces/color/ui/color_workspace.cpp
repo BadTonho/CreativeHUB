@@ -7,7 +7,11 @@
 #include <QCoreApplication>
 #include <QCheckBox>
 #include <QComboBox>
+#include <QContextMenuEvent>
+#include <QAbstractItemModel>
+#include <QAbstractItemView>
 #include <QDoubleSpinBox>
+#include <QEvent>
 #include <QFrame>
 #include <QFont>
 #include <QFormLayout>
@@ -19,11 +23,13 @@
 #include <QMetaObject>
 #include <QMenu>
 #include <QMouseEvent>
+#include <QKeyEvent>
 #include <QPainter>
 #include <QPainterPath>
 #include <QPixmap>
 #include <QPointer>
 #include <QPushButton>
+#include <QProgressDialog>
 #include <QInputDialog>
 #include <QLineF>
 #include <QLineEdit>
@@ -34,6 +40,7 @@
 #include <QSlider>
 #include <QThreadPool>
 #include <QTimer>
+#include <QTransform>
 #include <QVBoxLayout>
 #include <QUuid>
 
@@ -767,6 +774,320 @@ private:
     std::function<void(creative_suite::effects::CurvesPointList)> changed_;
 };
 
+class PowerWindowOverlay final : public QWidget {
+public:
+    using Changed = std::function<void(color::Graph, color::NodeId)>;
+    explicit PowerWindowOverlay(QWidget* parent) : QWidget(parent) {
+        setObjectName("colorPowerWindowOverlay");
+        setAttribute(Qt::WA_TranslucentBackground);
+        setMouseTracking(true);
+        if (parent) parent->installEventFilter(this);
+        setGeometry(parent ? parent->rect() : QRect{});
+        hide();
+    }
+    void setHandlers(std::function<void()> started, std::function<void()> finished,
+        Changed changed, std::function<void(std::optional<color::PowerWindowId>)> selected,
+        std::function<void(color::PowerWindowId, int)> track) {
+        started_ = std::move(started); finished_ = std::move(finished);
+        changed_ = std::move(changed); selected_ = std::move(selected);
+        track_ = std::move(track);
+    }
+    void setState(rendering::PreviewFramePayload payload, color::Graph graph,
+        std::optional<color::NodeId> node, qint64 frame, bool enabled) {
+        payload_ = std::move(payload); graph_ = std::move(graph);
+        node_id_ = node; frame_ = std::max<qint64>(0, frame);
+        const auto* selected = node_id_ ? color::findNode(graph_, *node_id_) : nullptr;
+        enabled_ = enabled && payload_.valid() && selected &&
+            (selected->type == color::NodeType::Effect || selected->type == color::NodeType::Curves);
+        setAttribute(Qt::WA_TransparentForMouseEvents, !enabled_);
+        if (enabled_) { show(); raise(); } else hide();
+        update();
+    }
+    void setSelected(std::optional<color::PowerWindowId> id) {
+        selected_window_ = id; update();
+    }
+protected:
+    bool eventFilter(QObject* watched, QEvent* event) override {
+        if (watched == parentWidget() && event->type() == QEvent::Resize) {
+            setGeometry(parentWidget()->rect()); update();
+        }
+        return QWidget::eventFilter(watched, event);
+    }
+    void paintEvent(QPaintEvent*) override {
+        if (!enabled_) return;
+        QPainter p(this); p.setRenderHint(QPainter::Antialiasing);
+        const auto* node = node_id_ ? color::findNode(graph_, *node_id_) : nullptr;
+        if (!node) return;
+        for (const auto& window : node->power_windows) {
+            const auto geometry = creative_suite::composition::evaluateShapeMask(
+                window.parameters, window.keyframes, frame_);
+            const bool selected = selected_window_ == window.id;
+            p.setPen(QPen(selected ? QColor(255, 174, 72, 245) : QColor(82, 196, 230, 210),
+                selected ? 2.0 : 1.5, Qt::DashLine));
+            p.setBrush(QColor(255, 174, 72, selected ? 20 : 8));
+            p.drawPath(windowPath(window.kind, geometry));
+            if (selected) {
+                p.setPen(QPen(QColor(28, 32, 40), 1)); p.setBrush(QColor(255, 192, 92));
+                for (const auto& handle : handles(geometry)) p.drawEllipse(handle, 4.5, 4.5);
+                const auto rotation = rotationHandle(geometry);
+                p.drawEllipse(rotation, 4.5, 4.5);
+                const auto top = mapLocal(geometry, {0, -geometry.height * imageRect().height() / 2.0});
+                p.setPen(QPen(QColor(255, 192, 92), 1)); p.drawLine(top, rotation);
+            }
+        }
+        if (drawing_) {
+            p.setPen(QPen(QColor(255, 215, 130), 2, Qt::DashLine));
+            p.setBrush(QColor(255, 192, 92, 20));
+            p.drawPath(windowPath(draw_kind_, geometryFromDrag(draw_start_, draw_current_)));
+        }
+    }
+    void contextMenuEvent(QContextMenuEvent* event) override {
+        if (!enabled_ || !node_id_) return;
+        auto* node = color::findNode(graph_, *node_id_); if (!node) return;
+        const auto hit = hitWindow(event->pos());
+        if (hit) {
+            selected_window_ = hit; if (selected_) selected_(hit); update();
+            auto* menu = new QMenu(this);
+            connect(menu, &QMenu::aboutToHide, menu, &QObject::deleteLater);
+            auto* forward = menu->addAction(QCoreApplication::translate(
+                "ColorWorkspace", "Track Forward"));
+            auto* backward = menu->addAction(QCoreApplication::translate(
+                "ColorWorkspace", "Track Backward"));
+            auto* clear = menu->addAction(QCoreApplication::translate(
+                "ColorWorkspace", "Clear Track"));
+            menu->addSeparator(); auto* remove = menu->addAction(QCoreApplication::translate(
+                "ColorWorkspace", "Remove Window"));
+            const auto* window = findWindow(*node, *hit);
+            clear->setEnabled(window && std::any_of(window->keyframes.begin(),
+                window->keyframes.end(), [](const auto& keys) { return !keys.empty(); }));
+            connect(forward, &QAction::triggered, this, [this, id = *hit] {
+                if (track_) track_(id, 1);
+            });
+            connect(backward, &QAction::triggered, this, [this, id = *hit] {
+                if (track_) track_(id, -1);
+            });
+            connect(clear, &QAction::triggered, this, [this, id = *hit] {
+                mutateWindow(id, true);
+            });
+            connect(remove, &QAction::triggered, this, [this, id = *hit] {
+                mutateWindow(id, false);
+            });
+            menu->popup(event->globalPos());
+            event->accept(); return;
+        }
+        auto* menu = new QMenu(this);
+        connect(menu, &QMenu::aboutToHide, menu, &QObject::deleteLater);
+        auto* rectangle = menu->addAction(QCoreApplication::translate(
+            "ColorWorkspace", "Add Rectangle Power Window"));
+        auto* ellipse = menu->addAction(QCoreApplication::translate(
+            "ColorWorkspace", "Add Ellipse Power Window"));
+        const auto draw_position = toImage(event->pos());
+        const auto armDrawing = [this, menu, draw_position](
+                                   creative_suite::composition::ShapeMaskKind kind) {
+            draw_kind_ = kind;
+            draw_start_ = draw_current_ = draw_position;
+            draw_armed_ = true;
+            setCursor(Qt::CrossCursor);
+            setFocus();
+            update();
+            menu->close();
+        };
+        connect(rectangle, &QAction::triggered, this, [armDrawing] {
+            armDrawing(creative_suite::composition::ShapeMaskKind::Rectangle);
+        });
+        connect(ellipse, &QAction::triggered, this, [armDrawing] {
+            armDrawing(creative_suite::composition::ShapeMaskKind::Ellipse);
+        });
+        menu->popup(event->globalPos());
+        event->accept();
+    }
+    void mousePressEvent(QMouseEvent* event) override {
+        if (!enabled_ || !node_id_ || event->button() != Qt::LeftButton ||
+            !imageRect().contains(event->position())) return;
+        const auto point = toImage(event->position());
+        if (draw_armed_) {
+            draw_armed_ = false; drawing_ = true;
+            draw_start_ = draw_current_ = point; update(); event->accept(); return;
+        }
+        const auto hit = hitWindow(event->position());
+        if (!hit) {
+            selected_window_.reset(); if (selected_) selected_(std::nullopt); update(); return;
+        }
+        selected_window_ = hit; if (selected_) selected_(hit);
+        const auto* window = currentWindow(*hit); if (!window) return;
+        drag_geometry_ = creative_suite::composition::evaluateShapeMask(
+            window->parameters, window->keyframes, frame_);
+        drag_start_ = point; active_handle_ = handleAt(drag_geometry_, event->position());
+        drag_changed_ = false; event->accept();
+    }
+    void mouseMoveEvent(QMouseEvent* event) override {
+        if (drawing_) { draw_current_ = toImage(event->position()); update(); event->accept(); return; }
+        if (active_handle_ == Handle::None || !selected_window_ || !node_id_) return;
+        auto geometry = drag_geometry_;
+        const auto point = toImage(event->position());
+        const double dx = point.x() - drag_start_.x(), dy = point.y() - drag_start_.y();
+        if (active_handle_ == Handle::Move) {
+            geometry.center_x = std::clamp(drag_geometry_.center_x + dx, -2.0, 3.0);
+            geometry.center_y = std::clamp(drag_geometry_.center_y + dy, -2.0, 3.0);
+        } else if (active_handle_ == Handle::Rotate) {
+            const auto center = mapLocal(drag_geometry_, {});
+            const auto before = std::atan2(drag_start_.y() - center.y(), drag_start_.x() - center.x());
+            const auto after = std::atan2(point.y() - center.y(), point.x() - center.x());
+            geometry.rotation = std::clamp(drag_geometry_.rotation +
+                (after - before) * 180.0 / std::numbers::pi, -3600.0, 3600.0);
+        } else {
+            const int sx = (resize_handle_ == 0 || resize_handle_ == 3) ? -1 : 1;
+            const int sy = resize_handle_ < 2 ? -1 : 1;
+            geometry.width = std::clamp(drag_geometry_.width + sx * 2.0 * dx, 0.01, 4.0);
+            geometry.height = std::clamp(drag_geometry_.height + sy * 2.0 * dy, 0.01, 4.0);
+        }
+        if (geometry == drag_geometry_) return;
+        if (!drag_changed_) { drag_changed_ = true; if (started_) started_(); }
+        auto next = graph_;
+        if (color::setPowerWindowGeometry(next, *node_id_, *selected_window_, frame_, geometry)) {
+            graph_ = next; if (changed_) changed_(std::move(next), *node_id_); update();
+        }
+        event->accept();
+    }
+    void mouseReleaseEvent(QMouseEvent* event) override {
+        if (event->button() != Qt::LeftButton) return;
+        if (drawing_) {
+            draw_current_ = toImage(event->position()); drawing_ = false;
+            createWindow(draw_start_, draw_current_); setCursor(Qt::ArrowCursor); update();
+            event->accept(); return;
+        }
+        if (active_handle_ != Handle::None) {
+            active_handle_ = Handle::None;
+            if (drag_changed_ && finished_) finished_();
+            drag_changed_ = false; event->accept();
+        }
+    }
+    void keyPressEvent(QKeyEvent* event) override {
+        if (event->key() == Qt::Key_Escape && draw_armed_) {
+            draw_armed_ = false; setCursor(Qt::ArrowCursor); update(); event->accept(); return;
+        }
+        QWidget::keyPressEvent(event);
+    }
+private:
+    enum class Handle { None, Move, Resize, Rotate };
+    [[nodiscard]] QRectF imageRect() const {
+        if (payload_.width() <= 0 || payload_.height() <= 0) return {};
+        QSize fitted(payload_.width(), payload_.height()); fitted.scale(size(), Qt::KeepAspectRatio);
+        return {(width() - fitted.width()) / 2.0, (height() - fitted.height()) / 2.0,
+            double(fitted.width()), double(fitted.height())};
+    }
+    [[nodiscard]] QPointF toImage(QPointF point) const {
+        const auto r = imageRect(); if (r.width() <= 0 || r.height() <= 0) return {};
+        return {(point.x() - r.left()) / r.width(), (point.y() - r.top()) / r.height()};
+    }
+    [[nodiscard]] QPointF mapLocal(
+        const creative_suite::composition::ShapeMaskParameters& g, QPointF local) const {
+        const auto r = imageRect(); const QPointF center(r.left() + g.center_x * r.width(),
+            r.top() + g.center_y * r.height());
+        QTransform transform; transform.translate(center.x(), center.y()); transform.rotate(g.rotation);
+        return transform.map(local);
+    }
+    [[nodiscard]] QPainterPath windowPath(creative_suite::composition::ShapeMaskKind kind,
+        const creative_suite::composition::ShapeMaskParameters& g) const {
+        const auto r = imageRect(); QPainterPath path;
+        const QRectF shape(-g.width * r.width() / 2.0, -g.height * r.height() / 2.0,
+            g.width * r.width(), g.height * r.height());
+        if (kind == creative_suite::composition::ShapeMaskKind::Ellipse) path.addEllipse(shape);
+        else path.addRect(shape);
+        const auto center = mapLocal(g, {}); QTransform transform;
+        transform.translate(center.x(), center.y()); transform.rotate(g.rotation);
+        return transform.map(path);
+    }
+    [[nodiscard]] std::array<QPointF, 4> handles(
+        const creative_suite::composition::ShapeMaskParameters& g) const {
+        const auto r = imageRect(); const double x = g.width * r.width() / 2.0;
+        const double y = g.height * r.height() / 2.0;
+        return {mapLocal(g, {-x, -y}), mapLocal(g, {x, -y}),
+            mapLocal(g, {x, y}), mapLocal(g, {-x, y})};
+    }
+    [[nodiscard]] QPointF rotationHandle(
+        const creative_suite::composition::ShapeMaskParameters& g) const {
+        const auto r = imageRect(); return mapLocal(g, {0, -g.height * r.height() / 2.0 - 22.0});
+    }
+    [[nodiscard]] static const color::PowerWindow* findWindow(
+        const color::Node& node, color::PowerWindowId id) {
+        const auto it = std::find_if(node.power_windows.begin(), node.power_windows.end(),
+            [id](const auto& window) { return window.id == id; });
+        return it == node.power_windows.end() ? nullptr : &*it;
+    }
+    [[nodiscard]] const color::PowerWindow* currentWindow(color::PowerWindowId id) const {
+        const auto* node = node_id_ ? color::findNode(graph_, *node_id_) : nullptr;
+        return node ? findWindow(*node, id) : nullptr;
+    }
+    [[nodiscard]] std::optional<color::PowerWindowId> hitWindow(QPointF point) const {
+        const auto* node = node_id_ ? color::findNode(graph_, *node_id_) : nullptr;
+        if (!node) return {};
+        for (auto it = node->power_windows.rbegin(); it != node->power_windows.rend(); ++it) {
+            const auto g = creative_suite::composition::evaluateShapeMask(
+                it->parameters, it->keyframes, frame_);
+            const auto path = windowPath(it->kind, g);
+            if (path.contains(point) || path.boundingRect().adjusted(-8, -8, 8, 8).contains(point))
+                return it->id;
+        }
+        return {};
+    }
+    [[nodiscard]] Handle handleAt(
+        const creative_suite::composition::ShapeMaskParameters& g, QPointF point) {
+        if (QLineF(point, rotationHandle(g)).length() <= 10) return Handle::Rotate;
+        const auto corners = handles(g);
+        for (int i = 0; i < 4; ++i) if (QLineF(point, corners[i]).length() <= 9) {
+            resize_handle_ = i; return Handle::Resize;
+        }
+        return Handle::Move;
+    }
+    [[nodiscard]] creative_suite::composition::ShapeMaskParameters geometryFromDrag(
+        QPointF start, QPointF end) const {
+        creative_suite::composition::ShapeMaskParameters g;
+        g.center_x = std::clamp((start.x() + end.x()) / 2.0, -2.0, 3.0);
+        g.center_y = std::clamp((start.y() + end.y()) / 2.0, -2.0, 3.0);
+        g.width = std::clamp(std::abs(end.x() - start.x()), 0.01, 4.0);
+        g.height = std::clamp(std::abs(end.y() - start.y()), 0.01, 4.0);
+        return g;
+    }
+    void createWindow(QPointF start, QPointF end) {
+        if (!node_id_) return; auto graph = graph_;
+        const auto id = color::addPowerWindow(graph, *node_id_, draw_kind_); if (!id) return;
+        if (!color::setPowerWindowGeometry(graph, *node_id_, *id, frame_, geometryFromDrag(start, end))) return;
+        if (started_) started_();
+        selected_window_ = *id;
+        if (selected_) selected_(selected_window_);
+        graph_ = graph;
+        if (changed_) changed_(std::move(graph), *node_id_);
+        if (finished_) finished_();
+    }
+    void mutateWindow(color::PowerWindowId id, bool clear) {
+        if (!node_id_) return; auto graph = graph_;
+        const bool changed = clear ? color::clearPowerWindowTrack(graph, *node_id_, id)
+            : color::removePowerWindow(graph, *node_id_, id);
+        if (!changed) return; if (started_) started_(); graph_ = graph;
+        if (!clear && selected_window_ == id) {
+            selected_window_.reset(); if (selected_) selected_(std::nullopt);
+        }
+        if (changed_) changed_(std::move(graph), *node_id_); if (finished_) finished_(); update();
+    }
+    rendering::PreviewFramePayload payload_;
+    color::Graph graph_;
+    std::optional<color::NodeId> node_id_;
+    std::optional<color::PowerWindowId> selected_window_;
+    qint64 frame_ = 0;
+    bool enabled_ = false, draw_armed_ = false, drawing_ = false, drag_changed_ = false;
+    QPointF draw_start_, draw_current_, drag_start_;
+    creative_suite::composition::ShapeMaskParameters drag_geometry_;
+    int resize_handle_ = 0;
+    Handle active_handle_ = Handle::None;
+    creative_suite::composition::ShapeMaskKind draw_kind_ =
+        creative_suite::composition::ShapeMaskKind::Rectangle;
+    std::function<void()> started_, finished_;
+    Changed changed_;
+    std::function<void(std::optional<color::PowerWindowId>)> selected_;
+    std::function<void(color::PowerWindowId, int)> track_;
+};
+
 }  // namespace
 
 ColorWorkspace::ColorWorkspace(QWidget* parent) : QWidget(parent) {
@@ -1201,6 +1522,34 @@ void ColorWorkspace::setPreviewWidget(QWidget* preview) {
     preview_widget_ = qobject_cast<PreviewWidget*>(preview_);
     if (preview_) preview_container_->layout()->addWidget(preview_);
     if (preview_widget_ != nullptr) {
+        auto* overlay = new PowerWindowOverlay(preview_widget_);
+        power_window_overlay_ = overlay;
+        overlay->setHandlers(
+            [this] { if (grade_edit_started_handler_) grade_edit_started_handler_(); },
+            [this] { if (grade_edit_finished_handler_) grade_edit_finished_handler_(); },
+            [this](color::Graph graph, color::NodeId node_id) {
+                const auto* before = color::findNode(graph_, node_id);
+                const auto* after = color::findNode(graph, node_id);
+                const bool structure_changed = !before || !after ||
+                    before->power_windows.size() != after->power_windows.size() ||
+                    !std::equal(before->power_windows.begin(), before->power_windows.end(),
+                        after->power_windows.begin(), after->power_windows.end(),
+                        [](const auto& left, const auto& right) {
+                            return left.id == right.id && left.kind == right.kind;
+                        });
+                if (before && after && after->power_windows.size() >
+                    before->power_windows.size())
+                    selected_power_window_ = after->power_windows.back().id;
+                submit(std::move(graph), node_id, structure_changed);
+            },
+            [this](std::optional<color::PowerWindowId> id) {
+                selected_power_window_ = id;
+                refreshControls();
+                refreshPowerWindowOverlay();
+            },
+            [this](color::PowerWindowId id, int direction) {
+                requestPowerWindowTrack(id, direction);
+            });
         connect(preview_widget_, &PreviewWidget::wipePositionDragged, this,
             [this](float fraction) {
                 const QSignalBlocker blocker(comparison_wipe_slider_);
@@ -1226,6 +1575,7 @@ void ColorWorkspace::setPreviewWidget(QWidget* preview) {
             preview_widget_->setComparisonReferenceFrame({});
         }
         applyPreviewComparison();
+        refreshPowerWindowOverlay();
     }
 }
 
@@ -1282,11 +1632,13 @@ QWidget* ColorWorkspace::takePreviewWidget() {
     if (result) preview_container_->layout()->removeWidget(result);
     preview_ = nullptr;
     preview_widget_ = nullptr;
+    if (power_window_overlay_ != nullptr) power_window_overlay_->hide();
     return result;
 }
 
 void ColorWorkspace::setActive(bool active) {
     active_ = active;
+    if (!active) cancelPowerWindowTracking();
     applyPreviewComparison();
     ++waveform_generation_;
     if (active) waveform_timer_->start();
@@ -1301,6 +1653,7 @@ void ColorWorkspace::setActive(bool active) {
         latest_curves_input_ = {};
         refreshMattePreview();
     }
+    refreshPowerWindowOverlay();
 }
 
 void ColorWorkspace::setClips(std::vector<ClipItem> clips, timeline::ClipId selected,
@@ -1309,6 +1662,7 @@ void ColorWorkspace::setClips(std::vector<ClipItem> clips, timeline::ClipId sele
     if (grade_comparison_reference_ && selected != grade_comparison_reference_->clip_id)
         clearGradeComparisonReference(true);
     if (selected_clip_ != selected || graph_ != graph) {
+        cancelPowerWindowTracking();
         latest_scope_source_ = {};
         latest_curves_input_ = {};
         active_color_input_request_id_ = 0;
@@ -1318,6 +1672,18 @@ void ColorWorkspace::setClips(std::vector<ClipItem> clips, timeline::ClipId sele
     const auto old_version_id = selected_clip_ == selected && grade_versions_->currentItem()
         ? grade_versions_->currentItem()->data(Qt::UserRole).toString() : QString{};
     selected_clip_ = selected;
+    selected_clip_start_frame_ = 0;
+    selected_clip_duration_frames_ = 0;
+    const auto selected_clip_item = std::find_if(clips.begin(), clips.end(),
+        [selected](const ClipItem& item) { return item.id == selected; });
+    if (selected_clip_item != clips.end()) {
+        selected_clip_start_frame_ = selected_clip_item->timeline_start_frame;
+        selected_clip_duration_frames_ = selected_clip_item->duration_frames;
+    }
+    if (previous_selected_clip != selected) {
+        cancelPowerWindowTracking();
+        selected_power_window_.reset();
+    }
     graph_ = color::validate(graph) ? std::move(graph) : color::makePassthroughGraph();
     selected_grade_versions_.clear();
     {
@@ -1382,6 +1748,7 @@ void ColorWorkspace::setClips(std::vector<ClipItem> clips, timeline::ClipId sele
     }
     refreshNodes(old_selected);
     applyPreviewComparison();
+    refreshPowerWindowOverlay();
 }
 
 void ColorWorkspace::setClipSelectedHandler(std::function<void(timeline::ClipId)> handler) {
@@ -1429,6 +1796,175 @@ void ColorWorkspace::setColorInputFrameRequestHandler(
     std::function<void(quint64, timeline::ClipId, color::NodeId, qint64,
         quint64, quint64, quint64, color::Graph)> handler) {
     color_input_frame_request_handler_ = std::move(handler);
+}
+
+void ColorWorkspace::setPowerWindowTrackRequestHandler(std::function<void(quint64,
+    timeline::ClipId, color::NodeId, color::PowerWindowId, qint64, int,
+    quint64, quint64, quint64, color::Graph,
+    std::shared_ptr<std::atomic_bool>)> handler) {
+    power_window_track_request_handler_ = std::move(handler);
+}
+
+void ColorWorkspace::setProjectGeneration(quint64 generation) noexcept {
+    if (project_generation_ == generation) return;
+    cancelPowerWindowTracking();
+    project_generation_ = generation;
+}
+
+void ColorWorkspace::requestPowerWindowTrack(color::PowerWindowId window_id,
+    int direction) {
+    if (!active_ || selected_clip_ == 0 || !selected_node_ ||
+        !power_window_track_request_handler_ || !preview_widget_ ||
+        (direction != 1 && direction != -1)) return;
+    const auto* node = color::findNode(graph_, *selected_node_);
+    if (!node || (node->type != color::NodeType::Effect &&
+        node->type != color::NodeType::Curves) ||
+        std::none_of(node->power_windows.begin(), node->power_windows.end(),
+            [window_id](const auto& item) { return item.id == window_id; })) return;
+    const auto payload = preview_widget_->currentPayload();
+    if (!payload.valid() || payload.timeline_frame < selected_clip_start_frame_ ||
+        (selected_clip_duration_frames_ > 0 && payload.timeline_frame >=
+            selected_clip_start_frame_ + selected_clip_duration_frames_)) {
+        if (power_window_status_)
+            power_window_status_->setText(QCoreApplication::translate(
+                "ColorWorkspace", "Move the playhead into the selected clip to track."));
+        return;
+    }
+    cancelPowerWindowTracking();
+    if (next_power_window_request_id_ == 0) ++next_power_window_request_id_;
+    const auto request_id = next_power_window_request_id_++;
+    active_power_window_request_id_ = request_id;
+    power_window_cancel_flag_ = std::make_shared<std::atomic_bool>(false);
+    selected_power_window_ = window_id;
+    const auto total = selected_clip_duration_frames_ > 0
+        ? selected_clip_duration_frames_ : 1;
+    power_window_progress_ = new QProgressDialog(
+        QCoreApplication::translate("ColorWorkspace", "Tracking Power Window…"),
+        QCoreApplication::translate("ColorWorkspace", "Cancel"), 0,
+        static_cast<int>(std::min<qint64>(total, std::numeric_limits<int>::max())), this);
+    power_window_progress_->setObjectName("colorPowerWindowTrackingProgress");
+    power_window_progress_->setWindowTitle(
+        QCoreApplication::translate("ColorWorkspace", "Power Window Tracker"));
+    power_window_progress_->setWindowModality(Qt::NonModal);
+    power_window_progress_->setMinimumDuration(0);
+    power_window_progress_->setAutoClose(false);
+    power_window_progress_->setAutoReset(false);
+    connect(power_window_progress_, &QProgressDialog::canceled, this, [this] {
+        if (power_window_cancel_flag_)
+            power_window_cancel_flag_->store(true, std::memory_order_release);
+        if (power_window_progress_)
+            power_window_progress_->setLabelText(QCoreApplication::translate(
+                "ColorWorkspace", "Cancelling Power Window tracking…"));
+    });
+    power_window_progress_->show();
+    if (power_window_status_)
+        power_window_status_->setText(QCoreApplication::translate(
+            "ColorWorkspace", "Tracking in progress…"));
+    power_window_track_request_handler_(request_id, selected_clip_, *selected_node_,
+        window_id, payload.timeline_frame, direction, project_generation_,
+        payload.composition_revision, payload.playback_generation, graph_,
+        power_window_cancel_flag_);
+}
+
+void ColorWorkspace::cancelPowerWindowTracking() {
+    if (power_window_cancel_flag_)
+        power_window_cancel_flag_->store(true, std::memory_order_release);
+    active_power_window_request_id_ = 0;
+    power_window_cancel_flag_.reset();
+    if (power_window_progress_ != nullptr) {
+        power_window_progress_->close();
+        power_window_progress_->deleteLater();
+        power_window_progress_ = nullptr;
+    }
+}
+
+void ColorWorkspace::acceptPowerWindowTrackProgress(quint64 request_id,
+    qint64 completed_frames, qint64 total_frames) {
+    if (request_id == 0 || request_id != active_power_window_request_id_ ||
+        power_window_progress_ == nullptr) return;
+    const auto maximum = static_cast<int>(std::clamp<qint64>(
+        total_frames, 1, std::numeric_limits<int>::max()));
+    const auto value = static_cast<int>(std::clamp<qint64>(
+        completed_frames, 0, maximum));
+    power_window_progress_->setRange(0, maximum);
+    power_window_progress_->setValue(value);
+}
+
+void ColorWorkspace::acceptPowerWindowTrack(quint64 request_id,
+    quint64 project_generation, timeline::ClipId clip_id,
+    color::NodeId node_id, color::PowerWindowId window_id,
+    qint64 timeline_frame,
+    quint64 composition_revision, quint64 playback_generation,
+    color::Graph original_graph, color::Graph tracked_graph,
+    qint64 stop_frame, bool reached_end, double confidence,
+    bool canceled, const QString& error) {
+    if (request_id == 0 || request_id != active_power_window_request_id_) return;
+    if (power_window_progress_ != nullptr) {
+        power_window_progress_->close();
+        power_window_progress_->deleteLater();
+        power_window_progress_ = nullptr;
+    }
+    active_power_window_request_id_ = 0;
+    power_window_cancel_flag_.reset();
+    if (canceled || !active_ || project_generation != project_generation_) return;
+    const auto current_payload = preview_widget_ != nullptr
+        ? preview_widget_->currentPayload() : rendering::PreviewFramePayload{};
+    const bool current_request = clip_id == selected_clip_ && selected_node_ &&
+        node_id == *selected_node_ && selected_power_window_ == window_id &&
+        graph_ == original_graph && color::validate(tracked_graph) &&
+        current_payload.valid() &&
+        current_payload.timeline_frame == timeline_frame &&
+        current_payload.composition_revision == composition_revision &&
+        current_payload.playback_generation == playback_generation;
+    if (!current_request) {
+        if (power_window_status_)
+            power_window_status_->setText(QCoreApplication::translate(
+                "ColorWorkspace", "Tracking result discarded because the grade or Viewer frame changed."));
+        return;
+    }
+    const auto* tracked_node = color::findNode(tracked_graph, node_id);
+    if (!tracked_node || std::none_of(tracked_node->power_windows.begin(),
+        tracked_node->power_windows.end(), [window_id](const auto& item) {
+            return item.id == window_id;
+        })) return;
+    if (tracked_graph != graph_) {
+        if (grade_edit_started_handler_) grade_edit_started_handler_();
+        submit(std::move(tracked_graph), node_id, false);
+        if (grade_edit_finished_handler_) grade_edit_finished_handler_();
+    }
+    power_window_status_node_ = node_id;
+    power_window_stop_frame_ = stop_frame;
+    power_window_confidence_ = std::clamp(confidence, 0.0, 1.0);
+    if (power_window_status_) {
+        const auto frame_text = QString::number(stop_frame + 1);
+        if (reached_end) {
+            power_window_status_->setText(QCoreApplication::translate(
+                "ColorWorkspace", "Tracking reached the clip boundary (confidence %1%).")
+                .arg(qRound(power_window_confidence_ * 100.0)));
+        } else {
+            power_window_status_->setText(QCoreApplication::translate(
+                "ColorWorkspace", "Tracking stopped at clip frame %1 (confidence %2%).")
+                .arg(frame_text).arg(qRound(power_window_confidence_ * 100.0)));
+        }
+        if (!error.isEmpty() && !reached_end)
+            power_window_status_->setToolTip(error);
+        else
+            power_window_status_->setToolTip({});
+    }
+    refreshPowerWindowOverlay();
+}
+
+void ColorWorkspace::refreshPowerWindowOverlay() {
+    auto* overlay = dynamic_cast<PowerWindowOverlay*>(power_window_overlay_);
+    if (!overlay) return;
+    const auto payload = preview_widget_ ? preview_widget_->currentPayload()
+        : rendering::PreviewFramePayload{};
+    const auto local_frame = payload.timeline_frame - selected_clip_start_frame_;
+    overlay->setState(payload, graph_, selected_node_, local_frame,
+        active_ && selected_clip_ != 0 && local_frame >= 0 &&
+        (selected_clip_duration_frames_ <= 0 ||
+            local_frame < selected_clip_duration_frames_));
+    overlay->setSelected(selected_power_window_);
 }
 
 void ColorWorkspace::setGradeComparisonRequestHandler(
@@ -1941,6 +2477,7 @@ void ColorWorkspace::refreshNodes(std::optional<color::NodeId> selected) {
 void ColorWorkspace::refreshControls() {
     matte_preview_ = nullptr;
     matte_preview_mode_ = nullptr;
+    power_window_status_ = nullptr;
     while (auto* item = controls_layout_->takeAt(0)) {
         if (auto* widget = item->widget()) {
             widget->hide();
@@ -2281,11 +2818,140 @@ void ColorWorkspace::refreshControls() {
                 });
         }
     }
+    if (node && (node->type == color::NodeType::Effect ||
+        node->type == color::NodeType::Curves)) {
+        const auto node_id = node->id;
+        auto* windows = new QListWidget(controls_);
+        windows->setObjectName("colorPowerWindowList");
+        windows->setMaximumHeight(112);
+        windows->setDragDropMode(QAbstractItemView::InternalMove);
+        windows->setDefaultDropAction(Qt::MoveAction);
+        windows->setDragDropOverwriteMode(false);
+        windows->setToolTip(QCoreApplication::translate("ColorWorkspace",
+            "Drag to reorder windows; later operations combine in list order."));
+        int selected_row = -1;
+        for (const auto& window : node->power_windows) {
+            const auto label = window.kind == creative_suite::composition::ShapeMaskKind::Ellipse
+                ? QCoreApplication::translate("ColorWorkspace", "Ellipse")
+                : QCoreApplication::translate("ColorWorkspace", "Rectangle");
+            auto* item = new QListWidgetItem(label, windows);
+            item->setData(Qt::UserRole, QVariant::fromValue<qulonglong>(window.id));
+            if (selected_power_window_ == window.id) selected_row = windows->count() - 1;
+        }
+        if (selected_row < 0 && windows->count() > 0) selected_row = 0;
+        if (selected_row >= 0) {
+            windows->setCurrentRow(selected_row);
+            selected_power_window_ = windows->currentItem()->data(Qt::UserRole).toULongLong();
+        } else {
+            selected_power_window_.reset();
+        }
+        controls_layout_->addRow(QCoreApplication::translate("ColorWorkspace",
+            "Power Windows"), windows);
+        connect(windows, &QListWidget::currentRowChanged, this,
+            [this, windows](int row) {
+                selected_power_window_ = row >= 0 && windows->item(row)
+                    ? std::optional<color::PowerWindowId>{
+                        windows->item(row)->data(Qt::UserRole).toULongLong()}
+                    : std::optional<color::PowerWindowId>{};
+                refreshPowerWindowOverlay();
+                refreshControls();
+            });
+        connect(windows->model(), &QAbstractItemModel::rowsMoved, this,
+            [this, windows, node_id] {
+                auto graph = graph_;
+                auto* target = color::findNode(graph, node_id);
+                if (!target || target->power_windows.size() !=
+                    static_cast<std::size_t>(windows->count())) return;
+                bool changed = false;
+                for (int destination = 0; destination < windows->count(); ++destination) {
+                    const auto id = windows->item(destination)->data(Qt::UserRole).toULongLong();
+                    const auto found = std::find_if(target->power_windows.begin(),
+                        target->power_windows.end(), [id](const auto& window) {
+                            return window.id == id;
+                        });
+                    if (found == target->power_windows.end()) return;
+                    const auto source = static_cast<std::size_t>(
+                        std::distance(target->power_windows.begin(), found));
+                    if (source != static_cast<std::size_t>(destination))
+                        changed = color::reorderPowerWindow(graph, node_id, source,
+                            static_cast<std::size_t>(destination)) || changed;
+                    target = color::findNode(graph, node_id);
+                }
+                if (changed) {
+                    if (grade_edit_started_handler_) grade_edit_started_handler_();
+                    submit(std::move(graph), node_id, true);
+                    if (grade_edit_finished_handler_) grade_edit_finished_handler_();
+                }
+            });
+
+        const color::PowerWindow* window = nullptr;
+        if (selected_power_window_) {
+            const auto found = std::find_if(node->power_windows.begin(),
+                node->power_windows.end(), [this](const auto& item) {
+                    return item.id == *selected_power_window_;
+                });
+            if (found != node->power_windows.end()) window = &*found;
+        }
+        if (window) {
+            auto* combine = new QComboBox(controls_);
+            combine->setObjectName("colorPowerWindowCombineMode");
+            combine->addItem(QCoreApplication::translate("ColorWorkspace", "Add"),
+                static_cast<int>(color::WindowCombineMode::Add));
+            combine->addItem(QCoreApplication::translate("ColorWorkspace", "Subtract"),
+                static_cast<int>(color::WindowCombineMode::Subtract));
+            combine->addItem(QCoreApplication::translate("ColorWorkspace", "Intersect"),
+                static_cast<int>(color::WindowCombineMode::Intersect));
+            combine->setCurrentIndex(combine->findData(static_cast<int>(window->combine_mode)));
+            combine->setEnabled(node->power_windows.front().id != window->id);
+            controls_layout_->addRow(QCoreApplication::translate("ColorWorkspace",
+                "Combine"), combine);
+            auto* softness = new QDoubleSpinBox(controls_);
+            softness->setObjectName("colorPowerWindowSoftness");
+            softness->setRange(0.0, 1.0); softness->setSingleStep(0.01);
+            softness->setDecimals(3); softness->setValue(window->parameters.soft_edge);
+            controls_layout_->addRow(QCoreApplication::translate("ColorWorkspace",
+                "Softness"), softness);
+            auto* invert = new QCheckBox(
+                QCoreApplication::translate("ColorWorkspace", "Invert"), controls_);
+            invert->setObjectName("colorPowerWindowInvert");
+            invert->setChecked(window->parameters.invert);
+            controls_layout_->addRow(invert);
+            const auto commit_settings = [this, node_id, combine, softness, invert] {
+                auto graph = graph_;
+                if (!selected_power_window_) return;
+                if (grade_edit_started_handler_) grade_edit_started_handler_();
+                const bool changed = color::setPowerWindowSettings(graph, node_id,
+                    *selected_power_window_, softness->value(), invert->isChecked(),
+                    static_cast<color::WindowCombineMode>(combine->currentData().toInt()));
+                if (changed) submit(std::move(graph), node_id, false);
+                if (grade_edit_finished_handler_) grade_edit_finished_handler_();
+            };
+            connect(combine, qOverload<int>(&QComboBox::currentIndexChanged), this,
+                [commit_settings](int) { commit_settings(); });
+            connect(softness, &QDoubleSpinBox::editingFinished, this, commit_settings);
+            connect(invert, &QCheckBox::toggled, this,
+                [commit_settings](bool) { commit_settings(); });
+        }
+        power_window_status_ = new QLabel(controls_);
+        power_window_status_->setObjectName("colorPowerWindowTrackerStatus");
+        power_window_status_->setWordWrap(true);
+        power_window_status_->setTextInteractionFlags(Qt::TextSelectableByMouse);
+        if (power_window_status_node_ == node_id && power_window_stop_frame_ >= 0) {
+            power_window_status_->setText(QCoreApplication::translate("ColorWorkspace",
+                "Last track stopped at clip frame %1 (confidence %2%).")
+                .arg(power_window_stop_frame_ + 1)
+                .arg(qRound(power_window_confidence_ * 100.0)));
+        }
+        controls_layout_->addRow(QCoreApplication::translate("ColorWorkspace",
+            "Tracker"), power_window_status_);
+    }
+    refreshPowerWindowOverlay();
 }
 
 void ColorWorkspace::submit(color::Graph graph, std::optional<color::NodeId> selected,
     bool rebuild_controls) {
     if (graph == graph_) return;
+    cancelPowerWindowTracking();
     bool preserve_curves_input = false;
     if (selected && selected_node_ == selected && !latest_curves_input_.isNull()) {
         auto comparable_graph = graph;
@@ -2308,6 +2974,7 @@ void ColorWorkspace::submit(color::Graph graph, std::optional<color::NodeId> sel
     if (preserve_curves_input) refreshMattePreview();
     if (selected_clip_ && effects_changed_handler_)
         effects_changed_handler_(selected_clip_, graph_);
+    refreshPowerWindowOverlay();
 }
 
 void ColorWorkspace::scheduleWaveform() {
@@ -2315,6 +2982,7 @@ void ColorWorkspace::scheduleWaveform() {
     auto* viewer = qobject_cast<PreviewWidget*>(preview_);
     if (!viewer) return;
     const auto payload = viewer->currentPayload();
+    refreshPowerWindowOverlay();
     if (!payload.valid()) {
         waveform_->setPixmap({});
         waveform_->setText(QCoreApplication::translate("ColorWorkspace", "No frame"));

@@ -40,6 +40,28 @@ GPU. Request identity includes project generation, composition revision and
 Timeline frame, so stale readbacks are discarded. Scope sampling is downscaled
 to its plot dimensions on a worker.
 
+## Color Power Windows and tracking
+
+Rectangular and elliptical Power Windows are evaluated in the selected effect
+or Curves node's local input domain. The first coverage is Add; later coverages
+apply Add, Subtract, or Intersect in Inspector list order. Curves combines that
+coverage with its tonal qualifier. The resulting mask blends the node's
+corrected RGB with its input and leaves the input alpha unchanged. Power Window
+graphs use the existing CPU RGBA graph evaluator in Preview, adjustment
+composition, and offline export; ordinary supported serial graphs retain their
+existing CPU/OpenGL/Vulkan paths. This avoids adding an unimplemented GPU mask
+path and keeps Viewer and export results on the same evaluator.
+
+Tracking is performed on the playback worker from the selected node's incoming
+image, after upstream Fusion/Color work and before the selected node correction.
+The tracker analyzes a downscaled image with pyramidal Lucas–Kanade points and
+fits a robust 2D similarity transform for center, uniform size, and rotation.
+Only valid samples are retained after confidence loss. Cancellation, graph or
+project revision changes, clip/window replacement, and stale worker replies
+discard the in-flight result; a committed run updates that one window as one
+Timeline edit. Audio clips are ineligible. The model does not include
+perspective.
+
 [Gaussian Blur](../features/GAUSSIAN_BLUR.md) is a static, maskable Fusion-only
 catalog node and an editable cscomp v3 stage. It shares CPU/GPU processing with
 Motion, persists in CSP v31 and is covered by `creative-suite-blur-interchange`.

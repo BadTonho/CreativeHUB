@@ -731,6 +731,34 @@ void reframeGraphMasks(std::optional<fusion::nodes::NodeGraph>& graph, std::int6
         if (fusion::nodes::isMaskNode(node.type)) reframeMaskNode(node,delta,duration);
 }
 
+void reframeColorGraph(color::Graph& graph, std::int64_t delta, std::int64_t duration) {
+    if (delta < 0 || duration <= 0) return;
+    for (auto& node : graph.nodes) {
+        for (auto& window : node.power_windows) {
+            const auto source_base = window.parameters;
+            const auto source_keys = window.keyframes;
+            for (std::size_t property = 0; property < source_keys.size(); ++property) {
+                const auto base_value = creative_suite::composition::shapeMaskValue(
+                    source_base, property);
+                const auto value_at = [&](std::int64_t frame) {
+                    return creative_suite::animation::evaluateScalar(
+                        base_value, source_keys[property], frame);
+                };
+                window.keyframes[property] = reframeScalarCurve(
+                    source_keys[property], delta, duration, value_at);
+                creative_suite::composition::setShapeMaskValue(
+                    window.parameters, property, value_at(delta));
+            }
+        }
+    }
+}
+
+void reframeColorData(TimelineClip& clip, std::int64_t delta, std::int64_t duration) {
+    if (clip.color_graph) reframeColorGraph(*clip.color_graph, delta, duration);
+    for (auto& version : clip.color_grade_versions)
+        reframeColorGraph(version.graph, delta, duration);
+}
+
 bool shiftCompositionOffset(TimelineClip& clip, std::int64_t delta) {
     if ((delta > 0 && clip.composition_input_offset_frames > std::numeric_limits<std::int64_t>::max() - delta) ||
         (delta < 0 && clip.composition_input_offset_frames < std::numeric_limits<std::int64_t>::min() - delta)) return false;
@@ -1279,6 +1307,9 @@ std::optional<ClipEdgeEditPreview> previewClipEdgeEdit(
         if (!shiftCompositionOffset(preview.clip, preview.clip.timeline_start_frame - original.timeline_start_frame)) return std::nullopt;
         reframeFusionGraph(preview.clip.node_graph, preview.clip.timeline_start_frame - original.timeline_start_frame, preview.clip.timeline_duration_frames);
     } else reframeGraphMasks(preview.clip.node_graph,preview.clip.timeline_start_frame-original.timeline_start_frame,preview.clip.timeline_duration_frames);
+    reframeColorData(preview.clip,
+        preview.clip.timeline_start_frame - original.timeline_start_frame,
+        preview.clip.timeline_duration_frames);
     if (original.kind == ClipKind::Adjustment || original.kind == ClipKind::FusionComposition) {
         preview.clip.source_start_frame = 0;
         preview.clip.source_duration_frames = 0;
@@ -1356,6 +1387,9 @@ std::optional<ClipEdgeEditPreview> previewClipEdgeEdit(
             if (!shiftCompositionOffset(neighbor, neighbor.timeline_start_frame - original_neighbor.timeline_start_frame)) return std::nullopt;
             reframeFusionGraph(neighbor.node_graph, neighbor.timeline_start_frame - original_neighbor.timeline_start_frame, neighbor.timeline_duration_frames);
         } else reframeGraphMasks(neighbor.node_graph,neighbor.timeline_start_frame-original_neighbor.timeline_start_frame,neighbor.timeline_duration_frames);
+        reframeColorData(neighbor,
+            neighbor.timeline_start_frame - original_neighbor.timeline_start_frame,
+            neighbor.timeline_duration_frames);
         if (neighbor.kind == ClipKind::Adjustment || neighbor.kind == ClipKind::FusionComposition) {
             neighbor.source_start_frame = 0;
             neighbor.source_duration_frames = 0;
@@ -1963,6 +1997,8 @@ SplitClipResult TimelineModel::splitClip(
         splitNodeGraphKeyframes(
             *clip.node_graph, *right.node_graph, local_frame, right.timeline_duration_frames);
     }
+    reframeColorData(right, local_frame, right.timeline_duration_frames);
+    reframeColorData(clip, 0, local_frame);
     if (clip.kind == ClipKind::Video) {
         right.source_duration_frames = source_duration - source_offset;
         clip.source_duration_frames = source_offset;
@@ -2338,6 +2374,7 @@ TrimClipResult TimelineModel::trimClip(
         auto curves = reframeKeyframes(clip, clip.timeline_start_frame, new_duration_frames, transformed);
         if (clip.kind == ClipKind::FusionComposition)
             reframeFusionGraph(clip.node_graph, 0, new_duration_frames);
+        reframeColorData(clip, 0, new_duration_frames);
         clip.transform = transformed;
         clip.keyframes = std::move(curves);
         clip.timeline_duration_frames = new_duration_frames;
@@ -2396,6 +2433,7 @@ TrimClipResult TimelineModel::trimClip(
         trimmed_transform);
     trimNodeGraphKeyframes(
         clip.node_graph, 0, local_start, new_duration_frames);
+    reframeColorData(clip, local_start, new_duration_frames);
     clip.source_start_frame = new_source_start_frame;
     clip.motion_link = std::move(trimmed_motion);
     clip.source_duration_frames = *converted_duration;

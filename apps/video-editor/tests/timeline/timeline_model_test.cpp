@@ -2,8 +2,10 @@
 #include "timeline/timeline_clip_edge_command.h"
 #include "timeline/timeline_history.h"
 #include "timeline/timeline_model.h"
+#include "workspaces/color/model/color_graph.h"
 
 #include <chrono>
+#include <cmath>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -650,6 +652,73 @@ void validateFusionNodeKeyframeTimeline(const std::filesystem::path& source_path
             "Changing Timeline frame rate did not rescale node animation keyframes.");
 }
 
+void validateColorPowerWindowKeyframeTimeline(
+    const std::filesystem::path& source_path) {
+    timeline::TimelineModel model;
+    auto metadata = makeMetadata(source_path, "animated-color-window.mkv", 120);
+    metadata.duration_seconds = 4.0;
+    metadata.frame_rate = 30.0;
+    require(model.addClip(metadata) == timeline::AddClipResult::Added,
+            "The animated Color Power Window fixture could not be added.");
+
+    auto graph = color::fromEffectStack(std::vector{
+        creative_suite::effects::makeDefaultInstance("video.brightness")});
+    const auto node_id = color::effectNodesInOrder(graph).front();
+    const auto window_id = color::addPowerWindow(graph, node_id,
+        creative_suite::composition::ShapeMaskKind::Ellipse);
+    auto geometry = color::findNode(graph, node_id)->power_windows.front().parameters;
+    geometry.center_x = .2;
+    geometry.center_y = .6;
+    geometry.width = .3;
+    geometry.height = .4;
+    creative_suite::composition::ShapeMaskKeyframes keyframes;
+    keyframes[0] = {{0, .2}, {30, .5}, {90, .9}};
+    require(window_id && color::setPowerWindowTrack(graph, node_id, *window_id,
+                geometry, keyframes) &&
+            model.setClipColorGraph(0, 0, graph) ==
+                timeline::ColorGraphMutationResult::Changed,
+            "An animated Power Window could not be assigned to its Color clip.");
+    const std::vector<timeline::ColorGradeVersion> versions{
+        {"window-version", "Window", graph}};
+    require(model.setClipColorGradeVersions(0, 0, versions) ==
+                timeline::ColorGradeVersionsMutationResult::Changed,
+            "The Power Window graph snapshot could not be saved as a grade version.");
+
+    require(model.splitClip(0, 0, 60) == timeline::SplitClipResult::Split,
+            "A clip with an animated Power Window could not be split.");
+    const auto& left = model.tracks()[0].clips[0];
+    const auto& right = model.tracks()[0].clips[1];
+    require(left.color_graph && right.color_graph &&
+                right.color_grade_versions.size() == 1,
+            "A Power Window graph and its saved grade version must survive a split.");
+    const auto* left_node = color::findNode(*left.color_graph, node_id);
+    const auto* right_node = color::findNode(*right.color_graph, node_id);
+    const auto* right_version_node = color::findNode(
+        right.color_grade_versions.front().graph, node_id);
+    require(left_node && right_node && right_version_node &&
+                left_node->power_windows.front().keyframes[0].back().frame == 59 &&
+                std::abs(right_node->power_windows.front().parameters.center_x - .7) < 1e-9 &&
+                creative_suite::animation::evaluateScalar(
+                    right_node->power_windows.front().parameters.center_x,
+                    right_node->power_windows.front().keyframes[0], 30) == .9 &&
+                std::abs(right_version_node->power_windows.front().parameters.center_x - .7) < 1e-9,
+            "Splitting did not rebase Power Window geometry in the current graph and saved versions.");
+
+    require(model.trimClip(0, 1, 70, 40) == timeline::TrimClipResult::Trimmed,
+            "A clip with an animated Power Window could not be trimmed.");
+    const auto& trimmed = model.tracks()[0].clips[1];
+    const auto* trimmed_node = color::findNode(*trimmed.color_graph, node_id);
+    const auto* trimmed_version_node = color::findNode(
+        trimmed.color_grade_versions.front().graph, node_id);
+    require(trimmed_node && trimmed_version_node &&
+                std::abs(trimmed_node->power_windows.front().parameters.center_x -
+                         (.5 + 2.0 / 3.0 * .4)) < 1e-9 &&
+                trimmed_node->power_windows.front().keyframes[0].back().frame == 39 &&
+                trimmed_version_node->power_windows.front().parameters.center_x ==
+                    trimmed_node->power_windows.front().parameters.center_x,
+            "Trimming did not rebase Power Window curves in current and saved graphs.");
+}
+
 } // namespace
 
 int main() {
@@ -668,6 +737,7 @@ int main() {
         validatePendingMediaTimingReconnect(directory);
         validateClipEdgeTrimCommand(first_source, second_source);
         validateMixedFrameRateMapping(first_source);
+        validateColorPowerWindowKeyframeTimeline(first_source);
         validateFusionNodeKeyframeTimeline(first_source);
 
         const auto non_canonical_first =

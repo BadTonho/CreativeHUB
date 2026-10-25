@@ -151,14 +151,32 @@ std::optional<std::vector<NodeId>> evaluationOrder(const Graph& graph) {
 
 bool validate(const Graph& graph) noexcept {
     try {
-        if (graph.nodes.size() < 2 || graph.next_id == 0) return false;
+        if (graph.nodes.size() < 2 || graph.next_id == 0 ||
+            graph.next_window_id == 0) return false;
         std::unordered_set<NodeId> ids;
+        std::unordered_set<PowerWindowId> window_ids;
         NodeId maximum_id = 0;
+        PowerWindowId maximum_window_id = 0;
         std::size_t input_count = 0;
         std::size_t output_count = 0;
         for (const auto& node : graph.nodes) {
             if (node.id == 0 || !ids.insert(node.id).second ||
                 !std::isfinite(node.x) || !std::isfinite(node.y)) return false;
+            if (!node.power_windows.empty() && node.type != NodeType::Effect &&
+                node.type != NodeType::Curves) return false;
+            for (std::size_t index = 0; index < node.power_windows.size(); ++index) {
+                const auto& window = node.power_windows[index];
+                if (window.id == 0 || !window_ids.insert(window.id).second ||
+                    (window.kind != creative_suite::composition::ShapeMaskKind::Rectangle &&
+                     window.kind != creative_suite::composition::ShapeMaskKind::Ellipse) ||
+                    !creative_suite::composition::validShapeMask(
+                        window.parameters, window.keyframes) ||
+                    (index == 0 && window.combine_mode != WindowCombineMode::Add) ||
+                    (window.combine_mode != WindowCombineMode::Add &&
+                     window.combine_mode != WindowCombineMode::Subtract &&
+                     window.combine_mode != WindowCombineMode::Intersect)) return false;
+                maximum_window_id = std::max(maximum_window_id, window.id);
+            }
             maximum_id = std::max(maximum_id, node.id);
             if (node.type == NodeType::Input) {
                 ++input_count;
@@ -179,7 +197,8 @@ bool validate(const Graph& graph) noexcept {
                 return false;
             }
         }
-        if (input_count != 1 || output_count != 1 || graph.next_id <= maximum_id)
+        if (input_count != 1 || output_count != 1 || graph.next_id <= maximum_id ||
+            graph.next_window_id <= maximum_window_id)
             return false;
 
         std::set<std::pair<NodeId, std::uint32_t>> input_slots;
@@ -249,6 +268,7 @@ linearEffectStack(const Graph& graph) {
         if (!visited.insert(current).second) return std::nullopt;
         const auto* node = findNode(graph, current);
         if (!node) return std::nullopt;
+        if (!node->power_windows.empty()) return std::nullopt;
         if (node->type == NodeType::ParallelMixer) return std::nullopt;
         if (node->type == NodeType::Effect) result.push_back(*node->effect);
         else if (node->type == NodeType::Curves) {
@@ -555,6 +575,167 @@ bool setCurvesQualifier(Graph& graph, NodeId id,
     node->curves->parameters.qualifier = qualifier;
     graph = std::move(candidate);
     return true;
+}
+
+std::optional<PowerWindowId> addPowerWindow(
+    Graph& graph, NodeId node_id,
+    creative_suite::composition::ShapeMaskKind kind) {
+    if (!validate(graph) ||
+        (kind != creative_suite::composition::ShapeMaskKind::Rectangle &&
+         kind != creative_suite::composition::ShapeMaskKind::Ellipse) ||
+        graph.next_window_id == 0 ||
+        graph.next_window_id == std::numeric_limits<PowerWindowId>::max())
+        return std::nullopt;
+    auto candidate = graph;
+    auto* node = findNode(candidate, node_id);
+    if (!node || (node->type != NodeType::Effect && node->type != NodeType::Curves))
+        return std::nullopt;
+    const auto id = candidate.next_window_id++;
+    PowerWindow window;
+    window.id = id;
+    window.kind = kind;
+    window.combine_mode = WindowCombineMode::Add;
+    node->power_windows.push_back(std::move(window));
+    if (!validate(candidate)) return std::nullopt;
+    graph = std::move(candidate);
+    return id;
+}
+
+bool removePowerWindow(Graph& graph, NodeId node_id, PowerWindowId window_id) {
+    auto candidate = graph;
+    auto* node = findNode(candidate, node_id);
+    if (!node || (node->type != NodeType::Effect && node->type != NodeType::Curves))
+        return false;
+    const auto found = std::find_if(node->power_windows.begin(), node->power_windows.end(),
+        [window_id](const PowerWindow& window) { return window.id == window_id; });
+    if (found == node->power_windows.end()) return false;
+    node->power_windows.erase(found);
+    if (!node->power_windows.empty())
+        node->power_windows.front().combine_mode = WindowCombineMode::Add;
+    if (!validate(candidate)) return false;
+    graph = std::move(candidate);
+    return true;
+}
+
+bool reorderPowerWindow(Graph& graph, NodeId node_id, std::size_t from, std::size_t to) {
+    auto candidate = graph;
+    auto* node = findNode(candidate, node_id);
+    if (!node || from >= node->power_windows.size() || to >= node->power_windows.size() ||
+        from == to) return false;
+    auto moving = std::move(node->power_windows[from]);
+    node->power_windows.erase(node->power_windows.begin() + static_cast<std::ptrdiff_t>(from));
+    node->power_windows.insert(node->power_windows.begin() + static_cast<std::ptrdiff_t>(to),
+        std::move(moving));
+    if (!node->power_windows.empty())
+        node->power_windows.front().combine_mode = WindowCombineMode::Add;
+    if (!validate(candidate)) return false;
+    graph = std::move(candidate);
+    return true;
+}
+
+bool setPowerWindowSettings(Graph& graph, NodeId node_id, PowerWindowId window_id,
+    double soft_edge, bool invert, WindowCombineMode combine_mode) {
+    if (!std::isfinite(soft_edge) || soft_edge < 0.0 || soft_edge > 1.0 ||
+        (combine_mode != WindowCombineMode::Add &&
+         combine_mode != WindowCombineMode::Subtract &&
+         combine_mode != WindowCombineMode::Intersect)) return false;
+    auto candidate = graph;
+    auto* node = findNode(candidate, node_id);
+    if (!node || (node->type != NodeType::Effect && node->type != NodeType::Curves))
+        return false;
+    const auto found = std::find_if(node->power_windows.begin(), node->power_windows.end(),
+        [window_id](const PowerWindow& window) { return window.id == window_id; });
+    if (found == node->power_windows.end() ||
+        (found == node->power_windows.begin() && combine_mode != WindowCombineMode::Add))
+        return false;
+    found->parameters.soft_edge = soft_edge;
+    found->parameters.invert = invert;
+    found->combine_mode = combine_mode;
+    if (!validate(candidate)) return false;
+    graph = std::move(candidate);
+    return true;
+}
+
+bool setPowerWindowGeometry(Graph& graph, NodeId node_id, PowerWindowId window_id,
+    std::int64_t local_frame,
+    const creative_suite::composition::ShapeMaskParameters& geometry) {
+    if (local_frame < 0) return false;
+    auto candidate = graph;
+    auto* node = findNode(candidate, node_id);
+    if (!node || (node->type != NodeType::Effect && node->type != NodeType::Curves))
+        return false;
+    auto found = std::find_if(node->power_windows.begin(), node->power_windows.end(),
+        [window_id](const PowerWindow& window) { return window.id == window_id; });
+    if (found == node->power_windows.end()) return false;
+    auto values = found->parameters;
+    values.center_x = geometry.center_x;
+    values.center_y = geometry.center_y;
+    values.width = geometry.width;
+    values.height = geometry.height;
+    values.rotation = geometry.rotation;
+    if (!creative_suite::composition::validShapeMask(values, found->keyframes)) return false;
+    const bool animated = std::any_of(found->keyframes.begin(), found->keyframes.end(),
+        [](const auto& keys) { return !keys.empty(); });
+    const std::array<double, 5> new_values{
+        geometry.center_x, geometry.center_y, geometry.width, geometry.height,
+        geometry.rotation};
+    if (!animated) {
+        found->parameters = values;
+    } else {
+        for (std::size_t index = 0; index < found->keyframes.size(); ++index) {
+            auto& keys = found->keyframes[index];
+            const auto existing = std::find_if(keys.begin(), keys.end(),
+                [local_frame](const auto& key) { return key.frame == local_frame; });
+            if (existing != keys.end()) {
+                existing->value = new_values[index];
+            } else {
+                const auto insert_at = std::lower_bound(keys.begin(), keys.end(), local_frame,
+                    [](const auto& key, std::int64_t frame) { return key.frame < frame; });
+                keys.insert(insert_at, {local_frame, new_values[index]});
+            }
+        }
+    }
+    if (!validate(candidate)) return false;
+    graph = std::move(candidate);
+    return true;
+}
+
+bool setPowerWindowTrack(Graph& graph, NodeId node_id, PowerWindowId window_id,
+    const creative_suite::composition::ShapeMaskParameters& base,
+    creative_suite::composition::ShapeMaskKeyframes keyframes) {
+    auto candidate = graph;
+    auto* node = findNode(candidate, node_id);
+    if (!node || (node->type != NodeType::Effect && node->type != NodeType::Curves))
+        return false;
+    auto found = std::find_if(node->power_windows.begin(), node->power_windows.end(),
+        [window_id](const PowerWindow& window) { return window.id == window_id; });
+    if (found == node->power_windows.end()) return false;
+    auto updated = base;
+    updated.soft_edge = found->parameters.soft_edge;
+    updated.invert = found->parameters.invert;
+    if (!creative_suite::composition::validShapeMask(updated, keyframes)) return false;
+    found->parameters = updated;
+    found->keyframes = std::move(keyframes);
+    if (!validate(candidate)) return false;
+    graph = std::move(candidate);
+    return true;
+}
+
+bool clearPowerWindowTrack(Graph& graph, NodeId node_id, PowerWindowId window_id) {
+    auto* node = findNode(graph, node_id);
+    if (!node) return false;
+    auto found = std::find_if(node->power_windows.begin(), node->power_windows.end(),
+        [window_id](const PowerWindow& window) { return window.id == window_id; });
+    if (found == node->power_windows.end() ||
+        std::none_of(found->keyframes.begin(), found->keyframes.end(),
+            [](const auto& keys) { return !keys.empty(); })) return false;
+    for (auto& keys : found->keyframes) keys.clear();
+    return validate(graph);
+}
+
+bool hasPowerWindows(const Graph& graph) noexcept {
+    return std::any_of(graph.nodes.begin(), graph.nodes.end(),
+        [](const Node& node) { return !node.power_windows.empty(); });
 }
 
 bool setEffectParameter(

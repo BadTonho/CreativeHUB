@@ -1,6 +1,6 @@
 # Application Architecture
 
-[Composition interchange](../../COMPOSITION_INTERCHANGE.md) uses a shared format/presentation library with application-owned converters and worker-backed UI commands. Native CSP schema is v39: v33 added Color Gallery metadata and PNG sidecars, v34 stores the Color correction graph, v35 expanded Primary Grade, v36 adds independent Log controls, v37 stores named per-clip Color graph snapshots, v38 adds Color Curves and tonal qualifiers, and v39 adds spatial qualifier matte refinement. Primary Grade was introduced in v32 and Gaussian Blur in v31. Blur transfers through cscomp v3.
+[Composition interchange](../../COMPOSITION_INTERCHANGE.md) uses a shared format/presentation library with application-owned converters and worker-backed UI commands. Native CSP schema is v40: v33 added Color Gallery metadata and PNG sidecars, v34 stores the Color correction graph, v35 expanded Primary Grade, v36 adds independent Log controls, v37 stores named per-clip Color graph snapshots, v38 adds Color Curves and tonal qualifiers, v39 adds spatial qualifier matte refinement, and v40 adds Color Power Windows and tracking curves. Primary Grade was introduced in v32 and Gaussian Blur in v31. Blur transfers through cscomp v3.
 
 Color owns a graph model and evaluator separate from Fusion. The render order
 is Fusion graph evaluation, Color graph evaluation, then clip transform and
@@ -61,12 +61,18 @@ under `docs/video-editor/architecture/` so each document can remain focused and 
 
 The Color workspace owns a per-clip correction graph with Input, effect,
 Parallel Mixer and Output nodes. Its connections define processing, and the
-graph and its named per-clip versions are saved in CSP v39. Serial graphs use the existing GPU effect pipeline
+graph, named per-clip versions, Power Windows and their geometry tracks are
+saved in CSP v40. Serial graphs without Power Windows use the existing GPU effect pipeline
 when available; branched graphs use Color's CPU RGBA evaluator after Fusion.
 Edit Inspector edits the same effect nodes' parameters and enabled state, while
 Color owns topology and layout. Primary Grade offers Wheels and Bars views over
 shared Lift/Gamma/Gain/Offset values plus independent Log tonal controls. The
-page includes Waveform, Parade, Vectorscope, and RGB Histogram scopes. Both
+page includes Waveform, Parade, Vectorscope, and RGB Histogram scopes. Effect
+and Curves nodes can contain multiple rectangular or elliptical Power Windows;
+their ordered coverage limits correction and combines with the Curves qualifier.
+The internal worker tracker records position, uniform scale and 2D rotation from
+the selected node's incoming image, and commits a valid partial or complete run
+as one history edit. Both
 workspaces use shared Timeline history. The Color clip menu copies and applies
 the current graph; its temporary clipboard clears on project replacement.
 Applying a version changes only the current graph, while splitting or

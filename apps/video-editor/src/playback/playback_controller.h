@@ -134,6 +134,30 @@ struct PlaybackColorGradeComparisonFrameEvent {
     rendering::PreviewFramePayload frame;
 };
 
+struct PlaybackColorPowerWindowTrackProgressEvent {
+    quint64 request_id = 0;
+    qint64 completed_frames = 0;
+    qint64 total_frames = 0;
+};
+
+struct PlaybackColorPowerWindowTrackReadyEvent {
+    quint64 request_id = 0;
+    timeline::ClipId clip_id = 0;
+    color::NodeId node_id = 0;
+    color::PowerWindowId window_id = 0;
+    qint64 timeline_frame = 0;
+    quint64 project_generation = 0;
+    quint64 composition_revision = 0;
+    quint64 playback_generation = 0;
+    color::Graph original_graph;
+    color::Graph tracked_graph;
+    qint64 stop_frame = 0;
+    bool reached_end = false;
+    double confidence = 0.0;
+    bool canceled = false;
+    QString error;
+};
+
 struct FusionNodePreviewTarget {
     timeline::ClipId clip_id = 0;
     fusion::nodes::NodeId node_id = 0;
@@ -155,7 +179,9 @@ using PlaybackControllerEvent = std::variant<
     PlaybackStillCaptureEvent,
     PlaybackScopeFrameEvent,
     PlaybackColorInputFrameEvent,
-    PlaybackColorGradeComparisonFrameEvent>;
+    PlaybackColorGradeComparisonFrameEvent,
+    PlaybackColorPowerWindowTrackProgressEvent,
+    PlaybackColorPowerWindowTrackReadyEvent>;
 
 class PlaybackController final : public QObject {
 public:
@@ -197,6 +223,11 @@ public:
         quint64 composition_revision,
         quint64 playback_generation,
         color::Graph graph);
+    void trackColorPowerWindow(quint64 request_id, timeline::ClipId clip_id,
+        color::NodeId node_id, color::PowerWindowId window_id,
+        qint64 timeline_frame, int direction, quint64 project_generation,
+        quint64 composition_revision, quint64 playback_generation,
+        color::Graph graph, std::shared_ptr<std::atomic_bool> canceled);
     void setColorGradeComparisonRequest(
         std::optional<PlaybackColorGradeComparisonRequest> request);
     [[nodiscard]] bool gpuCompositionEnabled() const noexcept { return gpu_composition_enabled_; }

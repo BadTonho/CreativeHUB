@@ -426,6 +426,22 @@ void testVideoDocuments(const QString& root) {
         [](const color::Node& node) { return node.type == color::NodeType::Curves; });
     CS_TEST_CHECK(curves_node != color_graph.nodes.end());
     const auto curves_id = curves_node->id;
+    const auto window_id = color::addPowerWindow(color_graph, curves_id,
+        creative_suite::composition::ShapeMaskKind::Ellipse);
+    CS_TEST_CHECK(window_id.has_value());
+    auto window_geometry = creative_suite::composition::ShapeMaskParameters{};
+    window_geometry.center_x = 0.42;
+    window_geometry.center_y = 0.53;
+    window_geometry.width = 0.24;
+    window_geometry.height = 0.31;
+    window_geometry.rotation = 12.0;
+    window_geometry.soft_edge = 0.04;
+    creative_suite::composition::ShapeMaskKeyframes window_track;
+    window_track[0] = {{10, 0.42}, {20, 0.48}};
+    window_track[1] = {{10, 0.53}, {20, 0.49}};
+    window_track[4] = {{10, 12.0}, {20, 21.0}};
+    CS_TEST_CHECK(color::setPowerWindowTrack(color_graph, curves_id, *window_id,
+        window_geometry, window_track));
     CS_TEST_CHECK(color::setCurvePoints(color_graph, curves_id,
         color::CurveKind::Master, {{0, 0}, {128, 170}, {255, 255}}));
     auto qualifier = color::findNode(color_graph, curves_id)->curves->parameters.qualifier;
@@ -448,9 +464,9 @@ void testVideoDocuments(const QString& root) {
         "hub-still.png",
         std::make_shared<const std::vector<std::uint8_t>>(
             std::vector<std::uint8_t>{137, 80, 78, 71, 13, 10, 26, 10}), false});
-    const auto color_path = QDir(QFileInfo(assets).absolutePath()).filePath("color-v39.csp");
+    const auto color_path = QDir(QFileInfo(assets).absolutePath()).filePath("color-v40.csp");
     project::save(fsPath(color_path), color_document);
-    const auto color_snapshot = backup(QDir(root).filePath("video-color-v39"), color_path);
+    const auto color_snapshot = backup(QDir(root).filePath("video-color-v40"), color_path);
     CS_TEST_CHECK(project::load(fsPath(color_snapshot.vault)) == color_document);
     CS_TEST_CHECK(project::load(fsPath(color_snapshot.restored)) == color_document);
     CS_TEST_CHECK(QFileInfo::exists(color_snapshot.vault + QStringLiteral(".gallery/hub-still.png")));
@@ -458,7 +474,7 @@ void testVideoDocuments(const QString& root) {
     auto future_video = QJsonDocument::fromJson(readBytes(color_path)).object();
     future_video.insert("version", project::current_format_version + 1);
     const auto future_video_path = QDir(QFileInfo(assets).absolutePath())
-        .filePath("video-future-v40.csp");
+        .filePath("video-future-v41.csp");
     writeBytes(future_video_path, QJsonDocument(future_video).toJson());
     creative_suite::hub::BackupManager future_video_manager(
         QDir(root).filePath("video-future-vault"));

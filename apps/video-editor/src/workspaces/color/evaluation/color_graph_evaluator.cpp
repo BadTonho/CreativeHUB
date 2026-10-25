@@ -66,6 +66,115 @@ std::optional<media::VideoFrame> mix(
     return result;
 }
 
+std::optional<std::vector<std::uint8_t>> powerWindowCoverage(
+    const Node& node, std::int64_t local_frame, int width, int height,
+    creative_suite::composition::ShapeMaskRasterCache& cache,
+    const std::function<bool()>& should_cancel) {
+    if (node.power_windows.empty()) return std::vector<std::uint8_t>{};
+    const auto pixel_count = static_cast<std::size_t>(width) *
+        static_cast<std::size_t>(height);
+    std::vector<std::uint8_t> combined(pixel_count, 0);
+    bool first = true;
+    for (const auto& window : node.power_windows) {
+        if (should_cancel && should_cancel()) return std::nullopt;
+        const auto parameters = creative_suite::composition::evaluateShapeMask(
+            window.parameters, window.keyframes, local_frame);
+        const auto coverage = cache.coverage(window.kind, parameters, width, height,
+            should_cancel);
+        if (!coverage || !usable(*coverage)) return std::nullopt;
+        for (int y = 0; y < height; ++y) {
+            if (should_cancel && should_cancel()) return std::nullopt;
+            const auto* row = coverage->rgba_pixels.data() +
+                static_cast<std::size_t>(y) * coverage->stride;
+            const auto pixel_offset = static_cast<std::size_t>(y) * width;
+            for (int x = 0; x < width; ++x) {
+                const double incoming = row[static_cast<std::size_t>(x) * 4] / 255.0;
+                auto& value = combined[pixel_offset + static_cast<std::size_t>(x)];
+                if (first) {
+                    value = static_cast<std::uint8_t>(std::lround(incoming * 255.0));
+                    continue;
+                }
+                const double current = value / 255.0;
+                double result = 0.0;
+                switch (window.combine_mode) {
+                case WindowCombineMode::Add:
+                    result = current + incoming - current * incoming;
+                    break;
+                case WindowCombineMode::Subtract:
+                    result = current * (1.0 - incoming);
+                    break;
+                case WindowCombineMode::Intersect:
+                    result = current * incoming;
+                    break;
+                }
+                value = static_cast<std::uint8_t>(std::clamp(
+                    std::lround(result * 255.0), 0L, 255L));
+            }
+        }
+        first = false;
+    }
+    return combined;
+}
+
+bool applyWindowedCorrection(
+    const Node& node, media::VideoFrame& frame, std::int64_t local_frame,
+    const std::function<bool()>& should_cancel,
+    creative_suite::composition::ShapeMaskRasterCache& mask_cache) {
+    if (node.power_windows.empty()) {
+        if (node.type == NodeType::Curves) {
+            creative_suite::effects::ColorAdjustmentParameters adjustment;
+            adjustment.video_curves = node.curves->parameters;
+            return creative_suite::effects::applyColorAdjustment(
+                frame, adjustment, should_cancel) ==
+                creative_suite::effects::ProcessingResult::Completed;
+        }
+        return creative_suite::effects::applyStack(frame,
+            std::span<const creative_suite::effects::EffectInstance>(&*node.effect, 1));
+    }
+
+    const auto original = frame;
+    auto corrected = frame;
+    if (node.type == NodeType::Curves) {
+        creative_suite::effects::ColorAdjustmentParameters adjustment;
+        adjustment.video_curves = node.curves->parameters;
+        if (creative_suite::effects::applyColorAdjustment(
+                corrected, adjustment, should_cancel) !=
+            creative_suite::effects::ProcessingResult::Completed) return false;
+    } else if (!creative_suite::effects::applyStack(corrected,
+        std::span<const creative_suite::effects::EffectInstance>(&*node.effect, 1))) {
+        return false;
+    }
+    if (should_cancel && should_cancel()) return false;
+    const auto coverage = powerWindowCoverage(node, local_frame, frame.width,
+        frame.height, mask_cache, should_cancel);
+    if (!coverage || coverage->size() != static_cast<std::size_t>(frame.width) *
+            static_cast<std::size_t>(frame.height)) return false;
+    for (int y = 0; y < frame.height; ++y) {
+        if (should_cancel && should_cancel()) return false;
+        auto* output = frame.rgba_pixels.data() +
+            static_cast<std::size_t>(y) * frame.stride;
+        const auto* source = original.rgba_pixels.data() +
+            static_cast<std::size_t>(y) * original.stride;
+        const auto* graded = corrected.rgba_pixels.data() +
+            static_cast<std::size_t>(y) * corrected.stride;
+        const auto mask_offset = static_cast<std::size_t>(y) * frame.width;
+        for (int x = 0; x < frame.width; ++x) {
+            const auto alpha = coverage->at(mask_offset + static_cast<std::size_t>(x)) /
+                255.0;
+            for (int channel = 0; channel < 3; ++channel) {
+                const auto offset = static_cast<std::size_t>(x) * 4 +
+                    static_cast<std::size_t>(channel);
+                output[offset] = static_cast<std::uint8_t>(std::clamp(
+                    std::lround(source[offset] * (1.0 - alpha) +
+                                graded[offset] * alpha), 0L, 255L));
+            }
+            output[static_cast<std::size_t>(x) * 4 + 3] =
+                source[static_cast<std::size_t>(x) * 4 + 3];
+        }
+    }
+    return true;
+}
+
 }  // namespace
 
 namespace {
@@ -73,6 +182,7 @@ namespace {
 std::optional<media::VideoFrame> evaluateFrom(
     const Graph& graph, const media::VideoFrame& input, NodeId root,
     std::optional<NodeId> stop_before,
+    std::int64_t local_frame,
     const std::function<bool()>& should_cancel) {
     if (!validate(graph) || !usable(input) ||
         (should_cancel && should_cancel())) return std::nullopt;
@@ -89,6 +199,7 @@ std::optional<media::VideoFrame> evaluateFrom(
     }
 
     std::unordered_map<NodeId, media::VideoFrame> values;
+    creative_suite::composition::ShapeMaskRasterCache mask_cache;
     std::unordered_map<NodeId, std::size_t> remaining_consumers;
     for (const auto& edge : graph.connections)
         if (required.contains(edge.to) && required.contains(edge.from))
@@ -121,16 +232,8 @@ std::optional<media::VideoFrame> evaluateFrom(
             }
             if (!effect) return std::nullopt;
             if (effect->enabled) {
-                if (node->type == NodeType::Curves) {
-                    creative_suite::effects::ColorAdjustmentParameters adjustment;
-                    adjustment.video_curves = node->curves->parameters;
-                    if (creative_suite::effects::applyColorAdjustment(
-                            frame, adjustment, should_cancel) !=
-                        creative_suite::effects::ProcessingResult::Completed)
-                        return std::nullopt;
-                } else if (!creative_suite::effects::applyStack(
-                        frame, std::span<const creative_suite::effects::EffectInstance>(
-                            &*effect, 1))) {
+                if (!applyWindowedCorrection(*node, frame, local_frame,
+                        should_cancel, mask_cache)) {
                     return std::nullopt;
                 }
             }
@@ -171,7 +274,17 @@ std::optional<media::VideoFrame> evaluate(
     const auto output_node = std::find_if(graph.nodes.begin(), graph.nodes.end(),
         [](const Node& node) { return node.type == NodeType::Output; });
     if (output_node == graph.nodes.end()) return std::nullopt;
-    return evaluateFrom(graph, input, output_node->id, {}, should_cancel);
+    return evaluateFrom(graph, input, output_node->id, {}, 0, should_cancel);
+}
+
+std::optional<media::VideoFrame> evaluateAtFrame(
+    const Graph& graph, const media::VideoFrame& input, std::int64_t local_frame,
+    const std::function<bool()>& should_cancel) {
+    if (local_frame < 0) return std::nullopt;
+    const auto output_node = std::find_if(graph.nodes.begin(), graph.nodes.end(),
+        [](const Node& node) { return node.type == NodeType::Output; });
+    if (output_node == graph.nodes.end()) return std::nullopt;
+    return evaluateFrom(graph, input, output_node->id, {}, local_frame, should_cancel);
 }
 
 std::optional<media::VideoFrame> evaluateInput(
@@ -180,7 +293,16 @@ std::optional<media::VideoFrame> evaluateInput(
     const auto* node = findNode(graph, curves_node);
     if (!node || node->type != NodeType::Curves || !incoming(graph, curves_node, 0))
         return std::nullopt;
-    return evaluateFrom(graph, input, curves_node, curves_node, should_cancel);
+    return evaluateFrom(graph, input, curves_node, curves_node, 0, should_cancel);
+}
+
+std::optional<media::VideoFrame> evaluateNodeInputAtFrame(
+    const Graph& graph, NodeId node_id, const media::VideoFrame& input,
+    std::int64_t local_frame, const std::function<bool()>& should_cancel) {
+    const auto* node = findNode(graph, node_id);
+    if (!node || (node->type != NodeType::Effect && node->type != NodeType::Curves) ||
+        !incoming(graph, node_id, 0) || local_frame < 0) return std::nullopt;
+    return evaluateFrom(graph, input, node_id, node_id, local_frame, should_cancel);
 }
 
 std::optional<std::vector<creative_suite::effects::EffectInstance>>
@@ -197,6 +319,7 @@ linearEffectStackBefore(const Graph& graph, NodeId curves_node) {
         if (!edge) return std::nullopt;
         const auto* previous = findNode(graph, edge->from);
         if (!previous) return std::nullopt;
+        if (!previous->power_windows.empty()) return std::nullopt;
         if (previous->type == NodeType::Input) {
             std::reverse(reversed.begin(), reversed.end());
             return reversed;

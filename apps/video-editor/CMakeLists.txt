@@ -42,6 +42,8 @@ set(MAIN_EDITOR_CORE_SOURCES
     src/workspaces/color/model/color_graph.h
     src/workspaces/color/evaluation/color_graph_evaluator.cpp
     src/workspaces/color/evaluation/color_graph_evaluator.h
+    src/workspaces/color/evaluation/power_window_tracker.cpp
+    src/workspaces/color/evaluation/power_window_tracker.h
     src/workspaces/color/ui/color_node_canvas.cpp
     src/workspaces/color/ui/color_node_canvas.h
     src/main_window/main_window_support.cpp

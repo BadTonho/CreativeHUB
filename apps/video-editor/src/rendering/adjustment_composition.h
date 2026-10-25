@@ -4,6 +4,7 @@
 #include "workspaces/color/model/color_graph.h"
 #include <creative_suite/composition/gpu_frame_compositor.h>
 #include <functional>
+#include <cstdint>
 #include <span>
 
 namespace rendering {
@@ -14,6 +15,7 @@ struct TimelineCompositionStep {
     CompositionLayer layer;
     bool adjustment = false;
     std::optional<color::Graph> color_graph;
+    std::int64_t local_frame = 0;
 };
 
 [[nodiscard]] bool adjustmentRequiresProcessing(

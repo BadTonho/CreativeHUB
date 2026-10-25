@@ -320,3 +320,18 @@ add_creative_suite_test(
     NAME creative-suite-main-editor-color-graph
     COMMAND creative-suite-main-editor-color-graph-tests
 )
+
+add_executable(creative-suite-main-editor-power-window-tracker-tests
+    power_window_tracker_test.cpp
+)
+link_video_editor_color_graph_test_support(creative-suite-main-editor-power-window-tracker-tests)
+target_compile_features(creative-suite-main-editor-power-window-tracker-tests PRIVATE cxx_std_20)
+if(MSVC)
+    target_compile_options(creative-suite-main-editor-power-window-tracker-tests PRIVATE /W4 /permissive-)
+else()
+    target_compile_options(creative-suite-main-editor-power-window-tracker-tests PRIVATE -Wall -Wextra -Wpedantic)
+endif()
+add_creative_suite_test(
+    NAME creative-suite-main-editor-power-window-tracker
+    COMMAND creative-suite-main-editor-power-window-tracker-tests
+)

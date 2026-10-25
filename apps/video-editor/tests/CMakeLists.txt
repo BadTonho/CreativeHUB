@@ -15,6 +15,7 @@ link_libraries(
 add_library(creative-suite-video-editor-color-graph-test-support STATIC
     ${VIDEO_EDITOR_SOURCE_DIR}/workspaces/color/model/color_graph.cpp
     ${VIDEO_EDITOR_SOURCE_DIR}/workspaces/color/evaluation/color_graph_evaluator.cpp
+    ${VIDEO_EDITOR_SOURCE_DIR}/workspaces/color/evaluation/power_window_tracker.cpp
 )
 target_include_directories(creative-suite-video-editor-color-graph-test-support PUBLIC
     ${VIDEO_EDITOR_SOURCE_DIR}

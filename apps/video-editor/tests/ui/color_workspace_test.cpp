@@ -25,6 +25,7 @@
 #include <QMouseEvent>
 #include <QMetaObject>
 #include <QPushButton>
+#include <QProgressDialog>
 #include <QSlider>
 #include <QThread>
 #include <QTimer>
@@ -48,6 +49,230 @@ void require(bool condition, const char* message) {
 int main(int argc, char** argv) {
     QApplication application(argc, argv);
     try {
+        {
+            auto trigger_overlay_action = [](QWidget* overlay, const QPoint& position,
+                                             const QString& action_text) {
+                bool triggered = false;
+                QTimer::singleShot(0, [&] {
+                    for (auto* widget : QApplication::topLevelWidgets()) {
+                        auto* menu = qobject_cast<QMenu*>(widget);
+                        if (!menu || !menu->isVisible()) continue;
+                        bool found_action = false;
+                        for (auto* action : menu->actions()) {
+                            if (action->text() != action_text) continue;
+                            action->trigger();
+                            triggered = true;
+                            found_action = true;
+                            return;
+                        }
+                        if (!found_action) QTest::keyClick(menu, Qt::Key_Escape);
+                    }
+                });
+                QContextMenuEvent event(QContextMenuEvent::Mouse, position,
+                    overlay->mapToGlobal(position));
+                QApplication::sendEvent(overlay, &event);
+                QTest::qWait(10);
+                return triggered;
+            };
+            auto drag_overlay = [](QWidget* overlay, const QPoint& start,
+                                   const QPoint& end) {
+                const auto global_start = overlay->mapToGlobal(start);
+                const auto global_end = overlay->mapToGlobal(end);
+                QMouseEvent press(QEvent::MouseButtonPress, QPointF(start),
+                    QPointF(global_start), Qt::LeftButton, Qt::LeftButton,
+                    Qt::NoModifier);
+                QApplication::sendEvent(overlay, &press);
+                QMouseEvent move(QEvent::MouseMove, QPointF(end),
+                    QPointF(global_end), Qt::NoButton, Qt::LeftButton,
+                    Qt::NoModifier);
+                QApplication::sendEvent(overlay, &move);
+                QMouseEvent release(QEvent::MouseButtonRelease, QPointF(end),
+                    QPointF(global_end), Qt::LeftButton, Qt::NoButton,
+                    Qt::NoModifier);
+                QApplication::sendEvent(overlay, &release);
+            };
+
+            ui::ColorWorkspace window_workspace;
+            window_workspace.resize(1000, 720);
+            auto window_graph = color::fromEffectStack(std::vector{
+                creative_suite::effects::makeDefaultInstance("video.brightness")});
+            const auto window_node_id = color::effectNodesInOrder(window_graph).front();
+            int window_edits = 0;
+            window_workspace.setEffectsChangedHandler(
+                [&](timeline::ClipId clip_id, color::Graph updated) {
+                    require(clip_id == 7,
+                        "Viewer Power Window edits must target the selected clip.");
+                    window_graph = std::move(updated);
+                    ++window_edits;
+                });
+            window_workspace.setClips({{7, QStringLiteral("Window target")}}, 7,
+                window_graph);
+            auto* window_viewer = new PreviewWidget(&window_workspace);
+            auto window_frame = std::make_shared<media::VideoFrame>();
+            window_frame->width = 64;
+            window_frame->height = 64;
+            window_frame->stride = 64 * 4;
+            window_frame->rgba_pixels.resize(64 * 64 * 4, 255);
+            window_viewer->setFrame(window_frame);
+            window_workspace.setPreviewWidget(window_viewer);
+            window_workspace.setActive(true);
+            window_workspace.show();
+            application.processEvents();
+
+            auto* window_canvas = static_cast<ui::ColorNodeCanvas*>(
+                window_workspace.findChild<QWidget*>("colorNodeCanvas"));
+            auto* overlay = window_workspace.findChild<QWidget*>(
+                "colorPowerWindowOverlay");
+            require(window_canvas && overlay,
+                "The Color Viewer must provide its Power Window overlay.");
+            const auto* effect_node = color::findNode(window_graph, window_node_id);
+            require(effect_node != nullptr,
+                "The Power Window UI fixture must contain a correction node.");
+            const auto node_point = window_canvas->mapFromScene(QPointF(
+                effect_node->x + 80.0, effect_node->y + 22.0));
+            QTest::mouseClick(window_canvas->viewport(), Qt::LeftButton,
+                Qt::NoModifier, node_point);
+            require(window_canvas->selectedNode() == window_node_id,
+                "The Power Window overlay must follow the selected correction node.");
+
+            const auto center = overlay->rect().center();
+            const auto extent = std::max(12, std::min(overlay->width(),
+                overlay->height()) / 8);
+            require(trigger_overlay_action(overlay, center,
+                        QStringLiteral("Add Rectangle Power Window")),
+                "The Viewer context menu must offer rectangle Power Window creation.");
+            require(overlay->cursor().shape() == Qt::CrossCursor,
+                "Choosing a Power Window shape must arm Viewer drawing.");
+            drag_overlay(overlay, center - QPoint(extent, extent),
+                center + QPoint(extent, extent));
+            require(overlay->cursor().shape() == Qt::ArrowCursor,
+                "A Power Window drag must complete its drawing gesture.");
+            application.processEvents();
+            auto* window_list = window_workspace.findChild<QListWidget*>(
+                "colorPowerWindowList");
+            require(color::findNode(window_graph, window_node_id)->power_windows.size() == 1,
+                "The Viewer gesture must update the selected node graph.");
+            require(window_list && window_list->count() == 1,
+                "Dragging in the Viewer must create a Power Window in the selected node.");
+
+            const auto second_start = center + QPoint(extent * 3 / 2, extent * 3 / 2);
+            require(trigger_overlay_action(overlay, second_start,
+                        QStringLiteral("Add Ellipse Power Window")),
+                "The Viewer context menu must offer ellipse Power Window creation.");
+            drag_overlay(overlay, second_start, second_start + QPoint(extent, extent));
+            QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+            application.processEvents();
+            window_list = window_workspace.findChild<QListWidget*>(
+                "colorPowerWindowList");
+            auto* combine_mode = window_workspace.findChild<QComboBox*>(
+                "colorPowerWindowCombineMode");
+            auto* softness = window_workspace.findChild<QDoubleSpinBox*>(
+                "colorPowerWindowSoftness");
+            auto* invert = window_workspace.findChild<QCheckBox*>(
+                "colorPowerWindowInvert");
+            require(window_list && window_list->count() == 2 && combine_mode &&
+                        softness && invert,
+                "The Inspector must list multiple windows and expose their settings.");
+            require(window_list->currentRow() == 1,
+                "Adding a Power Window must select the new window in the Inspector.");
+            combine_mode->setCurrentIndex(combine_mode->findData(
+                static_cast<int>(color::WindowCombineMode::Subtract)));
+            softness->setValue(.05);
+            invert->setChecked(true);
+            require(QMetaObject::invokeMethod(softness, "editingFinished"),
+                "Power Window softness must commit through the Inspector.");
+            const auto* edited_node = color::findNode(window_graph, window_node_id);
+            require(edited_node && edited_node->power_windows.size() == 2,
+                "The Inspector edit must retain both Power Windows.");
+            require(edited_node->power_windows[1].kind ==
+                        creative_suite::composition::ShapeMaskKind::Ellipse,
+                "The selected second Power Window must remain an ellipse.");
+            require(edited_node->power_windows[1].combine_mode ==
+                        color::WindowCombineMode::Subtract,
+                "The Inspector must apply the selected window's ordered combine mode.");
+            require(std::abs(edited_node->power_windows[1].parameters.soft_edge - .05) < 1e-9,
+                "The Inspector must apply the selected window's softness.");
+            require(edited_node->power_windows[1].parameters.invert && window_edits >= 3,
+                "The Inspector must apply inversion and report its edit.");
+
+            int track_direction = 0;
+            color::PowerWindowId tracked_window = 0;
+            quint64 track_request_id = 0;
+            quint64 track_project_generation = 0;
+            quint64 track_revision = 0;
+            quint64 track_playback_generation = 0;
+            qint64 track_timeline_frame = 0;
+            color::Graph track_original_graph;
+            std::shared_ptr<std::atomic_bool> track_cancel;
+            window_workspace.setPowerWindowTrackRequestHandler(
+                [&](quint64 request_id, timeline::ClipId clip_id, color::NodeId node_id,
+                    color::PowerWindowId window_id, qint64 timeline_frame, int direction,
+                    quint64 project_generation, quint64 revision,
+                    quint64 playback_generation, color::Graph original_graph,
+                    std::shared_ptr<std::atomic_bool> cancel) {
+                    require(clip_id == 7 && node_id == window_node_id,
+                        "Viewer tracking must target the selected clip and node.");
+                    track_direction = direction;
+                    tracked_window = window_id;
+                    track_request_id = request_id;
+                    track_project_generation = project_generation;
+                    track_revision = revision;
+                    track_playback_generation = playback_generation;
+                    track_timeline_frame = timeline_frame;
+                    track_original_graph = std::move(original_graph);
+                    track_cancel = std::move(cancel);
+                });
+            const auto selected_window_center = second_start + QPoint(
+                extent / 2, extent / 2);
+            require(trigger_overlay_action(overlay, selected_window_center,
+                        QStringLiteral("Track Forward")) && track_direction == 1 &&
+                        tracked_window != 0 && track_cancel && !track_cancel->load(),
+                "The selected Power Window context menu must request forward tracking.");
+            auto* tracking_progress = window_workspace.findChild<QProgressDialog*>(
+                "colorPowerWindowTrackingProgress");
+            require(tracking_progress != nullptr,
+                "Power Window tracking must present nonmodal progress.");
+            QTest::keyClick(tracking_progress, Qt::Key_Escape);
+            application.processEvents();
+            require(track_cancel->load(),
+                "Canceling Power Window progress must signal worker cancellation.");
+            track_direction = 0;
+            require(trigger_overlay_action(overlay, selected_window_center,
+                        QStringLiteral("Track Backward")) && track_direction == -1,
+                "The selected Power Window context menu must request backward tracking.");
+            const auto graph_before_stale_result = window_graph;
+            auto stale_graph = window_graph;
+            require(color::setPowerWindowSettings(stale_graph, window_node_id,
+                        tracked_window, .12, false, color::WindowCombineMode::Subtract),
+                "The stale tracking fixture must differ from the current graph.");
+            window_workspace.acceptPowerWindowTrack(track_request_id,
+                track_project_generation, 7, window_node_id, tracked_window,
+                track_timeline_frame + 1, track_revision, track_playback_generation, window_graph,
+                stale_graph, 4, false, .8, false, {});
+            require(window_graph == graph_before_stale_result,
+                "An outdated Power Window tracking result must not replace the current grade.");
+
+            require(trigger_overlay_action(overlay, selected_window_center,
+                        QStringLiteral("Track Forward")) && track_direction == 1,
+                "A new Power Window run must start after a stale result is discarded.");
+            auto concurrent_graph = window_graph;
+            require(color::setPowerWindowSettings(concurrent_graph, window_node_id,
+                        tracked_window, .16, false, color::WindowCombineMode::Subtract),
+                "The concurrent tracking fixture must edit the active grade.");
+            window_graph = concurrent_graph;
+            window_workspace.setClips({{7, QStringLiteral("Window target")}}, 7,
+                concurrent_graph);
+            require(track_cancel->load(),
+                "A concurrent grade edit must cancel its active tracking request.");
+            window_workspace.acceptPowerWindowTrack(track_request_id,
+                track_project_generation, 7, window_node_id, tracked_window,
+                track_timeline_frame, track_revision, track_playback_generation, track_original_graph,
+                stale_graph, 5, false, .75, false, {});
+            require(window_graph == concurrent_graph,
+                "A tracking result must not overwrite a concurrent Color edit.");
+            window_workspace.setActive(false);
+        }
+
         {
             ui::ColorWorkspace drop_workspace;
             drop_workspace.resize(1100, 760);

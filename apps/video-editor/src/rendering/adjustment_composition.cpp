@@ -16,7 +16,9 @@ bool adjustmentRequiresProcessing(
         std::any_of(effects.begin(), effects.end(), [](const auto& effect) { return effect.enabled; }) ||
         (color_graph && std::any_of(color_graph->nodes.begin(), color_graph->nodes.end(),
             [](const color::Node& node) {
-                return node.type == color::NodeType::Effect && node.effect && node.effect->enabled;
+                return !node.power_windows.empty() ||
+                    (node.type == color::NodeType::Effect && node.effect && node.effect->enabled) ||
+                    (node.type == color::NodeType::Curves && node.curves && node.curves->enabled);
             }));
 }
 
@@ -45,7 +47,8 @@ std::optional<creative_suite::media::RgbaFrame> composeAdjustmentLayers(
         adjustment.frame = &*original;
         std::optional<creative_suite::media::RgbaFrame> color_adjusted;
         if (step.color_graph) {
-            color_adjusted = color::evaluate(*step.color_graph, *original, canceled);
+            color_adjusted = color::evaluateAtFrame(
+                *step.color_graph, *original, step.local_frame, canceled);
             if (!color_adjusted || should_cancel()) return {};
             adjustment.frame = &*color_adjusted;
             adjustment.effect_stack = {};

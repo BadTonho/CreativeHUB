@@ -757,6 +757,19 @@ void MainWindow::createWorkspace() {
                         revision, generation,
                         std::move(graph));
             });
+        color_workspace_->setPowerWindowTrackRequestHandler(
+            [this](quint64 request_id, timeline::ClipId clip_id,
+                   color::NodeId node_id, color::PowerWindowId window_id,
+                   qint64 frame, int direction, quint64 project_generation,
+                   quint64 revision, quint64 playback_generation,
+                   color::Graph graph,
+                   std::shared_ptr<std::atomic_bool> canceled) {
+                if (playback_controller_)
+                    playback_controller_->trackColorPowerWindow(request_id,
+                        clip_id, node_id, window_id, frame, direction,
+                        project_generation, revision, playback_generation,
+                        std::move(graph), std::move(canceled));
+            });
         color_workspace_->setGradeComparisonRequestHandler(
             [this](std::optional<playback::PlaybackColorGradeComparisonRequest> request) {
                 if (playback_controller_)
@@ -908,6 +921,7 @@ void MainWindow::refreshFusionSelection() {
 
 void MainWindow::refreshColorSelection() {
     if (color_workspace_ == nullptr) return;
+    color_workspace_->setProjectGeneration(project_generation_);
     struct OrderedClip {
         std::int64_t start = 0;
         std::size_t track = 0;
@@ -938,7 +952,8 @@ void MainWindow::refreshColorSelection() {
             }
             ordered.push_back({clip.timeline_start_frame, track_index,
                 {clip.clip_id, std::move(name), std::move(thumbnail),
-                    clip.color_grade_versions}});
+                    clip.color_grade_versions, clip.timeline_start_frame,
+                    clip.timeline_duration_frames}});
         }
     }
     std::sort(ordered.begin(), ordered.end(), [](const OrderedClip& a, const OrderedClip& b) {

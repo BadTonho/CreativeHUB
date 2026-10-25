@@ -9,6 +9,9 @@
 #include <QImage>
 
 #include <functional>
+#include <atomic>
+#include <memory>
+#include <optional>
 #include <vector>
 
 class QDoubleSpinBox;
@@ -22,6 +25,7 @@ class QCheckBox;
 class QSlider;
 class QSplitter;
 class QVBoxLayout;
+class QProgressDialog;
 class PreviewWidget;
 
 namespace ui {
@@ -33,6 +37,8 @@ public:
         QString name;
         QImage thumbnail;
         std::vector<timeline::ColorGradeVersion> grade_versions;
+        qint64 timeline_start_frame = 0;
+        qint64 duration_frames = 0;
     };
     struct StillItem {
         QString id;
@@ -68,6 +74,11 @@ public:
     void setColorInputFrameRequestHandler(std::function<void(quint64,
         timeline::ClipId, color::NodeId, qint64, quint64, quint64, quint64,
         color::Graph)> handler);
+    void setPowerWindowTrackRequestHandler(std::function<void(quint64,
+        timeline::ClipId, color::NodeId, color::PowerWindowId, qint64, int,
+        quint64, quint64, quint64, color::Graph,
+        std::shared_ptr<std::atomic_bool>)> handler);
+    void setProjectGeneration(quint64 generation) noexcept;
     void setGradeComparisonRequestHandler(
         std::function<void(std::optional<playback::PlaybackColorGradeComparisonRequest>)> handler);
     void acceptScopeFrame(quint64 request_id, playback::VideoFramePtr frame,
@@ -77,6 +88,16 @@ public:
         color::NodeId node_id, playback::VideoFramePtr frame, qint64 timeline_frame,
         quint64 delivery_epoch, quint64 composition_revision,
         quint64 playback_generation);
+    void acceptPowerWindowTrackProgress(quint64 request_id,
+        qint64 completed_frames, qint64 total_frames);
+    void acceptPowerWindowTrack(quint64 request_id,
+        quint64 project_generation, timeline::ClipId clip_id,
+        color::NodeId node_id, color::PowerWindowId window_id,
+        qint64 timeline_frame,
+        quint64 composition_revision, quint64 playback_generation,
+        color::Graph original_graph, color::Graph tracked_graph,
+        qint64 stop_frame, bool reached_end, double confidence,
+        bool canceled, const QString& error);
     void acceptGradeComparisonFrame(quint64 request_id, quint64 project_generation,
         timeline::ClipId clip_id, const std::string& version_id,
         rendering::PreviewFramePayload frame);
@@ -110,6 +131,9 @@ private:
     void applySelectedGradeVersion();
     void renameSelectedGradeVersion();
     void removeSelectedGradeVersion();
+    void requestPowerWindowTrack(color::PowerWindowId window_id, int direction);
+    void cancelPowerWindowTracking();
+    void refreshPowerWindowOverlay();
 
     QWidget* preview_container_ = nullptr;
     QSplitter* upper_splitter_ = nullptr;
@@ -133,6 +157,7 @@ private:
     QPushButton* rename_grade_version_button_ = nullptr;
     QPushButton* remove_grade_version_button_ = nullptr;
     ColorNodeCanvas* nodes_ = nullptr;
+    QWidget* power_window_overlay_ = nullptr;
     QComboBox* node_kind_ = nullptr;
     QPushButton* add_branch_button_ = nullptr;
     QWidget* controls_ = nullptr;
@@ -140,6 +165,8 @@ private:
     QComboBox* primary_grade_mode_ = nullptr;
     QLabel* waveform_ = nullptr;
     QLabel* matte_preview_ = nullptr;
+    QLabel* power_window_status_ = nullptr;
+    QProgressDialog* power_window_progress_ = nullptr;
     QComboBox* matte_preview_mode_ = nullptr;
     QComboBox* scope_mode_ = nullptr;
     QTimer* waveform_timer_ = nullptr;
@@ -162,6 +189,10 @@ private:
     std::function<void(quint64, qint64, quint64, quint64)> scope_frame_request_handler_;
     std::function<void(quint64, timeline::ClipId, color::NodeId, qint64,
         quint64, quint64, quint64, color::Graph)> color_input_frame_request_handler_;
+    std::function<void(quint64, timeline::ClipId, color::NodeId,
+        color::PowerWindowId, qint64, int, quint64, quint64, quint64,
+        color::Graph,
+        std::shared_ptr<std::atomic_bool>)> power_window_track_request_handler_;
     std::function<void(std::optional<playback::PlaybackColorGradeComparisonRequest>)>
         grade_comparison_request_handler_;
     std::function<void()> capture_still_handler_;
@@ -189,6 +220,16 @@ private:
     rendering::PreviewFramePayload active_scope_identity_;
     quint64 active_color_input_request_id_ = 0;
     rendering::PreviewFramePayload active_color_input_identity_;
+    quint64 project_generation_ = 0;
+    quint64 next_power_window_request_id_ = 1;
+    quint64 active_power_window_request_id_ = 0;
+    std::shared_ptr<std::atomic_bool> power_window_cancel_flag_;
+    std::optional<color::PowerWindowId> selected_power_window_;
+    qint64 selected_clip_start_frame_ = 0;
+    qint64 selected_clip_duration_frames_ = 0;
+    std::optional<color::NodeId> power_window_status_node_;
+    qint64 power_window_stop_frame_ = -1;
+    double power_window_confidence_ = 0.0;
 };
 
 }  // namespace ui

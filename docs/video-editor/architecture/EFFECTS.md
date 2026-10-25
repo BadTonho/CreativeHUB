@@ -31,7 +31,7 @@ canvas creates a selected, disconnected effect node at the drop position. It
 does not connect the new node even when dropped over an existing node or cable;
 connect it using the Color canvas ports. The graph model validates and stores
 the node through the existing Timeline command, dirty-state, Preview/export,
-and CSP v39 paths. Curves remains a Color-specific canvas context-menu node
+and CSP v40 paths. Curves remains a Color-specific canvas context-menu node
 and is not part of this catalog.
 
 In Fusion, drag from Effects or Favorites to create a node at the drop position,
@@ -176,11 +176,17 @@ path. Allocation and processing failures return to the CPU frame path; branched
 Color graphs continue through the CPU graph evaluator. Filter parameters,
 enabled states, connections, mixer weights and positions are Timeline project
 data; caches and temporary preview state are not added by this library. The Video Editor persists graphs
-and named per-clip snapshots in CSP v39 as described in [PROJECT.md](PROJECT.md).
+and named per-clip snapshots in CSP v40 as described in [PROJECT.md](PROJECT.md).
 Versions 1–37 migrate without Curves nodes, versions through v38 receive neutral
 matte refinement values, and versions through v36 start with
 no saved grade versions. Copy/apply transfers only the current graph; saved
 versions remain owned by their clip.
+
+Power Windows are Video Editor graph data rather than shared catalog effects.
+Rectangles and ellipses combine in list order and mask the selected correction;
+Curves intersects that coverage with its qualifier. These graphs use the shared
+CPU Color evaluator for Preview and export, preserving input alpha. GPU-native
+Power Window passes are not implemented.
 
 `applyColorAdjustment()` is a fused processing entry point for Color
 Adjustment. It applies normalized RGB offset, contrast around the configured

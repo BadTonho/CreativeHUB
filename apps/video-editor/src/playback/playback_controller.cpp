@@ -165,6 +165,24 @@ PlaybackController::PlaybackController(
                 project_generation, clip_id, std::move(version_id),
                 std::move(frame)});
         }, Qt::QueuedConnection);
+    QObject::connect(worker_, &PlaybackWorker::colorPowerWindowTrackProgress, this,
+        [this](quint64 request_id, qint64 completed_frames, qint64 total_frames) {
+            emitEvent(PlaybackColorPowerWindowTrackProgressEvent{
+                request_id, completed_frames, total_frames});
+        }, Qt::QueuedConnection);
+    QObject::connect(worker_, &PlaybackWorker::colorPowerWindowTrackReady, this,
+        [this](quint64 request_id, timeline::ClipId clip_id,
+               color::NodeId node_id, color::PowerWindowId window_id,
+               qint64 timeline_frame,
+               quint64 project_generation, quint64 composition_revision,
+               quint64 generation, color::Graph original_graph,
+               color::Graph tracked_graph, qint64 stop_frame, bool reached_end,
+               double confidence, bool canceled, QString error) {
+            emitEvent(PlaybackColorPowerWindowTrackReadyEvent{request_id, clip_id,
+                node_id, window_id, timeline_frame, project_generation, composition_revision,
+                generation, std::move(original_graph), std::move(tracked_graph),
+                stop_frame, reached_end, confidence, canceled, std::move(error)});
+        }, Qt::QueuedConnection);
     worker_thread_.start();
 }
 
@@ -538,6 +556,24 @@ void PlaybackController::requestColorInputFrame(quint64 request_id,
             project_generation, delivery_epoch, composition_revision,
             playback_generation,
             std::move(graph));
+    });
+}
+
+void PlaybackController::trackColorPowerWindow(quint64 request_id,
+    timeline::ClipId clip_id, color::NodeId node_id,
+    color::PowerWindowId window_id, qint64 timeline_frame, int direction,
+    quint64 project_generation, quint64 composition_revision,
+    quint64 playback_generation, color::Graph graph,
+    std::shared_ptr<std::atomic_bool> canceled) {
+    if (!available() || request_id == 0 || clip_id == 0 || !canceled ||
+        (direction != 1 && direction != -1)) return;
+    queueWorker([request_id, clip_id, node_id, window_id, timeline_frame,
+                 direction, project_generation, composition_revision,
+                 playback_generation, graph = std::move(graph),
+                 canceled = std::move(canceled)](PlaybackWorker& worker) mutable {
+        worker.trackColorPowerWindow(request_id, clip_id, node_id, window_id,
+            timeline_frame, direction, project_generation, composition_revision,
+            playback_generation, std::move(graph), std::move(canceled));
     });
 }
 

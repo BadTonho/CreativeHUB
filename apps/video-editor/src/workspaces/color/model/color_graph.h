@@ -1,6 +1,7 @@
 #pragma once
 
 #include <creative_suite/effects/effects.h>
+#include <creative_suite/composition/shape_mask.h>
 
 #include <cstdint>
 #include <optional>
@@ -11,6 +12,13 @@
 namespace color {
 
 using NodeId = std::uint64_t;
+using PowerWindowId = std::uint64_t;
+
+enum class WindowCombineMode : std::uint8_t {
+    Add,
+    Subtract,
+    Intersect,
+};
 
 enum class NodeType {
     Input,
@@ -39,6 +47,17 @@ struct CurvesNode {
     friend bool operator==(const CurvesNode&, const CurvesNode&) = default;
 };
 
+struct PowerWindow {
+    PowerWindowId id = 0;
+    creative_suite::composition::ShapeMaskKind kind =
+        creative_suite::composition::ShapeMaskKind::Rectangle;
+    creative_suite::composition::ShapeMaskParameters parameters;
+    creative_suite::composition::ShapeMaskKeyframes keyframes;
+    WindowCombineMode combine_mode = WindowCombineMode::Add;
+
+    friend bool operator==(const PowerWindow&, const PowerWindow&) = default;
+};
+
 struct Node {
     NodeId id = 0;
     NodeType type = NodeType::Input;
@@ -46,6 +65,7 @@ struct Node {
     double y = 0.0;
     std::optional<creative_suite::effects::EffectInstance> effect;
     std::optional<CurvesNode> curves;
+    std::vector<PowerWindow> power_windows;
 
     friend bool operator==(const Node&, const Node&) = default;
 };
@@ -63,6 +83,7 @@ struct Graph {
     NodeId next_id = 1;
     std::vector<Node> nodes;
     std::vector<Connection> connections;
+    PowerWindowId next_window_id = 1;
 
     friend bool operator==(const Graph&, const Graph&) = default;
 };
@@ -103,6 +124,27 @@ effectInstancesInOrder(const Graph& graph);
     creative_suite::effects::CurvesPointList points);
 [[nodiscard]] bool setCurvesQualifier(Graph& graph, NodeId id,
     creative_suite::effects::TonalQualifier qualifier);
+[[nodiscard]] std::optional<PowerWindowId> addPowerWindow(
+    Graph& graph, NodeId node_id,
+    creative_suite::composition::ShapeMaskKind kind);
+[[nodiscard]] bool removePowerWindow(
+    Graph& graph, NodeId node_id, PowerWindowId window_id);
+[[nodiscard]] bool reorderPowerWindow(
+    Graph& graph, NodeId node_id, std::size_t from, std::size_t to);
+[[nodiscard]] bool setPowerWindowSettings(
+    Graph& graph, NodeId node_id, PowerWindowId window_id,
+    double soft_edge, bool invert, WindowCombineMode combine_mode);
+[[nodiscard]] bool setPowerWindowGeometry(
+    Graph& graph, NodeId node_id, PowerWindowId window_id,
+    std::int64_t local_frame,
+    const creative_suite::composition::ShapeMaskParameters& geometry);
+[[nodiscard]] bool setPowerWindowTrack(
+    Graph& graph, NodeId node_id, PowerWindowId window_id,
+    const creative_suite::composition::ShapeMaskParameters& base,
+    creative_suite::composition::ShapeMaskKeyframes keyframes);
+[[nodiscard]] bool clearPowerWindowTrack(
+    Graph& graph, NodeId node_id, PowerWindowId window_id);
+[[nodiscard]] bool hasPowerWindows(const Graph& graph) noexcept;
 [[nodiscard]] bool setEffectParameter(
     Graph& graph, NodeId id, std::string_view parameter, double value);
 [[nodiscard]] bool setMixerInputWeight(

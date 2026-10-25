@@ -811,6 +811,11 @@ void runColorGradeVersionCommands() {
                 creative_suite::effects::makeDefaultInstance("video.saturation")) &&
             color::validate(source_graph),
         "Could not prepare a branched Color graph with a disabled effect.");
+    const auto source_window = color::addPowerWindow(source_graph,
+        source_effect_nodes.front(),
+        creative_suite::composition::ShapeMaskKind::Ellipse);
+    require(source_window && color::validate(source_graph),
+        "Could not add a static Power Window to the saved grade fixture.");
     require(service.execute(application::SetClipColorGraphCommand{
         source_id, source_graph}).changed(),
         "The source clip could not receive its Color correction graph.");
@@ -913,6 +918,8 @@ void runColorGradeVersionCommands() {
     const auto adjustment = service.execute(application::AddAdjustmentClipCommand{
         new_track.affected_track_ids.front(), 0, 60});
     require(adjustment.changed() && !adjustment.affected_clip_ids.empty() &&
+            service.execute(application::SetClipColorGraphCommand{
+                adjustment.affected_clip_ids.front(), source_graph}).changed() &&
             service.execute(application::SetClipColorGradeVersionsCommand{
                 adjustment.affected_clip_ids.front(), source_versions}).changed(),
         "Could not prepare an adjustment clip with saved Color grade versions.");
@@ -923,8 +930,10 @@ void runColorGradeVersionCommands() {
         : session.timeline().locateClip(duplicated.affected_clip_ids.front());
     require(duplicated.changed() && duplicate_location &&
             session.timeline().tracks()[duplicate_location->track_index]
-                .clips[duplicate_location->clip_index].color_grade_versions == source_versions,
-        "Duplicating an adjustment clip must copy its named Color grade versions.");
+                .clips[duplicate_location->clip_index].color_grade_versions == source_versions &&
+            session.timeline().tracks()[duplicate_location->track_index]
+                .clips[duplicate_location->clip_index].color_graph == source_graph,
+        "Duplicating an adjustment clip must copy its Power Window graph and named grade versions.");
 
     application::EditorSession fusion_session;
     application::TimelineCommandService fusion_service(fusion_session);

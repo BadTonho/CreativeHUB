@@ -119,9 +119,53 @@ QJsonObject colorEffectJson(const creative_suite::effects::EffectInstance& effec
     return object;
 }
 
+void writeCurveEasing(QJsonObject& object, const timeline::Keyframe& key);
+
+const char* powerWindowKindName(creative_suite::composition::ShapeMaskKind kind) {
+    return kind == creative_suite::composition::ShapeMaskKind::Ellipse
+        ? "ellipse" : "rectangle";
+}
+
+const char* windowCombineModeName(color::WindowCombineMode mode) {
+    switch (mode) {
+    case color::WindowCombineMode::Subtract: return "subtract";
+    case color::WindowCombineMode::Intersect: return "intersect";
+    case color::WindowCombineMode::Add: return "add";
+    }
+    return "add";
+}
+
+QJsonObject powerWindowJson(const color::PowerWindow& window) {
+    using creative_suite::composition::shapeMaskValue;
+    const char* names[]{"center_x", "center_y", "width", "height", "rotation"};
+    QJsonObject parameters;
+    for (std::size_t index = 0; index < 5; ++index)
+        parameters.insert(QLatin1String(names[index]),
+            shapeMaskValue(window.parameters, index));
+    parameters.insert("soft_edge", window.parameters.soft_edge);
+    parameters.insert("invert", window.parameters.invert);
+    QJsonObject keyframes;
+    for (std::size_t index = 0; index < 5; ++index) {
+        QJsonArray values;
+        for (const auto& key : window.keyframes[index]) {
+            QJsonObject item;
+            item.insert("frame", static_cast<qint64>(key.frame));
+            item.insert("value", key.value);
+            writeCurveEasing(item, key);
+            values.append(item);
+        }
+        keyframes.insert(QLatin1String(names[index]), values);
+    }
+    return {{"id", static_cast<qint64>(window.id)},
+        {"kind", powerWindowKindName(window.kind)},
+        {"combine", windowCombineModeName(window.combine_mode)},
+        {"parameters", parameters}, {"keyframes", keyframes}};
+}
+
 QJsonObject colorGraphJson(const color::Graph& graph) {
     QJsonObject object;
     object.insert("next_id", static_cast<qint64>(graph.next_id));
+    object.insert("next_window_id", static_cast<qint64>(graph.next_window_id));
     QJsonArray nodes;
     for (const auto& node : graph.nodes) {
         QJsonObject value;
@@ -134,6 +178,10 @@ QJsonObject colorGraphJson(const color::Graph& graph) {
             value.insert("curves", QJsonObject{{"enabled", node.curves->enabled},
                 {"parameters", videoCurvesJson(node.curves->parameters)}});
         }
+        QJsonArray windows;
+        for (const auto& window : node.power_windows)
+            windows.append(powerWindowJson(window));
+        value.insert("power_windows", windows);
         nodes.append(value);
     }
     object.insert("nodes", nodes);

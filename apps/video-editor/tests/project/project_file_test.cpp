@@ -486,6 +486,51 @@ int main(int argc, char** argv) {
                     restored_curves.timeline_tracks.front().clips.front().color_grade_versions ==
                         curves_project.timeline_tracks.front().clips.front().color_grade_versions,
                     "CSP v39 must round-trip curve families, qualifier refinements and grade snapshots.");
+            auto window_graph = curves_graph;
+            const auto window_id = color::addPowerWindow(window_graph, curves_id,
+                creative_suite::composition::ShapeMaskKind::Ellipse);
+            auto window_geometry = creative_suite::composition::ShapeMaskParameters{};
+            window_geometry.center_x = .37;
+            window_geometry.center_y = .62;
+            window_geometry.width = .28;
+            window_geometry.height = .35;
+            auto window_keys = creative_suite::composition::ShapeMaskKeyframes{};
+            window_keys[0] = {{0, .37}, {12, .71}};
+            window_keys[4] = {{0, -4.0}, {12, 24.0}};
+            require(window_id && color::setPowerWindowGeometry(window_graph, curves_id,
+                        *window_id, 0, window_geometry) &&
+                    color::setPowerWindowSettings(window_graph, curves_id, *window_id,
+                        .035, true, color::WindowCombineMode::Add) &&
+                    color::setPowerWindowTrack(window_graph, curves_id, *window_id,
+                        window_geometry, window_keys),
+                "Could not create an animated CSP v40 Power Window fixture.");
+            auto window_project = curves_project;
+            window_project.timeline_tracks.front().clips.front().color_graph = window_graph;
+            window_project.timeline_tracks.front().clips.front().color_grade_versions = {
+                {"window-version-1", "Tracked Window", window_graph}};
+            const auto window_path = directory / "color-power-windows-v40.csp";
+            project::save(window_path, window_project);
+            const auto restored_window = project::load(window_path);
+            require(restored_window.timeline_tracks.front().clips.front().color_graph ==
+                        window_graph &&
+                    restored_window.timeline_tracks.front().clips.front().color_grade_versions ==
+                        window_project.timeline_tracks.front().clips.front().color_grade_versions,
+                "CSP v40 must round-trip window geometry, animation, settings and grade snapshots.");
+            std::ifstream window_file(window_path, std::ios::binary);
+            const std::string window_text{
+                std::istreambuf_iterator<char>(window_file),
+                std::istreambuf_iterator<char>()};
+            auto legacy_window = QJsonDocument::fromJson(QByteArray(
+                window_text.data(), static_cast<qsizetype>(window_text.size()))).object();
+            legacy_window.insert("version", 39);
+            const auto legacy_window_path = directory / "color-power-windows-v39.csp";
+            writeText(legacy_window_path,
+                QJsonDocument(legacy_window).toJson().toStdString());
+            const auto migrated_window = project::load(legacy_window_path);
+            require(migrated_window.timeline_tracks.front().clips.front().color_graph &&
+                    !color::hasPowerWindows(*migrated_window.timeline_tracks.front().clips
+                        .front().color_graph),
+                "CSP v39 must ignore v40 Power Window fields and open without windows.");
             std::ifstream curves_file(curves_path, std::ios::binary);
             const std::string curves_text{
                 std::istreambuf_iterator<char>(curves_file),
@@ -677,7 +722,7 @@ int main(int argc, char** argv) {
         require(saved_json.find("\"track_id\": 1") != std::string::npos &&
                     saved_json.find("\"clip_id\": 1") != std::string::npos,
                 "Stable track and clip identifiers were not written to the project.");
-        require(saved_json.find("\"version\": 39") != std::string::npos &&
+        require(saved_json.find("\"version\": 40") != std::string::npos &&
                     saved_json.find("\"render_start_time_us\": 1234567") != std::string::npos &&
                     saved_json.find("\"frame_rate\"") != std::string::npos &&
                     saved_json.find("\"numerator\": 30000") != std::string::npos &&
@@ -1522,10 +1567,10 @@ int main(int argc, char** argv) {
 
         writeText(
             project_path,
-            R"({"format":"creative-suite.main-editor","version":40,"media":[],"timeline":{"clips":[]}})");
+            R"({"format":"creative-suite.main-editor","version":41,"media":[],"timeline":{"clips":[]}})");
         try {
             static_cast<void>(project::load(project_path));
-            throw std::runtime_error("CSP v40 was accepted by the v39 reader.");
+            throw std::runtime_error("CSP v41 was accepted by the v40 reader.");
         } catch (const project::ProjectError& error) {
             require(error.code() == project::ProjectErrorCode::UnsupportedVersion,
                     "Unsupported version returned the wrong error category.");

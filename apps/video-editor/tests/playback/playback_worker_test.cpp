@@ -2062,6 +2062,27 @@ void validateVisualEffectPreview() {
                 graph_frames.back()->height == expected->height &&
                 graph_frames.back()->rgba_pixels == expected->rgba_pixels,
             "Preview must evaluate the Color graph before composing its frame.");
+
+    auto power_window_graph = color::fromEffectStack(std::vector{brightness});
+    const auto power_window_node = color::effectNodesInOrder(power_window_graph).front();
+    const auto power_window = color::addPowerWindow(power_window_graph,
+        power_window_node, creative_suite::composition::ShapeMaskKind::Ellipse);
+    require(power_window && !color::linearEffectStack(power_window_graph),
+            "A Power Window graph must select the shared CPU graph evaluation path.");
+    graph_layer.color_graph = power_window_graph;
+    graph_worker.setComposition({graph_layer}, {}, 605);
+    graph_worker.renderCompositionFrame(0, 0, 605);
+    const auto windowed_frame = color::evaluateAtFrame(power_window_graph, *still, 0);
+    std::optional<media::VideoFrame> expected_windowed;
+    if (windowed_frame) {
+        const std::vector<rendering::CompositionLayer> expected_layers{{
+            &*windowed_frame, timeline::Transform2D{}, {}}};
+        expected_windowed = rendering::FrameCompositor::compose(
+            1920, 1080, expected_layers);
+    }
+    require(graph_frames.size() == 2 && graph_frames.back() && expected_windowed &&
+                graph_frames.back()->rgba_pixels == expected_windowed->rgba_pixels,
+            "Preview must render Power Window graphs through the shared CPU evaluator.");
 }
 
 void validatePlaybackFrameMailbox() {

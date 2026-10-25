@@ -1283,6 +1283,23 @@ void MainWindow::handlePlaybackEvent(
                 color_workspace_->acceptGradeComparisonFrame(value.request_id,
                     value.project_generation, value.clip_id, value.version_id,
                     std::move(value.frame));
+        } else if constexpr (std::is_same_v<Event,
+                             playback::PlaybackColorPowerWindowTrackProgressEvent>) {
+            if (color_workspace_ != nullptr)
+                color_workspace_->acceptPowerWindowTrackProgress(value.request_id,
+                    value.completed_frames, value.total_frames);
+        } else if constexpr (std::is_same_v<Event,
+                             playback::PlaybackColorPowerWindowTrackReadyEvent>) {
+            if (color_workspace_ != nullptr &&
+                value.project_generation == project_generation_)
+                color_workspace_->acceptPowerWindowTrack(value.request_id,
+                    value.project_generation, value.clip_id, value.node_id,
+                    value.window_id, value.timeline_frame,
+                    value.composition_revision,
+                    value.playback_generation, std::move(value.original_graph),
+                    std::move(value.tracked_graph), value.stop_frame,
+                    value.reached_end, value.confidence, value.canceled,
+                    value.error);
         }
     }, event);
 }

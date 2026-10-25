@@ -1,6 +1,6 @@
 # Regression Testing
 
-## Color correction graph, Curves, Primary Grade, scopes and CSP v39
+## Color correction graph, Curves, Power Windows, tracking and CSP v40
 
 | Behavior | Verification |
 | --- | --- |
@@ -8,6 +8,11 @@
 | Lazy Color page, shared Viewer, clip strip, graph canvas, four scope modes and empty state, Edit dock restoration | `creative-suite-main-editor-color-workspace-integration`, `creative-suite-main-editor-color-workspace`, `creative-suite-main-editor-workspace-page-switch` |
 | Graph connection validity, cycle rejection, branch weights/mixing, layout, node add/remove and effect state/parameter edits | `creative-suite-main-editor-color-graph`, `creative-suite-main-editor-color-workspace`, `creative-suite-main-editor-timeline-command-service`, `creative-suite-main-editor-color-workspace-integration` |
 | Graph edits in shared Undo/Redo, clip duplication/split and project reopen | `creative-suite-main-editor-adjustment`, `creative-suite-main-editor-project`, Edit controller, `creative-suite-main-editor-color-workspace-integration` |
+| Rect/Ellipse windows, ordered Add/Subtract/Intersect, reordering, softness, inversion, Curves qualifier combination, correction mix and alpha preservation | `creative-suite-main-editor-color-graph`, `creative-suite-main-editor-timeline`, `creative-suite-main-editor-timeline-command-service` |
+| Power Window graph rejection by the linear GPU effect-stack path and matching CPU graph evaluation in Preview | `creative-suite-main-editor-color-graph`, `creative-suite-main-editor-playback-worker-errors` |
+| Viewer context-menu creation, drag geometry, selected-window Inspector controls, tracking menu directions, progress, Escape cancellation, concurrent-edit cancellation and stale-result rejection | `creative-suite-main-editor-color-workspace` |
+| Synthetic translation, uniform scale and rotation tracking in both directions, confidence loss and cancellation | `creative-suite-main-editor-power-window-tracker` |
+| Power Window geometry keyframe rebase through split and trim, including saved graph versions and adjustment duplication | `creative-suite-main-editor-timeline`, `creative-suite-main-editor-timeline-command-service` |
 | Copy/apply complete graphs between clips; preserve target versions; save/apply/rename/remove named versions; reject empty/duplicate names; undo and redo each action | `creative-suite-main-editor-color-workspace`, `creative-suite-main-editor-timeline-command-service`, `creative-suite-main-editor-project` |
 | Split and duplicate propagate a clip's named versions; copied grade application transfers graph data without source versions | `creative-suite-main-editor-timeline-command-service`, `creative-suite-main-editor-adjustment` |
 | Primary Grade neutral output, parameter limits, Log tonal response, alpha, and shared CPU/OpenGL/Vulkan math | `creative-suite-effects-primary-grade`, `creative-suite-composition-opengl-color`, `creative-suite-composition-vulkan-color`, `creative-suite-main-editor-color-graph`, `creative-suite-main-editor-gpu-color` and `creative-suite-main-editor-vulkan-color` CPU/GPU PlaybackWorker Preview, adjustment composition and lossless export, plus the broader composition and GPU Timeline suites |
@@ -19,7 +24,7 @@
 | Gallery reference selection, stale async replies, unavailable/removal reset, Off/Split-screen/Wipe state, page re-entry, and clip/playhead/history/project invariance | `creative-suite-main-editor-color-workspace`, `creative-suite-main-editor-color-workspace-integration` |
 | Saved-grade Compare Version selection and mode behavior, exclusive Gallery/version references, re-entry and clearing after clip/project/version changes, graph/playhead/dirty/history invariance, synchronized temporary alternate composition, stale and failed responses | `creative-suite-main-editor-color-workspace`, `creative-suite-main-editor-color-workspace-integration`, `creative-suite-main-editor-playback-worker-errors`, `creative-suite-main-editor-preview`, `creative-suite-main-editor-opengl-preview`, `creative-suite-composition-vulkan` |
 | Synthetic comparison pixels: CPU/OpenGL/Vulkan Off identity, left/right split, aspect fit, wipe at 0/50/100%, and draggable divider; Vulkan presentation API modes and endpoints | `creative-suite-main-editor-preview`, `creative-suite-main-editor-opengl-preview`, `creative-suite-composition-vulkan` |
-| CSP v39 matte-refinement save/reopen; v38 receives neutral defaults; v40 rejection, autosave/recovery and Hub backup/restoration with Gallery sidecars | `creative-suite-main-editor-project`, `creative-suite-main-editor-autosave`, `hub-backup-format-test`, `hub-backup-manager-test` |
+| CSP v40 Power Window save/reopen and v39 migration; v41 rejection; autosave/recovery and Hub backup/restoration with animated window tracks and Gallery sidecars | `creative-suite-main-editor-project`, `creative-suite-main-editor-autosave`, `hub-backup-format-test`, `hub-backup-manager-test` |
 | Qualifier refinement limits, 3x3 denoise, clean levels, In/Out, Gaussian edges, exact alpha, cancellation, CPU/OpenGL/Vulkan parity within one RGB level, and bounded OpenGL resource refusal with a valid CPU reference path | `creative-suite-effects-video-curves`, `creative-suite-main-editor-color-graph`, `creative-suite-composition-opengl-color`, `creative-suite-composition-vulkan-color`, `creative-suite-main-editor-color-workspace` |
 | Selected Curves input after upstream nodes, disabled-node inspection, linear GPU-prefix selection, and stale preview rejection after a Viewer frame change | `creative-suite-main-editor-color-graph`, `creative-suite-main-editor-color-workspace`, `creative-suite-main-editor-playback-worker-errors`, `creative-suite-composition-opengl-color`, `creative-suite-composition-vulkan-color` |
 
@@ -73,7 +78,7 @@ On the Grade Versions panel, save the current graph, rename the snapshot, apply
 it after changing the current graph, and remove it; confirm each operation is
 one shared Undo/Redo step. Save/reopen and restore a Hub backup with Gallery
 stills and a named grade version. Confirm a v36 project opens with no saved
-versions. Confirm a v37 project opens without Curves and a future v40 project is
+versions. Confirm a v37 project opens without Curves and a future v41 project is
 refused by the Hub. This manual visual check is documented and remains pending; it is not
 run as part of the current implementation pass.
 
@@ -92,6 +97,26 @@ leave Color; confirm the catalog returns to its dock and the prior dock layout
 is restored. Confirm the Effects button continues to open the dock group in Edit
 and Fusion. This manual interaction check remains pending until performed in
 the native UI.
+
+Manual Power Window check: open a project with a visible video clip, select a
+correction node in Color, and right-click the Viewer to create a rectangle and
+an ellipse. Drag each outline to move it, resize from a corner, and rotate from
+its rotation handle. Select each window in the Inspector, change softness and
+inversion, set the second window to Subtract or Intersect, then reorder the
+list and verify the rendered correction follows the new order. Start Track
+Forward and Track Backward separately; confirm the progress dialog stays
+responsive, Escape cancels, confidence loss reports the stop frame, and no keys
+are written after that point. Edit the grade during a track and confirm the
+request is cancelled without overwriting the edit. Undo once to remove a
+completed tracking run and Redo to restore it. Switch to Edit and back to Color
+and confirm the clip's grade and windows remain. This native visual and
+interaction check is pending.
+
+Windows Release verification on 2026-10-25: all 12 focused Power Window,
+Color workspace, playback-worker, CSP v40 migration, split/trim, autosave,
+translation, and Hub backup tests passed. Power Window graphs use the shared
+CPU evaluator for Preview/export. Native visual interaction and cross-platform
+runtime acceptance remain pending.
 
 Windows Release verification on 2026-10-23: the focused Primary Grade CPU,
 OpenGL and Vulkan tests, Color UI and dedicated MainWindow Color integration,

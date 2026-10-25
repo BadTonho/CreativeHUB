@@ -501,6 +501,110 @@
         <source>Still %1</source>
         <translation>Still %1</translation>
     </message>
+    <message>
+        <source>Track Forward</source>
+        <translation>Rastrear para frente</translation>
+    </message>
+    <message>
+        <source>Track Backward</source>
+        <translation>Rastrear para trás</translation>
+    </message>
+    <message>
+        <source>Clear Track</source>
+        <translation>Limpar rastreamento</translation>
+    </message>
+    <message>
+        <source>Remove Window</source>
+        <translation>Remover janela</translation>
+    </message>
+    <message>
+        <source>Add Rectangle Power Window</source>
+        <translation>Adicionar janela retangular</translation>
+    </message>
+    <message>
+        <source>Add Ellipse Power Window</source>
+        <translation>Adicionar janela elíptica</translation>
+    </message>
+    <message>
+        <source>Tracking Power Window…</source>
+        <translation>Rastreando janela Power…</translation>
+    </message>
+    <message>
+        <source>Power Window Tracker</source>
+        <translation>Rastreador de janela Power</translation>
+    </message>
+    <message>
+        <source>Cancelling Power Window tracking…</source>
+        <translation>Cancelando rastreamento da janela Power…</translation>
+    </message>
+    <message>
+        <source>Tracking in progress…</source>
+        <translation>Rastreamento em andamento…</translation>
+    </message>
+    <message>
+        <source>Tracking reached the clip boundary (confidence %1%).</source>
+        <translation>O rastreamento chegou ao limite do clipe (confiança de %1%).</translation>
+    </message>
+    <message>
+        <source>Tracking stopped at clip frame %1 (confidence %2%).</source>
+        <translation>O rastreamento parou no quadro %1 do clipe (confiança de %2%).</translation>
+    </message>
+    <message>
+        <source>Last track stopped at clip frame %1 (confidence %2%).</source>
+        <translation>O último rastreamento parou no quadro %1 do clipe (confiança de %2%).</translation>
+    </message>
+    <message>
+        <source>Tracking result discarded because the grade or Viewer frame changed.</source>
+        <translation>Resultado do rastreamento descartado porque a correção ou o quadro do Viewer mudou.</translation>
+    </message>
+    <message>
+        <source>Move the playhead into the selected clip to track.</source>
+        <translation>Mova o indicador de reprodução para o clipe selecionado para rastrear.</translation>
+    </message>
+    <message>
+        <source>Drag to reorder windows; later operations combine in list order.</source>
+        <translation>Arraste para reordenar as janelas; as operações seguintes são combinadas na ordem da lista.</translation>
+    </message>
+    <message>
+        <source>Power Windows</source>
+        <translation>Janelas Power</translation>
+    </message>
+    <message>
+        <source>Rectangle</source>
+        <translation>Retângulo</translation>
+    </message>
+    <message>
+        <source>Ellipse</source>
+        <translation>Elipse</translation>
+    </message>
+    <message>
+        <source>Combine</source>
+        <translation>Combinação</translation>
+    </message>
+    <message>
+        <source>Add</source>
+        <translation>Adicionar</translation>
+    </message>
+    <message>
+        <source>Subtract</source>
+        <translation>Subtrair</translation>
+    </message>
+    <message>
+        <source>Intersect</source>
+        <translation>Interseção</translation>
+    </message>
+    <message>
+        <source>Softness</source>
+        <translation>Suavidade</translation>
+    </message>
+    <message>
+        <source>Invert</source>
+        <translation>Inverter</translation>
+    </message>
+    <message>
+        <source>Tracker</source>
+        <translation>Rastreador</translation>
+    </message>
 </context>
 <context>
     <name>EditWorkspace</name>

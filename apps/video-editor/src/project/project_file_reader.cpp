@@ -224,6 +224,10 @@ creative_suite::effects::VideoCurvesParameters parseVideoCurves(
     return result;
 }
 
+timeline::Keyframe readCurveEasing(timeline::Keyframe key,
+    const QJsonObject& object, int version,
+    const std::filesystem::path& project_path);
+
 color::Graph parseColorGraph(const QJsonValue& value,
                              const std::filesystem::path& project_path,
                              int version) {
@@ -240,6 +244,14 @@ color::Graph parseColorGraph(const QJsonValue& value,
                   "Project JSON contains an incomplete Color correction graph.");
     color::Graph graph;
     graph.next_id = static_cast<color::NodeId>(next_id.toInteger());
+    if (version >= color_power_windows_format_version) {
+        const auto next_window_id = object.value("next_window_id");
+        if (!next_window_id.isDouble() || next_window_id.toInteger() <= 0)
+            throwJson(ProjectErrorCode::InvalidValue, project_path,
+                      "A CSP v40 Color graph is missing its Power Window ID counter.");
+        graph.next_window_id = static_cast<color::PowerWindowId>(
+            next_window_id.toInteger());
+    }
     for (const auto& node_value : nodes_value.toArray()) {
         if (!node_value.isObject())
             throwJson(ProjectErrorCode::InvalidValue, project_path,
@@ -318,6 +330,92 @@ color::Graph parseColorGraph(const QJsonValue& value,
         } else if (node_object.contains("curves")) {
             throwJson(ProjectErrorCode::InvalidValue, project_path,
                       "Only Color Curves nodes may contain curve settings.");
+        }
+        const auto windows_value = node_object.value("power_windows");
+        if (version >= color_power_windows_format_version && !windows_value.isArray())
+            throwJson(ProjectErrorCode::InvalidValue, project_path,
+                      "A CSP v40 Color node is missing its Power Windows array.");
+        if (version >= color_power_windows_format_version) {
+            if (!windows_value.isArray())
+                throwJson(ProjectErrorCode::InvalidValue, project_path,
+                          "A Color node contains an invalid Power Windows list.");
+            for (const auto& window_value : windows_value.toArray()) {
+                if (!window_value.isObject())
+                    throwJson(ProjectErrorCode::InvalidValue, project_path,
+                              "A Color graph contains an invalid Power Window.");
+                const auto window_object = window_value.toObject();
+                const auto window_id_value = window_object.value("id");
+                const auto kind = window_object.value("kind");
+                const auto combine = window_object.value("combine");
+                const auto parameters_value = window_object.value("parameters");
+                const auto keyframes_value = window_object.value("keyframes");
+                if (!window_id_value.isDouble() || window_id_value.toInteger() <= 0 || !kind.isString() ||
+                    !combine.isString() || !parameters_value.isObject() ||
+                    !keyframes_value.isObject())
+                    throwJson(ProjectErrorCode::InvalidValue, project_path,
+                              "A Color Power Window is missing required fields.");
+                color::PowerWindow window;
+                window.id = static_cast<color::PowerWindowId>(window_id_value.toInteger());
+                if (kind.toString() == QLatin1String("rectangle"))
+                    window.kind = creative_suite::composition::ShapeMaskKind::Rectangle;
+                else if (kind.toString() == QLatin1String("ellipse"))
+                    window.kind = creative_suite::composition::ShapeMaskKind::Ellipse;
+                else
+                    throwJson(ProjectErrorCode::InvalidValue, project_path,
+                              "A Color Power Window has an unknown shape.");
+                if (combine.toString() == QLatin1String("add"))
+                    window.combine_mode = color::WindowCombineMode::Add;
+                else if (combine.toString() == QLatin1String("subtract"))
+                    window.combine_mode = color::WindowCombineMode::Subtract;
+                else if (combine.toString() == QLatin1String("intersect"))
+                    window.combine_mode = color::WindowCombineMode::Intersect;
+                else
+                    throwJson(ProjectErrorCode::InvalidValue, project_path,
+                              "A Color Power Window has an unknown combine operation.");
+                const auto parameters = parameters_value.toObject();
+                const char* names[]{"center_x", "center_y", "width", "height", "rotation"};
+                for (std::size_t index = 0; index < 5; ++index) {
+                    const auto numeric = parameters.value(QLatin1String(names[index]));
+                    if (!numeric.isDouble())
+                        throwJson(ProjectErrorCode::InvalidValue, project_path,
+                                  "A Color Power Window is missing geometry.");
+                    creative_suite::composition::setShapeMaskValue(
+                        window.parameters, index, numeric.toDouble());
+                }
+                const auto soft_edge = parameters.value("soft_edge");
+                const auto invert = parameters.value("invert");
+                if (!soft_edge.isDouble() || !invert.isBool())
+                    throwJson(ProjectErrorCode::InvalidValue, project_path,
+                              "A Color Power Window has invalid refinement settings.");
+                window.parameters.soft_edge = soft_edge.toDouble();
+                window.parameters.invert = invert.toBool();
+                const auto keyframes = keyframes_value.toObject();
+                for (std::size_t index = 0; index < 5; ++index) {
+                    const auto values = keyframes.value(QLatin1String(names[index]));
+                    if (!values.isArray())
+                        throwJson(ProjectErrorCode::InvalidValue, project_path,
+                                  "A Color Power Window is missing an animation curve.");
+                    for (const auto& key_value : values.toArray()) {
+                        if (!key_value.isObject())
+                            throwJson(ProjectErrorCode::InvalidValue, project_path,
+                                      "A Color Power Window contains an invalid keyframe.");
+                        const auto key_object = key_value.toObject();
+                        const auto frame = requiredInteger(key_object, "frame", project_path);
+                        const auto numeric = key_object.value("value");
+                        if (frame < 0 || !numeric.isDouble() ||
+                            !std::isfinite(numeric.toDouble()))
+                            throwJson(ProjectErrorCode::InvalidValue, project_path,
+                                      "A Color Power Window contains invalid animation data.");
+                        window.keyframes[index].push_back(readCurveEasing(
+                            {frame, numeric.toDouble()}, key_object, version, project_path));
+                    }
+                }
+                if (!creative_suite::composition::validShapeMask(
+                        window.parameters, window.keyframes))
+                    throwJson(ProjectErrorCode::InvalidValue, project_path,
+                              "A Color Power Window contains out-of-range geometry.");
+                node.power_windows.push_back(std::move(window));
+            }
         }
         graph.nodes.push_back(std::move(node));
     }

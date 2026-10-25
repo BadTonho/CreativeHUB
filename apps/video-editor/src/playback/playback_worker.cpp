@@ -14,6 +14,7 @@
 #include "../media/still_image_decoder.h"
 #include "workspaces/fusion/nodes/evaluation/node_graph_evaluator.h"
 #include "workspaces/color/evaluation/color_graph_evaluator.h"
+#include "workspaces/color/evaluation/power_window_tracker.h"
 
 #include <QFileInfo>
 #include <QByteArray>
@@ -1871,6 +1872,219 @@ void PlaybackWorker::requestColorInputFrame(quint64 request_id,
     scope_readback_timer_->start();
 }
 
+void PlaybackWorker::trackColorPowerWindow(quint64 request_id,
+    timeline::ClipId clip_id, color::NodeId node_id,
+    color::PowerWindowId window_id, qint64 timeline_frame, int direction,
+    quint64 project_generation, quint64 requested_revision, quint64 generation,
+    color::Graph graph, std::shared_ptr<std::atomic_bool> cancel_flag) {
+    qint64 stop_frame = 0;
+    bool reached_end = false;
+    bool canceled_result = false;
+    double confidence = 0.0;
+    QString error;
+    auto tracked_graph = graph;
+    const auto canceled = [&] {
+        return (cancel_flag && cancel_flag->load(std::memory_order_acquire)) ||
+            generation != generation_ || requested_revision != composition_revision_;
+    };
+    try {
+        if (request_id == 0 || clip_id == 0 || node_id == 0 || window_id == 0 ||
+            !cancel_flag || (direction != 1 && direction != -1) ||
+            requested_revision != composition_revision_ || generation != generation_ ||
+            !color::validate(graph)) {
+            error = tr("The tracking request is no longer current.");
+        } else {
+            const auto target_session = std::find_if(composition_sessions_.begin(),
+                composition_sessions_.end(), [clip_id](const CompositionSession& session) {
+                    return session.spec.clip_id == clip_id;
+                });
+            if (target_session == composition_sessions_.end() ||
+                target_session->spec.kind == timeline::ClipKind::Audio ||
+                target_session->spec.segment_frame_count <= 0 ||
+                !target_session->spec.color_graph ||
+                *target_session->spec.color_graph != graph) {
+                error = tr("The selected clip graph is unavailable for tracking.");
+            } else {
+                const auto* node = color::findNode(graph, node_id);
+                const auto window = node ? std::find_if(node->power_windows.begin(),
+                    node->power_windows.end(), [window_id](const color::PowerWindow& item) {
+                        return item.id == window_id;
+                    }) : std::vector<color::PowerWindow>::const_iterator{};
+                if (!node || (node->type != color::NodeType::Effect &&
+                    node->type != color::NodeType::Curves) ||
+                    window == node->power_windows.end()) {
+                    error = tr("The selected Power Window no longer exists.");
+                } else {
+                    const auto& spec = target_session->spec;
+                    const qint64 last_local = spec.segment_frame_count - 1;
+                    const qint64 requested_local = timeline_frame - spec.timeline_start_frame;
+                    const qint64 start_local = std::clamp<qint64>(requested_local, 0, last_local);
+                    const qint64 end_local = direction > 0 ? last_local : 0;
+                    const qint64 total_frames = std::abs(end_local - start_local) + 1;
+                    const auto initial_geometry = creative_suite::composition::evaluateShapeMask(
+                        window->parameters, window->keyframes, start_local);
+                    color::PowerWindowTracker tracker;
+                    bool has_started = false;
+                    bool stop_for_error = false;
+                    const auto old_gpu_failure = gpu_composition_failed_;
+                    gpu_composition_failed_ = true;
+                    struct RestoreGpuFailure {
+                        bool& value;
+                        bool previous;
+                        ~RestoreGpuFailure() { value = previous; }
+                    } restore_gpu_failure{gpu_composition_failed_, old_gpu_failure};
+                    for (qint64 offset = 0; offset < total_frames; ++offset) {
+                        if (canceled()) { canceled_result = true; break; }
+                        const qint64 local_frame = start_local + direction * offset;
+                        if ((direction > 0 && local_frame < start_local) ||
+                            (direction < 0 && local_frame > start_local)) {
+                            error = tr("The tracking frame range overflowed.");
+                            stop_for_error = true;
+                            break;
+                        }
+                        const qint64 global_frame = spec.timeline_start_frame + local_frame;
+                        auto decoded = decodeCompositionLayers(global_frame, canceled);
+                        if (!decoded) {
+                            if (canceled()) canceled_result = true;
+                            else error = tr("The clip image could not be decoded for tracking.");
+                            stop_for_error = true;
+                            break;
+                        }
+                        const auto selected_layer = std::find_if(decoded->begin(), decoded->end(),
+                            [clip_id](const DecodedCompositionLayer& layer) {
+                                return layer.clip_id == clip_id;
+                            });
+                        if (selected_layer == decoded->end()) {
+                            error = tr("The selected clip has no image at the tracking frame.");
+                            stop_for_error = true;
+                            break;
+                        }
+                        std::optional<media::VideoFrame> adjustment_input;
+                        VideoFramePtr node_input;
+                        if (selected_layer->kind == timeline::ClipKind::Adjustment) {
+                            const auto selected_index = static_cast<std::size_t>(
+                                std::distance(decoded->begin(), selected_layer));
+                            std::vector<rendering::TimelineCompositionStep> lower_steps;
+                            lower_steps.reserve(selected_index);
+                            for (std::size_t index = 0; index < selected_index; ++index) {
+                                const auto& layer = (*decoded)[index];
+                                rendering::CompositionLayer composition_layer{
+                                    layer.frame.get(), layer.transform, layer.alpha_coverage};
+                                composition_layer.effect_stack =
+                                    composition_sessions_[layer.composition_session_index].spec.effects;
+                                rendering::TimelineCompositionStep step{
+                                    std::move(composition_layer),
+                                    layer.kind == timeline::ClipKind::Adjustment,
+                                    layer.color_graph, layer.local_frame};
+                                lower_steps.push_back(std::move(step));
+                            }
+                            if (!lower_steps.empty())
+                                adjustment_input = rendering::composeAdjustmentLayers(
+                                    composition_canvas_width_, composition_canvas_height_,
+                                    lower_steps, canceled);
+                            if (adjustment_input)
+                                node_input = std::make_shared<const media::VideoFrame>(
+                                    std::move(*adjustment_input));
+                        } else {
+                            node_input = selected_layer->color_input_frame;
+                        }
+                        if (!node_input || !usableRgbaFrame(*node_input)) {
+                            error = tr("The image entering the selected correction is unavailable.");
+                            stop_for_error = true;
+                            break;
+                        }
+                        auto input = color::evaluateNodeInputAtFrame(graph, node_id,
+                            *node_input, local_frame, canceled);
+                        if (!input) {
+                            if (canceled()) canceled_result = true;
+                            else error = tr("The selected correction input could not be evaluated.");
+                            stop_for_error = true;
+                            break;
+                        }
+                        if (!has_started) {
+                            has_started = tracker.begin(*input, local_frame,
+                                window->kind, initial_geometry);
+                            if (!has_started) {
+                                error = tr("The Power Window contains too few trackable image details.");
+                                stop_for_error = true;
+                                break;
+                            }
+                        } else if (!tracker.advance(*input, local_frame, canceled)) {
+                            if (canceled()) canceled_result = true;
+                            else error = tr("Tracking confidence fell below the reliable threshold.");
+                            stop_for_error = true;
+                            break;
+                        }
+                        const auto progress = offset + 1;
+                        if ((progress % 8) == 0 || progress == total_frames)
+                            emit colorPowerWindowTrackProgress(request_id, progress, total_frames);
+                        if (local_frame == end_local) reached_end = true;
+                        if (!tracker.active() && progress < total_frames) {
+                            error = tr("Tracking confidence fell below the reliable threshold.");
+                            stop_for_error = true;
+                            break;
+                        }
+                    }
+                    if (has_started && !canceled_result) {
+                        const auto track = tracker.result(reached_end);
+                        stop_frame = track.last_valid_frame;
+                        confidence = track.confidence;
+                        if (stop_for_error && error.isEmpty())
+                            error = tr("Tracking stopped before the clip boundary.");
+                        auto updated = graph;
+                        auto* updated_node = color::findNode(updated, node_id);
+                        auto updated_window = std::find_if(updated_node->power_windows.begin(),
+                            updated_node->power_windows.end(), [window_id](const auto& item) {
+                                return item.id == window_id;
+                            });
+                        // Clear old keys in the requested direction too, so a
+                        // confidence stop cannot leave stale keys from a prior run.
+                        const qint64 range_min = std::min(start_local, end_local);
+                        const qint64 range_max = std::max(start_local, end_local);
+                        auto merged = updated_window->keyframes;
+                        for (std::size_t property = 0; property < merged.size(); ++property) {
+                            std::erase_if(merged[property], [=](const auto& key) {
+                                return key.frame >= range_min && key.frame <= range_max;
+                            });
+                            const auto& addition = track.keyframes[property];
+                            merged[property].insert(merged[property].end(),
+                                addition.begin(), addition.end());
+                            std::sort(merged[property].begin(), merged[property].end(),
+                                [](const auto& left, const auto& right) {
+                                    return left.frame < right.frame;
+                                });
+                            merged[property].erase(std::unique(merged[property].begin(),
+                                merged[property].end(), [](const auto& left, const auto& right) {
+                                    return left.frame == right.frame;
+                                }), merged[property].end());
+                        }
+                        if (!color::setPowerWindowTrack(updated, node_id, window_id,
+                                updated_window->parameters, std::move(merged))) {
+                            error = tr("The tracked Power Window could not be saved to the graph.");
+                        } else {
+                            tracked_graph = std::move(updated);
+                        }
+                    }
+                }
+            }
+        }
+        canceled_result = canceled_result || canceled();
+    } catch (const std::exception& exception) {
+        error = tr("Power Window tracking failed: %1").arg(
+            QString::fromUtf8(exception.what()));
+        logging::Logger::instance().log(logging::Level::Error,
+            "color-power-window-tracker", "track_clip", exception.what(),
+            {{"clip_id", std::to_string(clip_id)},
+             {"node_id", std::to_string(node_id)},
+             {"window_id", std::to_string(window_id)},
+             {"request_id", std::to_string(request_id)}});
+    }
+    emit colorPowerWindowTrackReady(request_id, clip_id, node_id, window_id,
+        timeline_frame, project_generation, requested_revision, generation, std::move(graph),
+        std::move(tracked_graph), stop_frame, reached_end, confidence,
+        canceled_result, std::move(error));
+}
+
 void PlaybackWorker::pollScopeReadback() {
     using creative_suite::composition::OpenGlCompositionStatus;
     if (!pending_scope_readback_) {
@@ -3483,6 +3697,8 @@ PlaybackWorker::decodeCompositionLayers(
             adjustment.track_index = spec.track_index;
             adjustment.clip_index = spec.clip_index;
             adjustment.composition_session_index = request.session_index;
+            adjustment.local_frame = request.local_frame;
+            adjustment.color_graph = spec.color_graph;
             layers.push_back(std::move(adjustment));
             continue;
         }
@@ -3678,7 +3894,8 @@ PlaybackWorker::decodeCompositionLayers(
             !color::linearEffectStack(*spec.color_graph).has_value()) {
             if (!frame || !usableRgbaFrame(*frame))
                 throw media::MediaError("The Color graph requires an RGBA source frame.");
-            auto graded = color::evaluate(*spec.color_graph, *frame, should_cancel);
+            auto graded = color::evaluateAtFrame(
+                *spec.color_graph, *frame, request.local_frame, should_cancel);
             if (!graded)
                 throw media::MediaError("The Color correction graph could not produce a frame.");
             frame = std::make_shared<const media::VideoFrame>(std::move(*graded));
@@ -3712,6 +3929,7 @@ PlaybackWorker::decodeCompositionLayers(
                 : static_cast<std::uint64_t>(layer_decode_nanoseconds),
             forward_decode_diagnostics,
             request.session_index, std::move(native_frame), std::move(graph_texture)};
+        decoded_layer.local_frame = request.local_frame;
         if (spec.color_graph.has_value()) {
             decoded_layer.color_input_frame = std::move(color_input_frame);
             decoded_layer.color_input_texture = std::move(color_input_texture);
@@ -3798,8 +4016,8 @@ std::optional<media::VideoFrame> PlaybackWorker::composeCompositionLayers(
                     throw media::MediaError(
                         "The saved Color version input is unavailable as RGBA.");
                 }
-                auto evaluated = color::evaluate(*graph, *decoded.color_input_frame,
-                    should_cancel);
+                auto evaluated = color::evaluateAtFrame(*graph,
+                    *decoded.color_input_frame, decoded.local_frame, should_cancel);
                 if (!evaluated || should_cancel())
                     throw media::MediaError(
                         "The saved Color version could not produce an alternate frame.");
@@ -3827,6 +4045,7 @@ std::optional<media::VideoFrame> PlaybackWorker::composeCompositionLayers(
                 layers[index],
                 decoded_layers[index].kind == timeline::ClipKind::Adjustment};
             if (step.adjustment) step.color_graph = effective_graphs[index];
+            step.local_frame = decoded_layers[index].local_frame;
             steps.push_back(std::move(step));
         }
         const auto compose_on_cpu = [&]() {

@@ -340,7 +340,7 @@ std::optional<media::VideoFrame> composeFrame(
                         transform, effect_stack, &color_graph)) {
                     rendering::CompositionLayer operation;
                     operation.transform = transform;
-                    steps.push_back({operation, true, color_graph});
+                    steps.push_back({operation, true, color_graph, local_frame});
                 }
                 continue;
             }
@@ -493,7 +493,8 @@ std::optional<media::VideoFrame> composeFrame(
             if (color_cpu_graph) {
                 if (!source_frame || source_frame->rgba_pixels.empty())
                     throw std::runtime_error("The Color graph requires an RGBA source frame.");
-                auto graded = color::evaluate(color_graph, *source_frame,
+                auto graded = color::evaluateAtFrame(color_graph, *source_frame,
+                    local_frame,
                     [&canceled] { return canceled.load(std::memory_order_acquire); });
                 if (!graded)
                     throw std::runtime_error("The Color correction graph could not produce a frame.");

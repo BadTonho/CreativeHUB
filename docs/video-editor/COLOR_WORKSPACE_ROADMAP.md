@@ -1,6 +1,6 @@
 # Color Workspace Roadmap
 
-Status: **The project-owned Color graph, Curves, CPU/OpenGL/Vulkan qualifier matte refinement, selected-node input preview, Gallery capture and organization, transient Gallery still comparison, saved-grade comparison against the current Viewer, Wheels/Bars/Log Primary Grade, four scopes, shared Edit controls, reusable grades, per-clip grade versions, and drag-and-drop creation from the shared Effects catalog are implemented. Gallery stills and saved grades are exclusive reference sources. Saved-grade comparison recomposes the selected clip's alternate graph for the current timeline frame without changing the active graph or history. CSP v39 persists curves, qualifier refinements, and named graph snapshots. Refined serial GPU compositions use bounded R8 intermediates and fall back to CPU when allocation or processing fails; branched graphs continue through the CPU evaluator. The Inspector matte preview evaluates the selected Curves node's actual input asynchronously and does not change the Viewer. The top-right Effects action toggles a resizable catalog panel beside the Color node canvas; leaving Color returns the catalog to its shared dock and restores the previous dock layout. Dropping a supported correction creates a selected, disconnected node at the drop point. Other graph action controls remain hidden; Curves is created and managed from the canvas context menu. Native visual interaction and platform acceptance remain pending.**
+Status: **The project-owned Color graph, Curves, qualifier matte refinement, selected-node input preview, Gallery capture and organization, transient Gallery still comparison, saved-grade comparison against the current Viewer, Wheels/Bars/Log Primary Grade, four scopes, shared Edit controls, reusable grades, per-clip grade versions, drag-and-drop creation from the shared Effects catalog, and CSP v40 Power Windows are implemented. Rectangle and ellipse windows support ordered Add/Subtract/Intersect coverage, softness, inversion, animated geometry, and asynchronous forward/backward 2D similarity tracking. Power Window graphs use the shared CPU evaluator; ordinary supported serial graphs retain their CPU/OpenGL/Vulkan paths and bounded R8 qualifier refinement. Gallery stills and saved grades are exclusive reference sources. Saved-grade comparison recomposes the selected clip's alternate graph for the current timeline frame without changing the active graph or history. Power Windows persist in CSP v40 and are retained in graph snapshots and Hub backup/restoration. The Inspector matte preview evaluates the selected Curves node's actual input asynchronously and does not change the Viewer. The top-right Effects action toggles a resizable catalog panel beside the Color node canvas; leaving Color returns the catalog to its shared dock and restores the previous dock layout. Dropping a supported correction creates a selected, disconnected node at the drop point. Other graph action controls remain hidden; Curves is created and managed from the canvas context menu. Native visual interaction and platform acceptance remain pending.**
 
 This document records the current implementation, the functional areas expected
 from a complete color workspace, and a staged order for developing them. The
@@ -105,8 +105,25 @@ GPU operations use the CPU evaluator; if there is no CPU frame, the source is
 read back first. Native hardware frames are imported into the GPU tap, with CPU
 decode fallback if import fails. Curves previews and scopes share one pending readback, retaining
 only the newest queued Curves request. Results are discarded after project,
-clip, node, or frame changes. The preview does not alter the Viewer. Power
-Windows and tracking remain future work.
+clip, node, or frame changes. The preview does not alter the Viewer.
+
+Effect and Curves nodes can own multiple rectangular or elliptical Power
+Windows. Each window stores normalized geometry, softness, inversion, an
+ordered Add/Subtract/Intersect operation, and clip-local animated geometry.
+Power Windows combine with a Curves qualifier at the Curves node. The node
+blends its corrected RGB result with its input using the resulting coverage and
+preserves input alpha. Graphs with Power Windows use the CPU graph evaluator
+for preview and export; ordinary supported serial graphs retain their existing
+CPU/OpenGL/Vulkan paths. The Viewer context menu creates a window, and the
+Inspector edits its settings and reorders the list.
+
+Track Forward and Track Backward run on the playback worker from the selected
+node's pre-correction image, using downscaled pyramidal Lucas–Kanade points and
+a robust 2D similarity fit for position, uniform scale, and rotation. Tracking
+ends at a confidence loss or clip boundary, keeps valid samples, reports its
+stop frame, and commits them as one Undo edit. Escape cancels the active run;
+obsolete project, clip, graph, and window results are discarded. Tracking does
+not include perspective, polygons, stabilization, or audio clips.
 
 ## Functional capability inventory
 
@@ -155,11 +172,10 @@ design.
 - Qualify regions by hue, saturation, and luminance; inspect and refine the
   resulting matte with highlight, denoise, clean black/white, blur, and
   in/out adjustments.
-- Create Power Windows such as circles, polygons, curves, and gradients.
-  Adjust position, size, rotation, softness, inversion, and animated shape
-  changes.
-- Track windows through pan, tilt, zoom, rotation, and perspective changes;
-  support stabilization where the tracking model permits it.
+- Extend the implemented rectangular and elliptical Power Windows with polygons,
+  curves, and gradients if those shapes are needed.
+- Extend the implemented 2D similarity tracker to perspective tracking only with
+  a validated model and performance budget; stabilization remains separate.
 - Support matte/key inputs and outputs, alpha routing, and effect mix controls.
 - Consider assisted people or object masks only after the conventional
   qualifier, window, matte, and tracking workflows are reliable and can run
@@ -230,8 +246,13 @@ per-channel Log values, neutral in projects through v35. v37 stores each clip's
 named Color graph snapshots, including nodes, effects, state, connections,
 mixer weights and positions. CSP v38 adds Curves nodes with nine point lists
 and a tonal qualifier. CSP v39 adds Denoise, Clean Black/White, In/Out, and Blur
-for the matte, with defaults that preserve v38 behavior. Projects through v37
-open without Curves nodes; v1–v38 receive neutral refinement values. Preview
+for the matte, with defaults that preserve v38 behavior. CSP v40 adds ordered
+rectangular and elliptical Power Windows, softness and inversion, and
+clip-local geometry tracks on correction and Curves nodes. Projects through
+v39 open without windows. Splitting and trimming rebase the window tracks;
+copy/apply, grade snapshots, autosave, recovery, Save As, and Hub backups retain
+them. The Hub accepts v40 and rejects v41. Projects through v37 open without
+Curves nodes; v1–v38 receive neutral refinement values. Preview
 offers grayscale Matte and Highlight modes local to the Inspector; it does not
 replace the Viewer. Spatial matte refinements currently use the CPU frame
 fallback for serial graphs; neutral and unrefined Curves retain GPU processing.
@@ -267,9 +288,10 @@ and restoration. Keep large image assets outside the main CSP document.
    across CPU, OpenGL, and Vulkan. Direct comparison between two saved versions
    remains future work. Add group corrections only with a clear grade ordering
    model.
-4. **Add secondary grading (partially implemented).** Curves, targeted
-   selection, qualifier refinement, GPU R8 filters, and selected-node input
-    preview are implemented. Add windows, tracking, and their keyframes.
+4. **Add secondary grading (partially implemented).** Curves, qualifier
+   refinement, selected-node input preview, rectangular/elliptical Power
+   Windows, and forward/backward 2D similarity tracking are implemented.
+   Polygon/curve/gradient windows and perspective tracking remain future work.
 5. **Establish color management and source support.** Define project and
    output transforms, LUT handling, display profiles, RAW decode controls,
    and wide-gamut/HDR behavior across preview and export.
@@ -288,9 +310,12 @@ normalized mixing, CPU/OpenGL/Vulkan evaluation, Color canvas, Wheels/Bars
 synchronization, Log tonal response, Edit parameter and enabled-state editing,
 copy/apply between clips, saved-version actions and shared Undo/Redo, split and
 duplicate propagation, Curves editing and qualifier wrap/matte, Preview and
-offline export, CSP v39 persistence and v1-v38 migration, autosave and recovery,
+offline export, CSP v40 persistence and v1-v39 migration, autosave and recovery,
 all four scopes and GPU readback, Hub backup/restoration with Gallery sidecars,
 qualifier matte defaults and bounds, denoise, clean-level remapping, In/Out,
-blur borders, alpha preservation, and CPU cancellation. Native visual and platform
-acceptance remain pending.
+blur borders, alpha preservation, and CPU cancellation. Power Window coverage
+includes ordered combination, qualifier interaction, alpha, track cancellation
+and confidence loss, synthetic forward/backward position/scale/rotation, and
+geometry reframe checks for split/trim. Native visual and platform acceptance
+remain pending.
 

@@ -191,6 +191,12 @@ public slots:
         timeline::ClipId clip_id, color::NodeId node_id, qint64 timeline_frame,
         quint64 project_generation, quint64 delivery_epoch,
         quint64 composition_revision, quint64 generation, color::Graph graph);
+    virtual void trackColorPowerWindow(quint64 request_id,
+        timeline::ClipId clip_id, color::NodeId node_id,
+        color::PowerWindowId window_id, qint64 timeline_frame, int direction,
+        quint64 project_generation, quint64 composition_revision,
+        quint64 generation, color::Graph graph,
+        std::shared_ptr<std::atomic_bool> canceled);
     virtual void setColorGradeComparisonRequest(
         std::optional<PlaybackColorGradeComparisonRequest> request);
     virtual void stepForward();
@@ -231,6 +237,16 @@ signals:
         quint64 request_id, quint64 project_generation,
         timeline::ClipId clip_id, std::string version_id,
         rendering::PreviewFramePayload frame);
+    void colorPowerWindowTrackProgress(quint64 request_id,
+        qint64 completed_frames, qint64 total_frames);
+    void colorPowerWindowTrackReady(quint64 request_id,
+        timeline::ClipId clip_id, color::NodeId node_id,
+        color::PowerWindowId window_id, qint64 timeline_frame,
+        quint64 project_generation,
+        quint64 composition_revision, quint64 generation,
+        color::Graph original_graph, color::Graph tracked_graph,
+        qint64 stop_frame, bool reached_end, double confidence,
+        bool canceled, QString error);
 
 private slots:
     void decodeTick();
@@ -257,6 +273,7 @@ private:
         VideoFramePtr color_input_frame;
         creative_suite::composition::OpenGlTextureFramePtr color_input_texture;
         std::optional<color::Graph> color_graph;
+        qint64 local_frame = 0;
     };
 
     bool ensureSessionAtCurrentFrame();

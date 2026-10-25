@@ -1,14 +1,17 @@
 # Hub Regression Testing
 
-## Video Editor CSP v39 Curves, grades, versions and Gallery backup
+## Video Editor CSP v40 Power Windows, Curves, grades, versions and Gallery backup
 
-`hub-backup-format-test` saves a real CSP v39 document with a branched Color
-graph, Curves points and refined qualifier values, expanded Primary Grade and Log values, a named graph version, and a Gallery PNG sidecar, then uses the Video Editor reader to compare
+`hub-backup-format-test` saves a real CSP v40 document with a branched Color
+graph, animated Power Window geometry, Curves points and refined qualifier
+values, expanded Primary Grade and Log values, a named graph version, and a
+Gallery PNG sidecar, then uses the Video Editor reader to compare
 the vault snapshot and relocated restore with the producer document. Its version
-loop covers the older supported CSP schemas. The Windows Release
-`hub-backup-format-test`, `hub-backup-manager-test`, and `hub-backups-page-test`
-passed on 2026-10-24; the manager rejects future CSP v40. Native Hub
-restore/reopen UI acceptance remains pending.
+loop covers the older supported CSP schemas. On Windows Release, the
+`hub-backup-format-test` and `hub-backup-manager-test` passed on 2026-10-25,
+covering older schemas through CSP v39, v40 vault and relocated restores, and
+future CSP v41 rejection. Native Hub restore/reopen UI acceptance remains
+pending.
 
 Current backup gates save Motion v18 and reject v19. Version-specific sections
 below retain the records and evidence from earlier deliveries.
