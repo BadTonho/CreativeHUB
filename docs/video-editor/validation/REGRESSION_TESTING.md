@@ -78,7 +78,7 @@ On the Grade Versions panel, save the current graph, rename the snapshot, apply
 it after changing the current graph, and remove it; confirm each operation is
 one shared Undo/Redo step. Save/reopen and restore a Hub backup with Gallery
 stills and a named grade version. Confirm a v36 project opens with no saved
-versions. Confirm a v37 project opens without Curves and a future v42 project is
+versions. Confirm a v37 project opens without Curves and a future v43 project is
 refused by the Hub. This manual visual check is documented and remains pending; it is not
 run as part of the current implementation pass.
 
@@ -242,7 +242,7 @@ interop acceptance remain pending. This prototype does not expose a UI control.
 | Effects/Favorites/Functions availability, search/Add/Enter/MIME, selection and typed cable insertion/refusal | `creative-suite-main-editor-effects-panel`, `creative-suite-main-editor-shortcut-manager`, `creative-suite-main-editor-fusion-workspace`, `creative-suite-blur-interchange` |
 | Ordered Color/Blur stages, masks, text/media profiles, source windows, GPU/CPU recovery, history, duplication, cuts/trims/FPS, v1–v3/v31/v8 and recovery | `creative-suite-blur-interchange`, `creative-suite-composition-interchange`, `creative-suite-mask-interchange` |
 | Complete Preview/export frames before encoding, existing graphs and direct/GPU export | `creative-suite-main-editor-fusion-composition`, `creative-suite-main-editor-gpu-timeline`, `creative-suite-main-editor-render-export`, `creative-suite-main-editor-gpu-export` |
-| Real-reader CSP v39 backup/restoration with Color Curves, qualifier, graph versions, expanded Primary Grade and Log values, Gallery sidecar, Blur and external Inputs; future v42/Motion v19 | `hub-backup-format-test`, `hub-backup-manager-test` |
+| Real-reader CSP v39 backup/restoration with Color Curves, qualifier, graph versions, expanded Primary Grade and Log values, Gallery sidecar, Blur and external Inputs; future v43/Motion v19 | `hub-backup-format-test`, `hub-backup-manager-test` |
 
 See [Gaussian Blur](../features/GAUSSIAN_BLUR.md) for reproducible pending manual
 checks. Windows automation does not establish macOS/Linux or driver acceptance.
@@ -292,16 +292,20 @@ format, application version or rendering-engine change is involved.
 | --- | --- |
 | Bus creation/rename/removal, route/send references, gain and pan limits, bus deletion rerouting, snapshot restore, and Master settings | `tests/timeline/timeline_model_test.cpp` (`creative-suite-main-editor-timeline`) |
 | Track/bus/Master commands, Undo/Redo for bus deletion and routing, grouped fader/pan drags, and invalid references | `tests/timeline/timeline_command_service_test.cpp` (`creative-suite-main-editor-timeline-command-service`) |
-| Synthetic PCM route summing, pre/post-fader sends, mono equal-power pan, stereo balance, solo/mute precedence, export ignoring solo, bus and Master processing, meters, and Preview/export parity without solo | `tests/playback/timeline_audio_mix_test.cpp` (`creative-suite-main-editor-timeline-audio-mix`) |
-| Offline export applies stereo balance, saved bus routes, pre-fader/post-fader send behavior, and Master gain | `tests/ui/render_export_test.cpp` (`creative-suite-main-editor-render-export`) |
-| CSP v41 save/open, v1-v40 defaults, invalid bus references and v42 rejection | `tests/project/project_file_test.cpp` (`creative-suite-main-editor-project`) |
-| Hub snapshot/restore retains v41 mix data and future v42 is rejected | `apps/hub/tests/test_backup_formats.cpp` (`hub-backup-format-test`) and `test_backup_manager.cpp` (`hub-backup-manager-test`) |
-| Audio navigation, audio-only editable Timeline, track/bus controls, temporary solo, meters, save/reopen and Edit layout restoration | `tests/application/main_window_integration_test.cpp` (`creative-suite-main-editor-audio-workspace` and `creative-suite-main-editor-main-window`) |
+| Synthetic PCM EQ response, compression and block state, bypass, chain processing, sends, routes, pan, solo/mute precedence, meters, and Preview/export parity | `tests/playback/timeline_audio_mix_test.cpp` (`creative-suite-main-editor-timeline-audio-mix`) |
+| Offline export applies stereo balance, saved bus routes, pre-fader/post-fader send behavior, effects and Master gain | `tests/ui/render_export_test.cpp` (`creative-suite-main-editor-render-export`) |
+| CSP v42 save/open, v1-v41 defaults, invalid references/parameters and v43 rejection | `tests/project/project_file_test.cpp` (`creative-suite-main-editor-project`) |
+| Hub snapshot/restore retains v42 mix/effect data and future v43 is rejected | `apps/hub/tests/test_backup_formats.cpp` (`hub-backup-format-test`) and `test_backup_manager.cpp` (`hub-backup-manager-test`) |
+| Audio navigation, editable Timeline, track/bus controls, EQ/compressor editor, temporary solo, meters, save/reopen and Edit layout restoration | `tests/application/main_window_integration_test.cpp` (`creative-suite-main-editor-audio-workspace` and `creative-suite-main-editor-main-window`) |
 | Live Windows device playback, meter movement and Preview/audio synchronization | Manual check below; pending device validation |
 | Bundled pt-BR labels and shortcut descriptions | `creative-suite-video-editor-translation-catalog` build target and `creative-suite-main-editor-translation-catalog` test; native visual review remains pending |
 
 Manual check: open a project with two Audio tracks and video. Switch Edit to
-Audio and confirm the audio-only Timeline and prior Edit dock layout. Create
+Audio and confirm the audio-only Timeline and prior Edit dock layout. Open a
+track's Effects editor, add and enable an EQ, change its high shelf, add a
+compressor, reorder the chain, and compare Preview during playback. Save,
+reopen, and export; verify the order/parameters persist and Preview matches
+export for the saved effects chain. Create
 two buses, rename one, route a track to a bus, add a send to the other bus, and
 exercise pre-fader and post-fader modes. Drag track, bus, and Master faders
 and pans, plus send faders; each gesture should undo and redo as one step. Check mute and
@@ -394,7 +398,7 @@ pending separately from automated offscreen checks.
 | Edit/Fusion RGBA synchronization, multiple-node selection, node removal, ordinary video/image graphs, canceled dialogs and real video/audio/collision drops | `creative-suite-main-editor-background-generator` |
 | Dirty state, color Undo to saved baseline and cancellation in the real application | `creative-suite-main-editor-main-window` |
 | Pre-encoding Preview/export parity for the white preset and colored/transparent backgrounds over lower tracks | `creative-suite-main-editor-fusion-composition` |
-| Named compositions, graph masks/generators/inputs and signed offsets across backup/restoration; future CSP v42 rejection | `hub-backup-format-test`, `hub-backup-manager-test` |
+| Named compositions, graph masks/generators/inputs and signed offsets across backup/restoration; future CSP v43 rejection | `hub-backup-format-test`, `hub-backup-manager-test` |
 
 The generator drag test sends actual Qt drag/drop events directly, without
 showing the standalone TimelineWidget. In this Windows/offscreen fixture,
@@ -479,7 +483,7 @@ Background/Text/Merge parity through the native graph backend and requires that
 GPU work actually occurred. The main-window test checks insertion/effects dirty
 state, save and undo to the saved baseline. `hub-backup-format-test` preserves
 generator data, graph input paths and signed offsets through relocated restore;
-`hub-backup-manager-test` rejects future CSP v42. Existing graph, timeline, playback,
+`hub-backup-manager-test` rejects future CSP v43. Existing graph, timeline, playback,
 project, autosave, Inspector, adjustment and export gates remain relevant.
 
 CSP v27 also round-trips optional cubic Bezier easing for clip/node curves;

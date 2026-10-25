@@ -1,6 +1,6 @@
 # Audio Workspace Roadmap
 
-Status: **the editable Audio workspace and one-level mixer are implemented; device and native UI acceptance remain pending**.
+Status: **the editable Audio workspace, one-level mixer, and track EQ/compressor are implemented; device and native UI acceptance remain pending**.
 
 The Audio workspace is a fourth view of the Video Editor's current project. It
 uses the Edit timeline document, stable clip and track identities, shared edit
@@ -25,6 +25,12 @@ Master meters.
   and uses the full saved mix.
 - Preview and export use the shared sample mixer for clip gains and envelopes,
   crossfades, track routes, sends, bus processing, and Master processing.
+- Add one equalizer and one compressor per track, in either saved order. The
+  track editor exposes enable/bypass, parameter editing, insertion, removal,
+  and reordering. Effects process the summed track signal after clip envelopes
+  and crossfades and before main routing and pre/post-fader sends.
+- CSP v42 stores effect chains. Projects v1-v41 load with empty chains; Hub
+  backup and restore preserve v42 and reject v43.
 - Bus removal returns routed tracks to the Master and removes sends to that
   bus as one undoable edit. Fader and pan drags on tracks, buses, sends, and
   Master form one history edit per gesture.
@@ -35,8 +41,8 @@ Master meters.
 ## Audio workspace acceptance
 
 - Automated regressions cover mixer model/commands, Undo/Redo, routing and
-  sends, solo and mute rules, sample processing, meters, CSP v41 migration,
-  Preview/export mix parity, UI controls, and Hub backup/restore.
+  sends, solo and mute rules, EQ/compressor response and state, meters, CSP v42
+  migration, Preview/export mix parity, UI controls, and Hub backup/restore.
 - The reproducible manual mixer workflow is documented in the
   [Video Editor regression guide](validation/REGRESSION_TESTING.md#audio-workspace).
   Device playback and native visual acceptance remain pending for Windows,
@@ -46,8 +52,8 @@ Master meters.
 
 ## Remaining candidates
 
-1. **Processing:** track and clip EQ, dynamics, effect chains, dialogue
-   cleanup, noise reduction, repair, and ducking. Keep Preview and export equal.
+1. **Processing:** clip-level EQ/dynamics, dialogue cleanup, noise reduction,
+   repair, and ducking. Keep Preview and export equal.
 2. **Measurement and automation:** loudness, true-peak analysis, normalization,
    track automation, and richer clip automation.
 3. **Production workflows:** recording, voiceover/ADR, and a locally managed

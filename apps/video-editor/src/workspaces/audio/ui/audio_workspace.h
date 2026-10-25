@@ -15,6 +15,7 @@ class QHBoxLayout;
 class QLabel;
 class QProgressBar;
 class QPushButton;
+class QWidget;
 class QSlider;
 class QVBoxLayout;
 
@@ -47,6 +48,9 @@ signals:
         timeline::TrackId track_id, double gain, bool muted, double pan,
         std::optional<timeline::AudioBusId> output_bus_id,
         std::vector<timeline::AudioSend> sends);
+    void trackAudioEffectsChanged(
+        timeline::TrackId track_id,
+        std::vector<timeline::AudioEffectInstance> effects);
     void busMixChanged(
         timeline::AudioBusId bus_id, double gain, bool muted, double pan);
     void masterMixChanged(double gain, bool muted);
@@ -102,6 +106,12 @@ private:
         QCheckBox* mute = nullptr;
         QCheckBox* solo = nullptr;
     };
+    struct TrackEffectsRow {
+        timeline::TrackId id = 0;
+        QLabel* name = nullptr;
+        QPushButton* edit = nullptr;
+        std::vector<timeline::AudioEffectInstance> effects;
+    };
 
     void emitTrackMix(timeline::TrackId track_id);
     void emitBusMix(timeline::AudioBusId bus_id);
@@ -115,6 +125,7 @@ private:
     QVBoxLayout* mixer_layout_ = nullptr;
     QVBoxLayout* bus_mixer_layout_ = nullptr;
     QVBoxLayout* track_mixer_layout_ = nullptr;
+    QVBoxLayout* track_effects_layout_ = nullptr;
     QProgressBar* master_meter_ = nullptr;
     QProgressBar* mixer_master_meter_ = nullptr;
     QSlider* master_gain_ = nullptr;
@@ -123,6 +134,7 @@ private:
     QPushButton* add_bus_button_ = nullptr;
     std::vector<Strip> strips_;
     std::vector<BusStrip> bus_strips_;
+    std::vector<TrackEffectsRow> track_effects_rows_;
     std::vector<timeline::TrackId> solo_track_ids_;
     std::vector<timeline::AudioBusId> solo_bus_ids_;
 };

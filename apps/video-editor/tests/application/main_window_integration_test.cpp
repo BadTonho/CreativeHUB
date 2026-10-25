@@ -806,14 +806,74 @@ public:
                 ->findChild<QPushButton*>("audioBusRename");
             auto* bus_remove = window.audio_workspace_->mixerPanel()
                 ->findChild<QPushButton*>("audioBusRemove");
+            auto* track_effects = static_cast<QPushButton*>(nullptr);
+            for (auto* button : window.audio_workspace_->mixerPanel()
+                     ->findChildren<QPushButton*>("audioTrackEffects")) {
+                if (button->property("trackId").toULongLong() == track_id) {
+                    track_effects = button;
+                    break;
+                }
+            }
             require(gain != nullptr && mute != nullptr && gain->value() == 100 &&
                         pan != nullptr && pan->value() == 0 &&
                         output_route != nullptr && send_target != nullptr &&
                         add_send != nullptr && master_gain != nullptr &&
                         master_gain->value() == 100 && !mute->isChecked() &&
                         bus_solo != nullptr && bus_rename != nullptr &&
-                        bus_remove != nullptr,
-                    "The Audio mixer must expose neutral track mix and routing controls.");
+                        bus_remove != nullptr && track_effects != nullptr,
+                    "The Audio mixer must expose neutral track mix, routing, and effects controls.");
+            const auto effects_baseline_path = directory / "audio-effects-baseline.csp";
+            require(window.saveProjectTo(effects_baseline_path, "save") &&
+                        !window.project_dirty_,
+                    "The Audio effects UI test could not establish a clean baseline.");
+            bool audio_effect_dialog_edited = false;
+            QTimer::singleShot(0, &window, [&audio_effect_dialog_edited] {
+                auto* dialog = QApplication::activeModalWidget();
+                if (dialog == nullptr ||
+                    dialog->objectName() != QStringLiteral("audioTrackEffectsDialog"))
+                    return;
+                auto* add_eq = dialog->findChild<QPushButton*>("audioEffectAddEqualizer");
+                if (add_eq == nullptr) {
+                    dialog->close();
+                    return;
+                }
+                add_eq->click();
+                auto* enabled = dialog->findChild<QCheckBox*>("audioEffectEnabled");
+                auto* high_gain = dialog->findChild<QDoubleSpinBox*>("audioEqHighGain");
+                auto* buttons = dialog->findChild<QDialogButtonBox*>();
+                if (enabled == nullptr || high_gain == nullptr || buttons == nullptr) {
+                    dialog->close();
+                    return;
+                }
+                enabled->setChecked(true);
+                high_gain->setValue(6.0);
+                audio_effect_dialog_edited = true;
+                buttons->button(QDialogButtonBox::Ok)->click();
+            });
+            track_effects->click();
+            const auto effect_track_index = window.timeline_model_.locateTrack(track_id);
+            require(audio_effect_dialog_edited && effect_track_index.has_value() &&
+                        window.project_dirty_ &&
+                        window.timeline_model_.tracks()[*effect_track_index]
+                            .audio_effects.size() == 1 &&
+                        window.timeline_model_.tracks()[*effect_track_index]
+                            .audio_effects.front().enabled &&
+                        std::get<timeline::AudioEqualizerParameters>(
+                            window.timeline_model_.tracks()[*effect_track_index]
+                                .audio_effects.front().parameters)
+                                .high_shelf_gain_db == 6.0,
+                    "The track effects editor must apply an enabled EQ to the shared timeline.");
+            require(window.edit_workspace_->controller()->undo().changed() &&
+                        !window.project_dirty_ &&
+                        window.timeline_model_.tracks()
+                            [*effect_track_index]
+                            .audio_effects.empty() &&
+                        window.edit_workspace_->controller()->redo().changed() &&
+                        window.project_dirty_ &&
+                        window.timeline_model_.tracks()
+                            [*effect_track_index]
+                            .audio_effects.size() == 1,
+                    "Audio effects must participate in dirty state and shared Undo/Redo.");
             auto* track_meter = window.audio_workspace_->meterPage()
                 ->findChild<QProgressBar*>("audioTrackMeter");
             auto* output_meter = window.audio_workspace_->meterPage()
@@ -901,6 +961,11 @@ public:
                         saved_track->audio_sends.size() == 1 &&
                         saved_track->audio_sends.front().tap ==
                             timeline::AudioSendTap::PreFader &&
+                        saved_track->audio_effects.size() == 1 &&
+                        saved_track->audio_effects.front().enabled &&
+                        std::get<timeline::AudioEqualizerParameters>(
+                            saved_track->audio_effects.front().parameters)
+                                .high_shelf_gain_db == 6.0 &&
                         saved.audio_buses.size() == 2 &&
                         std::abs(saved.master_audio_mix.audio_gain - 0.8) < 1.0e-6,
                     "Audio mixer settings must survive a project round trip.");
@@ -948,6 +1013,12 @@ public:
                         std::abs(window.timeline_model_.tracks()[*reopened_track]
                             .audio_gain - 0.65) < 1.0e-6 &&
                         window.timeline_model_.tracks()[*reopened_track].audio_muted &&
+                        window.timeline_model_.tracks()[*reopened_track]
+                            .audio_effects.size() == 1 &&
+                        std::get<timeline::AudioEqualizerParameters>(
+                            window.timeline_model_.tracks()[*reopened_track]
+                                .audio_effects.front().parameters)
+                                .high_shelf_gain_db == 6.0 &&
                         reopened_gain != nullptr && reopened_mute != nullptr &&
                         reopened_gain->value() == 65 && reopened_mute->isChecked() &&
                         reopened_pan != nullptr && reopened_pan->value() == -25 &&

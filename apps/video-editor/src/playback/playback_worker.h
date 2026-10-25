@@ -106,6 +106,7 @@ struct CompositionLayerSpec {
     double track_audio_pan = 0.0;
     std::optional<timeline::AudioBusId> output_bus_id;
     std::vector<timeline::AudioSend> audio_sends;
+    std::vector<timeline::AudioEffectInstance> track_audio_effects;
     int source_audio_channel_count = 2;
 };
 
@@ -525,6 +526,7 @@ private:
     std::vector<media::TimelineAudioMixClip> composition_audio_mix_clips_;
     std::vector<media::TimelineAudioMixTransition> composition_audio_mix_transitions_;
     media::TimelineAudioMixConfiguration composition_audio_mix_configuration_;
+    media::TimelineAudioMixState composition_audio_mix_state_;
     std::shared_ptr<TransitionPrerollState> transition_preroll_state_;
     std::thread transition_preroll_thread_;
     std::size_t last_transition_preroll_session_index_ =

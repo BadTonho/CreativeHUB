@@ -337,6 +337,10 @@ void validateDocument(const ProjectDocument& document,
             throwJson(ProjectErrorCode::InvalidValue, project_path,
                       "Project JSON contains invalid track audio routing settings.");
         }
+        if (!timeline::validAudioEffectChain(track.audio_effects)) {
+            throwJson(ProjectErrorCode::InvalidValue, project_path,
+                      "Project JSON contains invalid or duplicate audio effects.");
+        }
         std::unordered_set<timeline::AudioBusId> send_bus_ids;
         for (const auto& send : track.audio_sends) {
             if (!audio_bus_ids.contains(send.destination_bus_id) ||

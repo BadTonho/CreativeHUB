@@ -1931,6 +1931,51 @@ void runAudioBusCommands() {
             "Undo did not restore Master mix state.");
 }
 
+void runAudioEffectCommands() {
+    application::EditorSession session;
+    require(session.legacyTimelineForUi().addTrack(
+                "Audio", timeline::TrackKind::Audio) ==
+                timeline::AddTrackResult::Added,
+            "Could not create an Audio track for effects command tests.");
+    application::TimelineCommandService service(session);
+    const auto track_id = session.timeline().tracks().back().track_id;
+    timeline::AudioEffectInstance equalizer;
+    equalizer.enabled = true;
+    auto eq_parameters = timeline::AudioEqualizerParameters{};
+    eq_parameters.mid_gain_db = 4.0;
+    equalizer.parameters = eq_parameters;
+    timeline::AudioEffectInstance compressor;
+    compressor.parameters = timeline::AudioCompressorParameters{};
+    const std::vector<timeline::AudioEffectInstance> chain{
+        equalizer, compressor};
+    const auto applied = service.execute(
+        application::SetTrackAudioEffectsCommand{track_id, chain});
+    require(applied.changed() && applied.invalidate_playback &&
+                applied.affected_track_ids ==
+                    std::vector<timeline::TrackId>{track_id} &&
+                session.timeline().tracks().back().audio_effects == chain,
+            "The audio effect chain command did not update its track and playback state.");
+    require(service.undo().changed() &&
+                session.timeline().tracks().back().audio_effects.empty() &&
+                service.redo().changed() &&
+                session.timeline().tracks().back().audio_effects == chain,
+            "Undo/Redo did not restore the ordered audio effect chain.");
+
+    auto duplicate_chain = chain;
+    duplicate_chain.push_back(equalizer);
+    const auto duplicate = service.execute(
+        application::SetTrackAudioEffectsCommand{track_id, duplicate_chain});
+    auto invalid_chain = chain;
+    std::get<timeline::AudioEqualizerParameters>(
+        invalid_chain.front().parameters).mid_q = 0.0;
+    const auto invalid = service.execute(
+        application::SetTrackAudioEffectsCommand{track_id, invalid_chain});
+    require(duplicate.reason == application::EditReason::InvalidValue &&
+                invalid.reason == application::EditReason::InvalidValue &&
+                session.timeline().tracks().back().audio_effects == chain,
+            "The model accepted duplicate or out-of-range audio effects.");
+}
+
 } // namespace
 
 int main() {
@@ -1948,6 +1993,7 @@ int main() {
         runClipAttributeCommands();
         runProjectSettingsCommands();
         runAudioBusCommands();
+        runAudioEffectCommands();
         return 0;
     } catch (const std::exception& error) {
         std::cerr << error.what() << '\n';

@@ -880,7 +880,7 @@ playback clock unchanged. Timeline playback is coordinated by the active
 composition and does not require a Media Browser item to remain selected;
 text-only compositions can also advance through their valid frame range.
 Confirmed text/style edits are Timeline Undo/Redo entries and are persisted by
-the current `.csp` version 41 format. Linked video-audio clips can be
+the current `.csp` version 42 format. Linked video-audio clips can be
 unlinked from the Timeline clip context menu; after unlinking, audio remains
 externalized on its Audio track. Right-clicking a video or image clip offers
 **Open in Fusion** and opens the selected clip's node graph. A video with linked
@@ -914,7 +914,7 @@ transform and animation, audio gain and mute, audio volume envelope,
 and text content/style. Color's dedicated Copy Grade and Apply Grade actions
 copy only the current correction graph between clips. Per-clip Grade Versions
 store named graph snapshots and are separate from Gallery stills and Edit's
-attribute clipboard. Saved versions persist in CSP v41; versions through v36
+attribute clipboard. Saved versions persist in CSP v42; versions through v36
 load with an empty list. Splitting or duplicating an Adjustment clip copies
 the versions along with its current graph. For linked video/audio clips, audio attributes are read
 from and applied to the audio companion while the reciprocal link is preserved.

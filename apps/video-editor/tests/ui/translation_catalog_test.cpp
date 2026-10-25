@@ -51,6 +51,16 @@ int main(int argc, char* argv[]) {
         std::fprintf(stderr, "The Render workspace did not use its pt-BR catalog entry.\n");
         return 1;
     }
+    if (QCoreApplication::translate("AudioWorkspace", "Add EQ") !=
+            QStringLiteral("Adicionar EQ") ||
+        QCoreApplication::translate("AudioWorkspace", "High shelf gain") !=
+            QStringLiteral("Ganho dos agudos") ||
+        QCoreApplication::translate("AudioWorkspace", "Track audio effects — %1")
+                .arg(QStringLiteral("Voz")) !=
+            QStringLiteral("Efeitos de áudio da faixa — Voz")) {
+        std::fprintf(stderr, "The Audio effects editor did not use its pt-BR catalog entries.\n");
+        return 1;
+    }
     if (QCoreApplication::translate("EditWorkspace", "Adjust %1").arg(100) !=
             QStringLiteral("Ajustar 100")) {
         std::fprintf(stderr, "A translated placeholder was not preserved.\n");

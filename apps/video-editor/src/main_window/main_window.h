@@ -132,6 +132,9 @@ private:
         timeline::TrackId track_id, double gain, bool muted, double pan,
         std::optional<timeline::AudioBusId> output_bus_id,
         std::vector<timeline::AudioSend> sends);
+    void applyAudioTrackEffects(
+        timeline::TrackId track_id,
+        std::vector<timeline::AudioEffectInstance> effects);
     void applyAudioBusMix(
         timeline::AudioBusId bus_id, double gain, bool muted, double pan);
     void applyAudioMasterMix(double gain, bool muted);

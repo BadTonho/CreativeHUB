@@ -428,6 +428,7 @@ void PlaybackWorker::stop() {
     audio_position_valid_ = false;
     composition_audio_cursor_valid_ = false;
     pending_audio_bytes_.clear();
+    composition_audio_mix_state_.reset();
 }
 
 void PlaybackWorker::setAudioParameters(
@@ -933,6 +934,7 @@ void PlaybackWorker::setComposition(
             audio_clip.track_pan = prepared.track_audio_pan;
             audio_clip.output_bus_id = prepared.output_bus_id;
             audio_clip.audio_sends = prepared.audio_sends;
+            audio_clip.audio_effects = prepared.track_audio_effects;
             audio_clip.source_channel_count = prepared.source_audio_channel_count;
         }
 
@@ -1105,6 +1107,7 @@ void PlaybackWorker::renderCompositionFrame(
         if (!playing_) {
             composition_audio_cursor_valid_ = false;
             pending_audio_bytes_.clear();
+            composition_audio_mix_state_.reset();
             if (audio_output_ != nullptr) audio_output_->stop();
         }
         if (transition_preroll_state_ != nullptr &&
@@ -2904,7 +2907,8 @@ void PlaybackWorker::fillCompositionAudioOutput() {
 
         media::TimelineAudioMixAccumulator audio_mixer(
             static_cast<std::size_t>(block_samples), output.channel_count,
-            composition_audio_mix_configuration_);
+            composition_audio_mix_configuration_,
+            &composition_audio_mix_state_);
         const auto meter_now = std::chrono::steady_clock::now();
         const bool meter_this_block = audio_metering_enabled_ &&
             (last_audio_meter_emit_ == std::chrono::steady_clock::time_point{} ||

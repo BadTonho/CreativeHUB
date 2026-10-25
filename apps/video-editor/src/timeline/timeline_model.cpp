@@ -3212,6 +3212,18 @@ AudioParameterResult TimelineModel::setTrackAudioMix(
     return AudioParameterResult::Changed;
 }
 
+AudioParameterResult TimelineModel::setTrackAudioEffects(
+    TrackId track_id,
+    std::vector<AudioEffectInstance> effects) {
+    const auto track_index = locateTrack(track_id);
+    if (!track_index.has_value()) return AudioParameterResult::InvalidIndex;
+    if (!validAudioEffectChain(effects)) return AudioParameterResult::InvalidValue;
+    auto& track = tracks_[*track_index];
+    if (track.audio_effects == effects) return AudioParameterResult::NoChange;
+    track.audio_effects = std::move(effects);
+    return AudioParameterResult::Changed;
+}
+
 AudioParameterResult TimelineModel::setAudioBusMix(
     AudioBusId bus_id,
     double gain,

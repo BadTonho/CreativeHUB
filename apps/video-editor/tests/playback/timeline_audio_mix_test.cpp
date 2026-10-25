@@ -2,8 +2,10 @@
 
 #include <cmath>
 #include <cstdint>
+#include <algorithm>
 #include <iostream>
 #include <limits>
+#include <numbers>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -452,6 +454,253 @@ void testStereoBalanceAndMultichannelPassThrough() {
             "Multichannel pan changed channels outside the front pair.");
 }
 
+std::vector<float> renderEffectTone(
+    double frequency_hz,
+    std::vector<timeline::AudioEffectInstance> effects) {
+    constexpr int sample_rate = 48000;
+    constexpr int frame_count = 9600;
+    media::TimelineAudioMixClip clip{
+        0, 0, 0, timeline::ClipKind::Audio, true,
+        0, 6, 0, 30.0, 1.0, 1.0, false, false};
+    clip.source_duration_time_us = 200000;
+    clip.track_id = 90;
+    clip.source_channel_count = 2;
+    clip.audio_effects = std::move(effects);
+    const auto spans = media::planTimelineAudioMix(
+        std::span<const media::TimelineAudioMixClip>(&clip, 1), {},
+        30.0, sample_rate, 0, frame_count);
+    require(spans.size() == 1,
+            "The test tone did not produce one audio mix span.");
+    media::AudioPcmChunk chunk;
+    chunk.sample_rate = sample_rate;
+    chunk.channel_count = 2;
+    chunk.first_sample_index = spans.front().source_start_sample;
+    chunk.samples.resize(static_cast<std::size_t>(frame_count) * 2U);
+    for (int frame = 0; frame < frame_count; ++frame) {
+        const auto value = static_cast<std::int16_t>(std::lround(
+            8000.0 * std::sin(2.0 * std::numbers::pi * frequency_hz *
+                frame / sample_rate)));
+        chunk.samples[static_cast<std::size_t>(frame) * 2U] = value;
+        chunk.samples[static_cast<std::size_t>(frame) * 2U + 1U] = value;
+    }
+    media::TimelineAudioMixAccumulator accumulator(frame_count, 2, {});
+    accumulator.accumulate(spans.front(), clip, chunk);
+    return accumulator.finish().samples;
+}
+
+std::vector<float> renderEffectTone(
+    double frequency_hz,
+    timeline::AudioEffectInstance effect) {
+    return renderEffectTone(frequency_hz,
+        std::vector<timeline::AudioEffectInstance>{std::move(effect)});
+}
+
+double steadyRms(const std::vector<float>& samples, std::size_t first_frame) {
+    double sum = 0.0;
+    std::size_t count = 0;
+    for (std::size_t frame = first_frame;
+         frame < samples.size() / 2U; ++frame) {
+        const auto value = static_cast<double>(samples[frame * 2U]);
+        sum += value * value;
+        ++count;
+    }
+    return count == 0 ? 0.0 : std::sqrt(sum / count);
+}
+
+void testEqualizerResponseAndFlatCompatibility() {
+    timeline::AudioEffectInstance flat;
+    flat.enabled = true;
+    const auto plain = renderEffectTone(10000.0, timeline::AudioEffectInstance{
+        timeline::AudioEqualizerParameters{}, false});
+    const auto flat_enabled = renderEffectTone(10000.0, flat);
+    require(plain == flat_enabled,
+            "A flat EQ changed the existing mixer output.");
+
+    auto boosted = flat;
+    auto eq = timeline::AudioEqualizerParameters{};
+    eq.high_shelf_gain_db = 6.0;
+    boosted.parameters = eq;
+    const auto high_boost = renderEffectTone(16000.0, boosted);
+    const auto low_control = renderEffectTone(100.0, boosted);
+    require(steadyRms(high_boost, 4000) >
+                steadyRms(renderEffectTone(16000.0,
+                    timeline::AudioEffectInstance{}), 4000) * 1.6 &&
+            std::abs(steadyRms(low_control, 4000) -
+                steadyRms(renderEffectTone(100.0,
+                    timeline::AudioEffectInstance{}), 4000)) < 0.002,
+            "The high shelf did not boost its band while preserving low frequencies.");
+
+    auto compressor = timeline::AudioEffectInstance{};
+    compressor.enabled = true;
+    compressor.parameters = timeline::AudioCompressorParameters{
+        -18.0, 4.0, 0.1, 100.0, 0.0};
+    const auto eq_then_compressor = renderEffectTone(
+        10000.0, {boosted, compressor});
+    const auto compressor_then_eq = renderEffectTone(
+        10000.0, {compressor, boosted});
+    require(eq_then_compressor != compressor_then_eq,
+            "The saved effect-chain order did not change processing order.");
+}
+
+std::vector<float> renderChangedEqBlock(
+    media::TimelineAudioMixState& state,
+    std::int64_t block_start_sample,
+    double high_shelf_gain_db) {
+    constexpr int sample_rate = 48000;
+    constexpr int frame_count = 4800;
+    media::TimelineAudioMixClip clip{
+        0, 0, 0, timeline::ClipKind::Audio, true,
+        0, 120, 0, 30.0, 1.0, 1.0, false, false};
+    clip.source_duration_time_us = 4'000'000;
+    clip.track_id = 93;
+    clip.source_channel_count = 2;
+    timeline::AudioEffectInstance eq;
+    eq.enabled = true;
+    auto parameters = timeline::AudioEqualizerParameters{};
+    parameters.high_shelf_gain_db = high_shelf_gain_db;
+    eq.parameters = parameters;
+    clip.audio_effects = {eq};
+    const auto spans = media::planTimelineAudioMix(
+        std::span<const media::TimelineAudioMixClip>(&clip, 1), {},
+        30.0, sample_rate, block_start_sample, frame_count);
+    require(spans.size() == 1,
+            "The EQ transition block did not produce one audio mix span.");
+    media::AudioPcmChunk chunk;
+    chunk.sample_rate = sample_rate;
+    chunk.channel_count = 2;
+    chunk.first_sample_index = spans.front().source_start_sample;
+    chunk.samples.resize(static_cast<std::size_t>(frame_count) * 2U);
+    for (int frame = 0; frame < frame_count; ++frame) {
+        const auto source_sample = chunk.first_sample_index + frame;
+        const auto value = static_cast<std::int16_t>(std::lround(
+            8000.0 * std::sin(2.0 * std::numbers::pi * 10000.0 *
+                source_sample / sample_rate)));
+        chunk.samples[static_cast<std::size_t>(frame) * 2U] = value;
+        chunk.samples[static_cast<std::size_t>(frame) * 2U + 1U] = value;
+    }
+    media::TimelineAudioMixAccumulator accumulator(
+        frame_count, 2, {}, &state);
+    accumulator.accumulate(spans.front(), clip, chunk);
+    return accumulator.finish().samples;
+}
+
+double rmsRange(const std::vector<float>& samples,
+                std::size_t first_frame,
+                std::size_t end_frame) {
+    double sum = 0.0;
+    std::size_t count = 0;
+    for (std::size_t frame = first_frame;
+         frame < std::min(end_frame, samples.size() / 2U); ++frame) {
+        const auto value = static_cast<double>(samples[frame * 2U]);
+        sum += value * value;
+        ++count;
+    }
+    return count == 0 ? 0.0 : std::sqrt(sum / count);
+}
+
+void testEffectParameterChangeIsSmoothedAcrossBlocks() {
+    media::TimelineAudioMixState state;
+    const auto dry = renderChangedEqBlock(state, 0, 0.0);
+    const auto changed = renderChangedEqBlock(state, 4800, 6.0);
+    const auto dry_level = rmsRange(dry, 500, 4500);
+    const auto transition_level = rmsRange(changed, 0, 240);
+    const auto processed_level = rmsRange(changed, 1000, 4500);
+    require(transition_level > dry_level * 0.9 &&
+                transition_level < processed_level * 0.9,
+            "Changing effect parameters did not crossfade between old and new processing.");
+}
+
+std::vector<float> renderCompressorBlock(
+    media::TimelineAudioMixState& state,
+    std::int64_t block_start_sample,
+    std::int16_t value,
+    bool include_compressor) {
+    constexpr int sample_rate = 48000;
+    constexpr int frame_count = 4800;
+    media::TimelineAudioMixClip clip{
+        0, 0, 0, timeline::ClipKind::Audio, true,
+        0, 120, 0, 30.0, 1.0, 1.0, false, false};
+    clip.source_duration_time_us = 4'000'000;
+    clip.track_id = 91;
+    clip.source_channel_count = 2;
+    if (include_compressor) {
+        timeline::AudioEffectInstance compressor;
+        compressor.enabled = true;
+        compressor.parameters = timeline::AudioCompressorParameters{
+            -18.0, 4.0, 0.1, 100.0, 0.0};
+        clip.audio_effects = {compressor};
+    }
+    const auto spans = media::planTimelineAudioMix(
+        std::span<const media::TimelineAudioMixClip>(&clip, 1), {},
+        30.0, sample_rate, block_start_sample, frame_count);
+    require(spans.size() == 1,
+            "The compressor block did not produce one audio mix span.");
+    media::TimelineAudioMixAccumulator accumulator(
+        frame_count, 2, {}, &state);
+    accumulator.accumulate(spans.front(), clip,
+        constantChunk(spans.front().source_start_sample, value, frame_count));
+    return accumulator.finish().samples;
+}
+
+void testCompressorAndPersistentState() {
+    media::TimelineAudioMixState continuing_state;
+    static_cast<void>(renderCompressorBlock(
+        continuing_state, 0, 20000, true));
+    const auto continued = renderCompressorBlock(
+        continuing_state, 4800, 1000, true);
+    media::TimelineAudioMixState reset_state;
+    const auto reset = renderCompressorBlock(reset_state, 0, 1000, true);
+    require(steadyRms(continued, 3000) < steadyRms(reset, 3000) * 0.8,
+            "The compressor detector state did not continue across audio blocks.");
+
+    media::TimelineAudioMixState plain_state;
+    const auto uncompressed = renderCompressorBlock(
+        plain_state, 0, 20000, false);
+    const auto compressed = renderCompressorBlock(
+        reset_state, 4800, 20000, true);
+    require(steadyRms(compressed, 3000) < steadyRms(uncompressed, 3000) * 0.8,
+            "The compressor did not reduce sustained audio above its threshold.");
+    reset_state.reset();
+    const auto after_reset = renderCompressorBlock(reset_state, 0, 1000, true);
+    require(steadyRms(after_reset, 3000) > steadyRms(continued, 3000),
+            "Resetting the compressor state did not clear its release envelope.");
+}
+
+void testProcessedPreviewExportParityAndSendTaps() {
+    auto clip = media::TimelineAudioMixClip{
+        0, 0, 0, timeline::ClipKind::Audio, true,
+        0, 4, 0, 30.0, 1.0, 1.0, false, false};
+    clip.source_duration_time_us = 133333;
+    clip.track_id = 92;
+    clip.audio_sends = {{404, 0.5, timeline::AudioSendTap::PreFader},
+                        {405, 0.5, timeline::AudioSendTap::PostFader}};
+    clip.track_gain = 0.5;
+    clip.track_pan = 0.25;
+    timeline::AudioEffectInstance compressor;
+    compressor.enabled = true;
+    compressor.parameters = timeline::AudioCompressorParameters{
+        -24.0, 2.0, 1.0, 100.0, 0.0};
+    clip.audio_effects = {compressor};
+    auto configuration = media::TimelineAudioMixConfiguration{};
+    configuration.buses = {{404, "Pre", 1.0, false, 0.0},
+                           {405, "Post", 1.0, false, 0.0}};
+    const auto preview = renderMix({clip}, configuration, 20000);
+    configuration.apply_solo = false;
+    const auto exported = renderMix({clip}, configuration, 20000);
+    require(preview.samples == exported.samples &&
+                preview.bus_peaks == exported.bus_peaks,
+            "Preview and export did not match with the saved effects chain.");
+    const auto peakFor = [](const auto& result, timeline::AudioBusId id) {
+        const auto found = std::find_if(result.bus_peaks.begin(),
+            result.bus_peaks.end(), [id](const auto& peak) {
+                return peak.first == id;
+            });
+        return found == result.bus_peaks.end() ? -1.0F : found->second;
+    };
+    require(peakFor(preview, 404) > peakFor(preview, 405),
+            "A pre-fader send did not tap the processed signal before track gain and pan.");
+}
+
 } // namespace
 
 int main() {
@@ -468,6 +717,10 @@ int main() {
         testTrackRoutesAndPrePostSends();
         testPanSoloMuteAndMasterMix();
         testStereoBalanceAndMultichannelPassThrough();
+        testEqualizerResponseAndFlatCompatibility();
+        testEffectParameterChangeIsSmoothedAcrossBlocks();
+        testCompressorAndPersistentState();
+        testProcessedPreviewExportParityAndSendTaps();
         std::cout << "timeline audio mix tests passed\n";
         return 0;
     } catch (const std::exception& error) {

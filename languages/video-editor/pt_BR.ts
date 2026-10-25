@@ -40,6 +40,31 @@
     <message><source>Rename</source><translation>Renomear</translation></message>
     <message><source>Remove</source><translation>Remover</translation></message>
     <message><source>Rename bus</source><translation>Renomear bus</translation></message>
+    <message><source>Equalizer</source><translation>Equalizador</translation></message>
+    <message><source>Compressor</source><translation>Compressor</translation></message>
+    <message><source>Track audio effects — %1</source><translation>Efeitos de áudio da faixa — %1</translation></message>
+    <message><source>Add EQ</source><translation>Adicionar EQ</translation></message>
+    <message><source>Add compressor</source><translation>Adicionar compressor</translation></message>
+    <message><source>Move up</source><translation>Mover para cima</translation></message>
+    <message><source>Move down</source><translation>Mover para baixo</translation></message>
+    <message><source>On</source><translation>Ativado</translation></message>
+    <message><source>Off</source><translation>Desativado</translation></message>
+    <message><source>Enabled</source><translation>Ativo</translation></message>
+    <message><source>Add an effect to edit its settings.</source><translation>Adicione um efeito para editar suas configurações.</translation></message>
+    <message><source>Low shelf frequency</source><translation>Frequência dos graves</translation></message>
+    <message><source>Low shelf gain</source><translation>Ganho dos graves</translation></message>
+    <message><source>Mid frequency</source><translation>Frequência dos médios</translation></message>
+    <message><source>Mid gain</source><translation>Ganho dos médios</translation></message>
+    <message><source>Mid Q</source><translation>Q dos médios</translation></message>
+    <message><source>High shelf frequency</source><translation>Frequência dos agudos</translation></message>
+    <message><source>High shelf gain</source><translation>Ganho dos agudos</translation></message>
+    <message><source>Threshold</source><translation>Threshold</translation></message>
+    <message><source>Ratio</source><translation>Proporção</translation></message>
+    <message><source>Attack</source><translation>Ataque</translation></message>
+    <message><source>Release</source><translation>Release</translation></message>
+    <message><source>Makeup gain</source><translation>Ganho de compensação</translation></message>
+    <message><source>Track audio effects</source><translation>Efeitos de áudio da faixa</translation></message>
+    <message><source>Effects…</source><translation>Efeitos…</translation></message>
 </context>
 <context>
     <name>ColorWorkspace</name>

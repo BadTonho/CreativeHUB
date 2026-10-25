@@ -1,6 +1,6 @@
 # Application Architecture
 
-[Composition interchange](../../COMPOSITION_INTERCHANGE.md) uses a shared format/presentation library with application-owned converters and worker-backed UI commands. Native CSP schema is v41: v33 added Color Gallery metadata and PNG sidecars, v34 stores the Color correction graph, v35 expanded Primary Grade, v36 adds independent Log controls, v37 stores named per-clip Color graph snapshots, v38 adds Color Curves and tonal qualifiers, v39 adds spatial qualifier matte refinement, v40 adds Color Power Windows and tracking curves, and v41 adds one-level audio buses, track routes and sends, pan, and Master mix settings. Primary Grade was introduced in v32 and Gaussian Blur in v31. Blur transfers through cscomp v3.
+[Composition interchange](../../COMPOSITION_INTERCHANGE.md) uses a shared format/presentation library with application-owned converters and worker-backed UI commands. Native CSP schema is v42: v33 added Color Gallery metadata and PNG sidecars, v34 stores the Color correction graph, v35 expanded Primary Grade, v36 adds independent Log controls, v37 stores named per-clip Color graph snapshots, v38 adds Color Curves and tonal qualifiers, v39 adds spatial qualifier matte refinement, v40 adds Color Power Windows and tracking curves, v41 adds one-level audio buses, track routes and sends, pan, and Master mix settings, and v42 adds per-track EQ/compressor chains. Primary Grade was introduced in v32 and Gaussian Blur in v31. Blur transfers through cscomp v3.
 
 Color owns a graph model and evaluator separate from Fusion. The render order
 is Fusion graph evaluation, Color graph evaluation, then clip transform and
@@ -63,7 +63,7 @@ under `docs/video-editor/architecture/` so each document can remain focused and 
 The Color workspace owns a per-clip correction graph with Input, effect,
 Parallel Mixer and Output nodes. Its connections define processing, and the
 graph, named per-clip versions, Power Windows and their geometry tracks are
-saved in CSP v41. Serial graphs without Power Windows use the existing GPU effect pipeline
+saved in CSP v42. Serial graphs without Power Windows use the existing GPU effect pipeline
 when available; branched graphs use Color's CPU RGBA evaluator after Fusion.
 Edit Inspector edits the same effect nodes' parameters and enabled state, while
 Color owns topology and layout. Primary Grade offers Wheels and Bars views over
@@ -100,7 +100,7 @@ mute, and Master controls use `TimelineCommandService`. The playback worker and
 offline renderer share the sample mixer; solo is temporary and Preview-only.
 Generation-gated level messages provide track, bus, and Master meters, and the
 meter path is disabled outside Audio. Panels are created on first entry. CSP
-v41 stores the mixer state; the Hub accepts it and rejects v42. See the
+v42 stores mixer and track effect state; the Hub accepts it and rejects v43. See the
 [Audio Boundary](AUDIO.md) and [Audio Workspace Roadmap](../AUDIO_WORKSPACE_ROADMAP.md).
 
 The Video Editor is the suite's audiovisual application under

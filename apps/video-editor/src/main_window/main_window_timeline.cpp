@@ -370,6 +370,26 @@ void MainWindow::applyAudioTrackMix(
     }
 }
 
+void MainWindow::applyAudioTrackEffects(
+    timeline::TrackId track_id,
+    std::vector<timeline::AudioEffectInstance> effects) {
+    try {
+        const auto result = timeline_command_service_.execute(
+            application::SetTrackAudioEffectsCommand{
+                track_id, std::move(effects)});
+        if (!result.changed()) return;
+        applyTimelineEditResult(result, false);
+        updateTimelineState();
+        refreshPlaybackComposition();
+    } catch (const std::exception& error) {
+        logging::Logger::instance().log(
+            logging::Level::Error, "audio_workspace", "set_track_effects",
+            error.what(), {{"track_id", std::to_string(track_id)}});
+        statusBar()->showMessage(
+            QCoreApplication::translate("MainWindow", "Could not change the audio track effects."));
+    }
+}
+
 void MainWindow::applyAudioBusMix(
     timeline::AudioBusId bus_id, double gain, bool muted, double pan) {
     try {

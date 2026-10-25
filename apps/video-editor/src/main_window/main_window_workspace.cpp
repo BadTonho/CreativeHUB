@@ -598,6 +598,8 @@ void MainWindow::createWorkspace() {
             });
     connect(audio_workspace_, &ui::AudioWorkspace::trackMixChanged,
             this, &MainWindow::applyAudioTrackMix);
+    connect(audio_workspace_, &ui::AudioWorkspace::trackAudioEffectsChanged,
+            this, &MainWindow::applyAudioTrackEffects);
     connect(audio_workspace_, &ui::AudioWorkspace::busMixChanged,
             this, &MainWindow::applyAudioBusMix);
     connect(audio_workspace_, &ui::AudioWorkspace::masterMixChanged,

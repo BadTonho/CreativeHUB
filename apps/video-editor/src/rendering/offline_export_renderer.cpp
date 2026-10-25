@@ -854,6 +854,7 @@ std::vector<media::TimelineAudioMixClip> audioMixClips(
         audio_clip.track_pan = render_clip.track->audio_pan;
         audio_clip.output_bus_id = render_clip.track->output_bus_id;
         audio_clip.audio_sends = render_clip.track->audio_sends;
+        audio_clip.audio_effects = render_clip.track->audio_effects;
         audio_clip.source_channel_count = render_clip.audio != nullptr
             ? render_clip.audio->source_channel_count() : 2;
     }
@@ -881,6 +882,7 @@ void mixAudioBlock(
     const std::vector<media::TimelineAudioMixClip>& audio_clips,
     const std::vector<media::TimelineAudioMixTransition>& transitions,
     const media::TimelineAudioMixConfiguration& audio_mix_configuration,
+    media::TimelineAudioMixState& audio_mix_state,
     double timeline_fps,
     std::int64_t block_start,
     int sample_count,
@@ -888,7 +890,8 @@ void mixAudioBlock(
     const std::atomic_bool& canceled) {
     constexpr int sample_rate = 48000;
     media::TimelineAudioMixAccumulator audio_mixer(
-        static_cast<std::size_t>(sample_count), 2, audio_mix_configuration);
+        static_cast<std::size_t>(sample_count), 2, audio_mix_configuration,
+        &audio_mix_state);
     const auto spans = media::planTimelineAudioMix(
         audio_clips, transitions, timeline_fps, sample_rate,
         block_start, sample_count);
@@ -989,6 +992,7 @@ void OfflineExportRenderer::render(
         const auto audio_clips = audioMixClips(clips);
         const auto audio_transitions = audioMixTransitions(transitions);
         media::TimelineAudioMixConfiguration audio_mix_configuration;
+        media::TimelineAudioMixState audio_mix_state;
         audio_mix_configuration.buses = job.project_snapshot.audio_buses;
         audio_mix_configuration.master = job.project_snapshot.master_audio_mix;
         audio_mix_configuration.apply_solo = false;
@@ -1112,7 +1116,8 @@ void OfflineExportRenderer::render(
                 {
                     detail::ExportTimedScope audio(metrics.audio_nanoseconds);
                     mixAudioBlock(clips, audio_clips, audio_transitions,
-                                  audio_mix_configuration, timeline_fps,
+                                  audio_mix_configuration, audio_mix_state,
+                                  timeline_fps,
                                   sample, block_count, mixed, cancel_requested);
                 }
                 {

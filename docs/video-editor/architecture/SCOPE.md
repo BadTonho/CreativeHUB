@@ -89,18 +89,20 @@ The Video Editor currently includes:
 - clip movement, splitting, trimming, deletion, and bounded Undo/Redo;
 - keyframe-based seeking with bounded cache and temporal fallback;
 - hierarchical Media Browser bins, project labels, and offline state;
-- versioned `.csp` persistence through version 41, with versions 1 through 40
+- versioned `.csp` persistence through version 42, with versions 1 through 41
   readable, a rational Timeline rate and separate source/Timeline
   clip durations, video/image/text/audio/adjustment clip kinds, typed tracks,
   per-project timeline zoom, separate Video/Audio track-row heights, audio
-  buses, track routing and sends, pan and Master mix settings, and optional
+  buses, track routing and sends, pan and Master mix settings, per-track EQ
+  and compression chains, and optional
   shared/clip-specific
   Image Editor links and Motion links with persisted publication positions.
   New projects offer 1920×1080 (16:9) and 1080×1920 (9:16)
   canvases plus 24, 25, 30, 48, 50, and 60 fps, defaulting to 16:9 at 30 fps;
 - embedded video audio exposed as linked Audio-track companions, independent
   audio-only tracks, synchronized mixing, shared Preview/export track routing,
-  buses, sends, gain, mute, pan, transient Preview solo, CSP v41 migration, and
+  buses, sends, gain, mute, pan, transient Preview solo, EQ/compressor DSP,
+  CSP v42 migration, and
   the video fallback path;
 - basic Timeline layers, normalized 2D transformations, linear keyframes, and
   worker-side composition;
@@ -111,7 +113,7 @@ The Video Editor currently includes:
 - per-clip Color correction graphs for supported visual clips, with effect and
   Parallel Mixer nodes, rectangular/elliptical Power Windows and animated
   tracking data, shared Edit parameter/enabled-state controls, Preview and
-  export evaluation, and version 41 persistence;
+  export evaluation, and version 42 persistence;
 - Primary Grade Wheels and Bars editing of shared RGB Lift, Gamma, Gain, and
   Offset values; independent Log Shadows, Midtones, and Highlights; Contrast,
   Pivot, Saturation, Temperature and Tint; and Waveform, Parade, Vectorscope,
@@ -170,7 +172,7 @@ Text and transitions are drag-only, and Gain remains unavailable. Merge combines
 straight-alpha source-over. The graph output passes through the Color
 correction graph before Timeline transform/keyframes.
 
-Graph animation was introduced in `.csp` version 22 and is retained in version 41.
+Graph animation was introduced in `.csp` version 22 and is retained in version 42.
 Versions 1 through 21 retain their
 existing graph behavior and preserve their prior image result. New keyframes
 are linear, relative to the selected clip's start, and constrained to its

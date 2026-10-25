@@ -671,6 +671,7 @@ ProjectOpenResult ProjectOpenService::prepare(
             prepared_track.audio_pan = project_track.audio_pan;
             prepared_track.output_bus_id = project_track.output_bus_id;
             prepared_track.audio_sends = project_track.audio_sends;
+            prepared_track.audio_effects = project_track.audio_effects;
             snapshot.tracks.push_back(std::move(prepared_track));
 
             for (std::size_t clip_index = 0;

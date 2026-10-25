@@ -1405,6 +1405,69 @@ ProjectDocument detail::load(const std::filesystem::path& project_path) {
                     track.audio_sends.push_back(send);
                 }
             }
+            if (version >= audio_effects_format_version) {
+                const auto effects_value = track_object.value("audio_effects");
+                if (!effects_value.isArray()) {
+                    throwJson(ProjectErrorCode::MissingField, project_path,
+                              "CSP v42 is missing the track audio effects array.");
+                }
+                for (const auto& effect_value : effects_value.toArray()) {
+                    if (!effect_value.isObject()) {
+                        throwJson(ProjectErrorCode::InvalidValue, project_path,
+                                  "Project JSON contains an invalid audio effect.");
+                    }
+                    const auto effect_object = effect_value.toObject();
+                    const auto type = effect_object.value("type");
+                    const auto enabled = effect_object.value("enabled");
+                    if (!type.isString() || !enabled.isBool()) {
+                        throwJson(ProjectErrorCode::InvalidValue, project_path,
+                                  "Project JSON contains invalid audio effect metadata.");
+                    }
+                    const auto read_parameter = [&effect_object, &project_path](
+                            const char* name) {
+                        const auto value = effect_object.value(QLatin1String(name));
+                        if (!value.isDouble()) {
+                            throwJson(ProjectErrorCode::MissingField, project_path,
+                                      "Project JSON is missing an audio effect parameter.");
+                        }
+                        return value.toDouble();
+                    };
+                    timeline::AudioEffectInstance effect;
+                    effect.enabled = enabled.toBool();
+                    if (type.toString() == QLatin1String("equalizer")) {
+                        timeline::AudioEqualizerParameters parameters;
+                        parameters.low_shelf_frequency_hz = read_parameter(
+                            "low_shelf_frequency_hz");
+                        parameters.low_shelf_gain_db = read_parameter(
+                            "low_shelf_gain_db");
+                        parameters.mid_frequency_hz = read_parameter(
+                            "mid_frequency_hz");
+                        parameters.mid_gain_db = read_parameter("mid_gain_db");
+                        parameters.mid_q = read_parameter("mid_q");
+                        parameters.high_shelf_frequency_hz = read_parameter(
+                            "high_shelf_frequency_hz");
+                        parameters.high_shelf_gain_db = read_parameter(
+                            "high_shelf_gain_db");
+                        effect.parameters = parameters;
+                    } else if (type.toString() == QLatin1String("compressor")) {
+                        timeline::AudioCompressorParameters parameters;
+                        parameters.threshold_db = read_parameter("threshold_db");
+                        parameters.ratio = read_parameter("ratio");
+                        parameters.attack_ms = read_parameter("attack_ms");
+                        parameters.release_ms = read_parameter("release_ms");
+                        parameters.makeup_gain_db = read_parameter("makeup_gain_db");
+                        effect.parameters = parameters;
+                    } else {
+                        throwJson(ProjectErrorCode::InvalidValue, project_path,
+                                  "Project JSON contains an unsupported audio effect type.");
+                    }
+                    track.audio_effects.push_back(std::move(effect));
+                }
+                if (!timeline::validAudioEffectChain(track.audio_effects)) {
+                    throwJson(ProjectErrorCode::InvalidValue, project_path,
+                              "Project JSON contains invalid or duplicate audio effects.");
+                }
+            }
             const auto track_clips = track_object.value("clips");
             if (!track_clips.isArray()) {
                 throwJson(ProjectErrorCode::MissingField, project_path, "Project JSON is missing a track clips array.");

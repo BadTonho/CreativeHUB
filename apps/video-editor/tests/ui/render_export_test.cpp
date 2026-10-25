@@ -1130,6 +1130,35 @@ void validateEmbeddedAudioMixing(
     require(std::abs(pre_fader_rms - audible_rms * 0.75) < 0.004,
             "A pre-fader export send did not bypass the track fader.");
 
+    auto effects_job = job;
+    effects_job.id = 412;
+    effects_job.settings.output_path = pathToQString(
+        root / ("audio-track-effects." + extension));
+    auto& effects_track = effects_job.project_snapshot.timeline_tracks.front();
+    timeline::AudioEffectInstance equalizer;
+    equalizer.enabled = true;
+    auto eq_parameters = timeline::AudioEqualizerParameters{};
+    eq_parameters.mid_frequency_hz = 440.0;
+    eq_parameters.mid_gain_db = 6.0;
+    equalizer.parameters = eq_parameters;
+    timeline::AudioEffectInstance compressor;
+    compressor.enabled = true;
+    compressor.parameters = timeline::AudioCompressorParameters{
+        -24.0, 4.0, 0.1, 100.0, 0.0};
+    effects_track.audio_effects = {equalizer, compressor};
+    renderJob(effects_job, canceled);
+    const auto plain_quiet_rms = decodedAudioRmsRange(
+        pathFromQString(job.settings.output_path), 0, 8000);
+    const auto effected_quiet_rms = decodedAudioRmsRange(
+        pathFromQString(effects_job.settings.output_path), 0, 8000);
+    const auto plain_loud_rms = decodedAudioRmsRange(
+        pathFromQString(job.settings.output_path), 32000, 8000);
+    const auto effected_loud_rms = decodedAudioRmsRange(
+        pathFromQString(effects_job.settings.output_path), 32000, 8000);
+    require(effected_quiet_rms > plain_quiet_rms * 1.5 &&
+                effected_loud_rms < plain_loud_rms * 0.9,
+            "Offline export did not apply the saved EQ and compressor chain.");
+
     auto linked_job = makeImageJob(
         output, source, root / ("linked-video-audio." + extension), 407, 24);
     linked_job.project_snapshot.timeline_frame_rate = {24, 1};

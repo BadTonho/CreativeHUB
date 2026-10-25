@@ -85,7 +85,7 @@ keeps the project clean, and repeated open/save cycles do not duplicate
 companions. Older projects use gain `1.0` and mute `false` when those optional
 fields are absent.
 
-## Mixer routing (CSP v41)
+## Mixer routing and track effects (CSP v42)
 
 The project owns stable-ID audio buses and one Master mix. A track routes its
 main output either to Master or one bus. Buses are flat and always feed Master;
@@ -113,10 +113,31 @@ monitor gain and output clipping.
 
 Removing a bus sends its main-routed tracks to Master and removes sends that
 target it. The operation is one undoable timeline edit. Fader and pan drags are
-grouped into one edit per gesture. CSP v41 requires bus and Master settings and
-track pan, route, and send data; projects v1-v40 load with no buses or sends,
-centered pan, Master defaults, and tracks routed to Master. The Hub accepts v41
-and rejects v42.
+grouped into one edit per gesture.
+
+Each track can store an ordered chain with at most one three-band equalizer
+and one compressor. Effects are disabled by default. The EQ has low and high
+shelves plus a peaking mid band; shelf gains and mid gain range from -18 to
+18 dB, shelf frequencies from 20 to 500 Hz and 500 Hz to 20 kHz, and the mid
+frequency/Q range from 20 Hz to 20 kHz and 0.1 to 10. Defaults are 120 Hz,
+1 kHz/Q 1, and 8 kHz, all flat. The compressor ranges are -60 to 0 dB
+threshold, 1:1 to 20:1 ratio, 0.1 to 200 ms attack, 10 to 1000 ms release,
+and 0 to 24 dB makeup; defaults are -18 dB, 4:1, 10 ms, 100 ms, and 0 dB.
+
+The shared mixer sums each track's clips after clip gain, envelopes, and
+crossfades, then applies the enabled effect chain before its main route and
+sends. Pre-fader sends tap that processed signal before track gain and pan;
+post-fader sends tap it after those controls. Track mute silences both. DSP
+filter and compressor state carries across contiguous Preview and export blocks
+and resets after a seek, output restart, or discontinuity. Flat or disabled
+chains preserve the existing mixer output. Chain edits during playback blend
+the previous and new processing over 10 ms. The track Effects editor changes
+the ordered chain through one undoable command.
+
+CSP v42 requires the bus and Master settings, track pan/routes/sends, and an
+`audio_effects` array on each track. Projects v1-v41 open without effects;
+projects v1-v40 also receive no buses or sends, centered pan, neutral Master,
+and tracks routed to Master. The Hub accepts v1-v42 and rejects v43.
 
 Video export remains a video file. Its duration reaches the end of the longest
 Timeline clip. If audio extends beyond visual content, the renderer emits black
@@ -126,8 +147,9 @@ The complete Timeline still determines video duration and its black tail. With
 audio enabled, an offline audio source fails with a detailed log and preserves
 the previous destination. Preview and export share sample scheduling and
 mixing for embedded and independent audio sources, including trims, clip
-envelopes, crossfades, track routes and sends, bus processing, Master gain/mute,
-and silence. Solo is Preview only. Monitoring volume affects Preview only.
+envelopes, crossfades, track effects, track routes and sends, bus processing,
+Master gain/mute, and silence. Solo is Preview only. Monitoring volume affects
+Preview only.
 
 Audio clip waveforms are derived after insertion and displayed from separate
 left/right channel peaks. The global Mono/Stereo preference lives in
@@ -141,8 +163,9 @@ Crossfade at an adjacent cut. It overlaps the incoming clip by D Timeline
 frames and uses equal-power cosine/sine gains per sample in the shared Preview
 and export mixer. The transition gain multiplies track gain, clip gain, mute,
 and the clip's existing volume envelope. Clips linked to video must be
-unlinked before adding the transition. Recording, audio effects, track
-automation, and audio-only file export remain future work.
+unlinked before adding the transition. Recording, clip-level effects, advanced
+repair/noise processing, track automation, and audio-only file export remain
+future work.
 
 A visual Cross Dissolve changes video timing but keeps embedded video audio as
 a hard cut at the original cut: outgoing audio continues through the visual

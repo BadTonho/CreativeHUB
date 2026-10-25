@@ -363,6 +363,7 @@ void PlaybackController::refreshComposition() {
             audio_layer.track_audio_pan = track.audio_pan;
             audio_layer.output_bus_id = track.output_bus_id;
             audio_layer.audio_sends = track.audio_sends;
+            audio_layer.track_audio_effects = track.audio_effects;
             if (imported != nullptr && imported->metadata.audio.has_value()) {
                 audio_layer.source_audio_channel_count = std::max(
                     1, imported->metadata.audio->channel_count);

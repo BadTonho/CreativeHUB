@@ -5,6 +5,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <memory>
 #include <span>
 #include <unordered_map>
 #include <vector>
@@ -40,6 +41,7 @@ struct TimelineAudioMixClip {
     double track_pan = 0.0;
     std::optional<timeline::AudioBusId> output_bus_id;
     std::vector<timeline::AudioSend> audio_sends;
+    std::vector<timeline::AudioEffectInstance> audio_effects;
     int source_channel_count = 2;
 };
 
@@ -88,6 +90,25 @@ struct TimelineAudioMixResult {
     float master_peak = 0.0F;
 };
 
+// Persistent per-track DSP state shared by consecutive Preview or export
+// blocks. Call reset() whenever playback jumps to a different Timeline point.
+class TimelineAudioMixState final {
+public:
+    TimelineAudioMixState();
+    ~TimelineAudioMixState();
+    TimelineAudioMixState(TimelineAudioMixState&&) noexcept;
+    TimelineAudioMixState& operator=(TimelineAudioMixState&&) noexcept;
+    TimelineAudioMixState(const TimelineAudioMixState&) = delete;
+    TimelineAudioMixState& operator=(const TimelineAudioMixState&) = delete;
+
+    void reset() noexcept;
+
+private:
+    friend class TimelineAudioMixAccumulator;
+    struct Impl;
+    std::unique_ptr<Impl> impl_;
+};
+
 // Accumulates clip samples through track routes, sends, buses and the Master.
 // The same class is used for real-time Preview and offline export.
 class TimelineAudioMixAccumulator final {
@@ -95,7 +116,8 @@ public:
     TimelineAudioMixAccumulator(
         std::size_t sample_count,
         int channel_count,
-        TimelineAudioMixConfiguration configuration);
+        TimelineAudioMixConfiguration configuration,
+        TimelineAudioMixState* persistent_state = nullptr);
 
     void accumulate(
         const TimelineAudioMixSpan& span,
@@ -104,6 +126,18 @@ public:
     [[nodiscard]] TimelineAudioMixResult finish();
 
 private:
+    struct TrackBuffers {
+        std::vector<float> pre_fader;
+        std::vector<float> post_fader;
+        double gain = 1.0;
+        double pan = 0.0;
+        bool muted = false;
+        int source_channel_count = 2;
+        std::optional<timeline::AudioBusId> output_bus_id;
+        std::vector<timeline::AudioSend> sends;
+        std::vector<timeline::AudioEffectInstance> effects;
+    };
+
     [[nodiscard]] bool trackSoloed(timeline::TrackId track_id) const noexcept;
     [[nodiscard]] bool busSoloed(timeline::AudioBusId bus_id) const noexcept;
     [[nodiscard]] std::vector<float>& busBuffer(timeline::AudioBusId bus_id);
@@ -111,10 +145,13 @@ private:
     std::size_t sample_count_ = 0;
     int channel_count_ = 0;
     TimelineAudioMixConfiguration configuration_;
+    int sample_rate_ = 0;
+    std::unique_ptr<TimelineAudioMixState> owned_state_;
+    TimelineAudioMixState* persistent_state_ = nullptr;
     bool any_solo_ = false;
     std::vector<float> master_samples_;
     std::unordered_map<timeline::AudioBusId, std::vector<float>> bus_samples_;
-    std::unordered_map<timeline::TrackId, std::vector<float>> track_samples_;
+    std::unordered_map<timeline::TrackId, TrackBuffers> track_samples_;
 };
 
 [[nodiscard]] std::vector<TimelineAudioMixSpan> planTimelineAudioMix(
