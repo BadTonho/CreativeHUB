@@ -16,8 +16,12 @@ existing creative_suite::effects implementations. Parallel Mixer combines
 its inputs by normalized weighted RGBA average, with equal weights by default.
 
 The canvas currently supports node selection, movement, and connecting or
-reconnecting ports. The Add Effect, Add Branch, On/Off, Remove, and effect-type
-controls remain connected to their actions but are hidden from the interface.
+reconnecting ports. Dragging supported effects from the shared Effects catalog
+adds disconnected nodes. The standalone Add Effect action, Add Branch, generic
+effect On/Off and Remove commands, and effect-type selector are deferred by the
+maintainer; they are not planned work in the current roadmap. Curves remains
+available through the canvas context menu, including its own enable/disable and
+remove actions.
 The top-right Effects button remains visible in Color and toggles a resizable
 catalog panel at the right of the node canvas, within the upper workspace area.
 The shared catalog is temporarily hosted there and returns to its dock when
@@ -246,11 +250,12 @@ and restoration. Keep large image assets outside the main CSP document.
 
 ## Staged development order
 
-1. **Make graph editing reachable (partially implemented).** Color can create
-   supported correction nodes by dragging them from the shared, resizable
-   Effects catalog panel beside the node canvas. Nodes are added disconnected
-   and connected through the canvas ports. Other graph-management actions
-   remain hidden.
+1. **Make graph editing reachable (implemented for the current scope).** Color
+   creates supported correction nodes by dragging them from the shared,
+   resizable Effects catalog panel beside the node canvas. Nodes are added
+   disconnected and connected through the canvas ports. The standalone Add
+   Effect action, Add Branch, generic effect On/Off and Remove commands, and
+   effect-type selector are deferred by the maintainer and are not scheduled.
 2. **Broaden primary grading and monitoring (implemented).** Wheels/Bars/Log,
    Vectorscope, and RGB Histogram use normalized RGB and Rec. 709-derived
    scopes; calibrated IRE, HDR, and display-managed modes await a color
