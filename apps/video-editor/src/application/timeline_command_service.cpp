@@ -1643,6 +1643,27 @@ TimelineEditResult TimelineCommandService::execute(
 }
 
 TimelineEditResult TimelineCommandService::execute(
+    const SetTrackAudioDuckingCommand& command) {
+    if (!session_.timeline_.locateTrack(command.track_id).has_value()) {
+        return result(EditStatus::Rejected, EditReason::InvalidTarget);
+    }
+    const auto before = session_.captureEditState();
+    const auto mutation = session_.timeline_.setTrackAudioDucking(
+        command.track_id, command.settings);
+    if (mutation == timeline::AudioParameterResult::NoChange) {
+        return result(EditStatus::NoChange);
+    }
+    if (mutation != timeline::AudioParameterResult::Changed) {
+        return result(EditStatus::Rejected, reasonForAudio(mutation));
+    }
+    recordSuccessfulEdit(before);
+    auto output = result(EditStatus::Applied);
+    output.affected_track_ids = {command.track_id};
+    output.invalidate_playback = true;
+    return output;
+}
+
+TimelineEditResult TimelineCommandService::execute(
     const SetAudioBusMixCommand& command) {
     const auto before = session_.captureEditState();
     const auto mutation = session_.timeline_.setAudioBusMix(

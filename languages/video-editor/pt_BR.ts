@@ -65,6 +65,138 @@
     <message><source>Makeup gain</source><translation>Ganho de compensação</translation></message>
     <message><source>Track audio effects</source><translation>Efeitos de áudio da faixa</translation></message>
     <message><source>Effects…</source><translation>Efeitos…</translation></message>
+    <message>
+        <source>Dialogue cleanup</source>
+        <translation>Limpeza de diálogo</translation>
+    </message>
+    <message>
+        <source>Noise reduction</source>
+        <translation>Redução de ruído</translation>
+    </message>
+    <message>
+        <source>Audio repair</source>
+        <translation>Reparo de áudio</translation>
+    </message>
+    <message>
+        <source>Add dialogue cleanup</source>
+        <translation>Adicionar limpeza de diálogo</translation>
+    </message>
+    <message>
+        <source>Add noise reduction</source>
+        <translation>Adicionar redução de ruído</translation>
+    </message>
+    <message>
+        <source>Add audio repair</source>
+        <translation>Adicionar reparo de áudio</translation>
+    </message>
+    <message>
+        <source>Edit this effect in the Audio workspace.</source>
+        <translation>Edite este efeito na aba Áudio.</translation>
+    </message>
+    <message>
+        <source>High-pass frequency</source>
+        <translation>Frequência de corte de graves</translation>
+    </message>
+    <message>
+        <source>De-esser intensity</source>
+        <translation>Intensidade do de-esser</translation>
+    </message>
+    <message>
+        <source>Noise floor</source>
+        <translation>Piso de ruído</translation>
+    </message>
+    <message>
+        <source>Hum removal</source>
+        <translation>Remoção de zumbido</translation>
+    </message>
+    <message>
+        <source>Remove clicks</source>
+        <translation>Remover estalos</translation>
+    </message>
+    <message>
+        <source>Click detection threshold</source>
+        <translation>Limiar de detecção de estalos</translation>
+    </message>
+    <message>
+        <source>Ducking</source>
+        <translation>Ducking</translation>
+    </message>
+    <message>
+        <source>Automatic</source>
+        <translation>Automático</translation>
+    </message>
+    <message>
+        <source>Curve</source>
+        <translation>Curva</translation>
+    </message>
+    <message>
+        <source>Mode</source>
+        <translation>Modo</translation>
+    </message>
+    <message>
+        <source>Choose a voice track</source>
+        <translation>Escolha uma faixa de voz</translation>
+    </message>
+    <message>
+        <source>Voice source</source>
+        <translation>Fonte de voz</translation>
+    </message>
+    <message>
+        <source>Reduction</source>
+        <translation>Redução</translation>
+    </message>
+    <message>
+        <source>Hold</source>
+        <translation>Sustentação</translation>
+    </message>
+    <message>
+        <source>Generate a curve to edit ducking points on the music track. Regenerating replaces the saved curve and can be undone.</source>
+        <translation>Gere uma curva para editar os pontos de ducking na faixa de música. Gerar novamente substitui a curva salva e pode ser desfeito.</translation>
+    </message>
+    <message>
+        <source>Generate curve</source>
+        <translation>Gerar curva</translation>
+    </message>
+    <message>
+        <source>Select an audio clip to edit its effects</source>
+        <translation>Selecione um clipe de áudio para editar seus efeitos</translation>
+    </message>
+    <message>
+        <source>Clip audio effects — %1</source>
+        <translation>Efeitos de áudio do clipe — %1</translation>
+    </message>
+    <message>
+        <source>Remove ducking point</source>
+        <translation>Remover ponto de ducking</translation>
+    </message>
+    <message>
+        <source>Could not change the clip audio effects.</source>
+        <translation>Não foi possível alterar os efeitos de áudio do clipe.</translation>
+    </message>
+    <message>
+        <source>Could not change ducking settings.</source>
+        <translation>Não foi possível alterar as configurações de ducking.</translation>
+    </message>
+    <message>
+        <source>Generating ducking curve…</source>
+        <translation>Gerando curva de ducking…</translation>
+    </message>
+    <message>
+        <source>Cancel</source>
+        <translation>Cancelar</translation>
+    </message>
+    <message>
+        <source>The project changed. Generate the ducking curve again.</source>
+        <translation>O projeto foi alterado. Gere a curva de ducking novamente.</translation>
+    </message>
+    <message>
+        <source>Could not generate the ducking curve. See the error log.</source>
+        <translation>Não foi possível gerar a curva de ducking. Consulte o registro de erros.</translation>
+    </message>
+    <message>
+        <source>An audio processor failed and was bypassed. See the error log.</source>
+        <translation>Um processador de áudio falhou e foi ignorado. Consulte o registro de erros.</translation>
+    </message>
 </context>
 <context>
     <name>ColorWorkspace</name>

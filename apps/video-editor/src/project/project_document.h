@@ -15,7 +15,8 @@
 
 namespace project {
 
-inline constexpr int current_format_version = 43;
+inline constexpr int current_format_version = 44;
+inline constexpr int audio_processing_format_version = 44;
 inline constexpr int audio_mixing_format_version = 41;
 inline constexpr int audio_effects_format_version = 42;
 inline constexpr int clip_audio_effects_format_version = 43;
@@ -149,6 +150,8 @@ struct ProjectTrack {
     std::optional<timeline::AudioBusId> output_bus_id;
     std::vector<timeline::AudioSend> audio_sends;
     std::vector<timeline::AudioEffectInstance> audio_effects;
+
+    timeline::AudioDuckingSettings audio_ducking;
 
     friend bool operator==(const ProjectTrack&, const ProjectTrack&) = default;
 };

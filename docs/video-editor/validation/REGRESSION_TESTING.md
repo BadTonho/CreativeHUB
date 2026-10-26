@@ -2369,3 +2369,52 @@ scenario now use an actual Image v23 producer with raster mask, resized canvas,
 (255,38,58), while alpha, stale-revision refusal and clip variants retain their
 contracts. Shared effects checks retain Video's Rec.709 saturation. See
 [Image execution evidence](../../image-editor/features/HUE_SATURATION.md).
+
+## Audio dialogue processing and ducking (CSP v44)
+
+| Behavior | Verification |
+| --- | --- |
+| Cleanup/denoise response, hum rejection, click repair, mono/stereo, duration/alignment, persistent block state | `creative-suite-main-editor-timeline-audio-mix` |
+| Automatic RMS attack/hold/release, solo-independent source, order-independent mixing, curve-mode exclusivity and at most 0.1 dB simplification error | `creative-suite-main-editor-timeline-audio-mix` |
+| Full chains, ducking settings/curves, invalid self-reference/points, source deletion and atomic Undo/Redo | `creative-suite-main-editor-timeline-command-service` |
+| CSP v44 round-trip, invalid parameters/references, v43 migration and v45 rejection | `creative-suite-main-editor-project` |
+| New processing and curves survive autosave/recovery | `creative-suite-main-editor-autosave` |
+| Audio-only effect editor, Edit preservation, ducking source controls, real-source curve generation, cancellation and stale-project rejection | `creative-suite-main-editor-audio-workspace` |
+| Audio Timeline curve add/drag emits one track command and does not move clips | `creative-suite-main-editor-timeline-widget` |
+| Real offline export uses the expanded processing path | `creative-suite-main-editor-render-export` |
+| Shared playback decoder/mixer boundaries | `creative-suite-main-editor-playback-worker-errors`, `creative-suite-main-editor-playback-controller`, `creative-suite-main-editor-audio-playback` |
+| Expanded processing/curve preservation in Hub backup/restoration; future version rejection | `hub-backup-format-test`, `hub-backup-manager-test` |
+| pt-BR controls and tracked compiled catalog | `creative-suite-main-editor-translation-catalog`, `creative-suite-video-editor-translation-catalog` build target |
+
+Native manual check (pending Windows/macOS/Linux device and visual acceptance):
+open voice and music clips on separate tracks. In Audio, edit a selected clip's
+cleanup, denoise and repair controls, then add/reorder track processors. Confirm
+Cancel preserves the prior chain and Edit displays Audio-owned entries without
+removing them. Compare beginning/end timing and sound in Preview/export. Save,
+reopen, split/duplicate linked clips, paste Audio Effects and exercise Undo/Redo.
+Choose the voice as the music track's ducking source; audition attack, hold,
+release, mute and solo, including a pre-fader send. Generate Curve, check progress,
+cancel a second generation, and verify no partial result is applied. Add/drag a
+point and remove one through its context menu; each action must undo once.
+Switch Automatic/Curve and verify no doubled attenuation and preservation of
+manual points. Regenerate, undo, change the source during analysis and replace
+the project; stale results must not modify the document. Remove the source
+track and undo; confirm saved curve and source settings restore. Back up and
+restore the CSP v44 project through Hub and compare settings and exported audio.
+
+The audio playback regression always generates its own silent-video fixture for
+missing-stream fallback. The optional reference-video invocation checks actual
+decode availability and may contain audio. Timeline widget catalog-drop checks
+follow the existing Edit/Fusion/Color action ownership; the new ducking lane
+adds no catalog-drop behavior.
+
+Windows Release verification (2026-10-26): all 17 selected CTest entries passed
+across Audio/MainWindow, project/autosave, Timeline commands/widget/mix,
+playback worker/controller and audio/reference decoding, export, Edit controller,
+translation catalog and Hub backup format/manager. The final Audio/MainWindow
+and translation-catalog rerun passed 3/3 after the background-task lifetime/logging
+adjustments and pt-BR encoding corrections.
+Video Editor and Hub Release application targets built successfully; no
+installers or release packages were generated. The canonical Video Editor is
+`build/apps/video-editor/Release/creative-suite-video-editor.exe` (4,785,152 bytes; modified 2026-10-26 15:15:59 UTC-03:00).
+Native device/visual and macOS/Linux runtime acceptance remain pending.

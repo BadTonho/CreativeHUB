@@ -1,7 +1,7 @@
 # Video Editor Roadmap
 
 The dedicated [Audio Workspace Roadmap](AUDIO_WORKSPACE_ROADMAP.md) records the
-implemented first editing/mixing stage and later audio candidates without a
+implemented editing/mixing, dialogue processing and ducking stages, and later audio candidates without a
 release commitment.
 
 The [Color Workspace Roadmap](COLOR_WORKSPACE_ROADMAP.md) records the current
@@ -225,9 +225,10 @@ performance, licensing, and maintenance cost.
   masks and power windows; comparison and waveform/vectorscope displays; shot
   matching; managed wide-gamut and HDR workflows with explicit input/output
   transforms and LUT handling.
-- **Audio:** track routing and submixes; equalization and dynamics processing;
-  loudness measurement and normalization; dialogue cleanup, noise reduction,
-  ducking, and repair; expanded recording, automation, and surround workflows.
+- **Audio:** loudness measurement and normalization; advanced voice isolation,
+  dereverberation and restoration; expanded recording, automation, and surround
+  workflows. Routing, EQ/compression, basic cleanup/noise/repair and ducking are
+  implemented in the Audio workspace.
 - **Compositing and effects:** spline and polygon masks; mask tracking; point
   and planar tracking; chroma/luma keying; rotoscoping; reusable effect
   templates; advanced compositing and 3D layers after a separate performance

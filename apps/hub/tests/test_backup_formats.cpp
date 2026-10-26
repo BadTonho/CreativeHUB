@@ -485,6 +485,12 @@ void testVideoDocuments(const QString& root) {
     clip_eq_parameters.mid_gain_db = 4.0;
     clip_eq.parameters = clip_eq_parameters;
     color_document.timeline_tracks.front().clips.front().audio_effects = {clip_eq};
+    auto& processing_track = color_document.timeline_tracks.front();
+    processing_track.audio_effects.push_back({timeline::AudioDialogueCleanupParameters{}, true});
+    processing_track.audio_effects.push_back({timeline::AudioNoiseReductionParameters{}, true});
+    processing_track.audio_effects.push_back({timeline::AudioRepairParameters{60, true, 3}, true});
+    processing_track.audio_ducking.mode = timeline::AudioDuckingMode::Curve;
+    processing_track.audio_ducking.curve = {{0, 0}, {100000, 12}, {200000, 0}};
     color_document.color_gallery_stills.push_back({"hub-still", "Still 1",
         color_document.timeline_tracks.front().clips.front().clip_id, 10,
         "hub-still.png",
@@ -502,7 +508,7 @@ void testVideoDocuments(const QString& root) {
     auto future_video = QJsonDocument::fromJson(readBytes(color_path)).object();
     future_video.insert("version", project::current_format_version + 1);
     const auto future_video_path = QDir(QFileInfo(assets).absolutePath())
-        .filePath("video-future-v44.csp");
+        .filePath("video-future-v45.csp");
     writeBytes(future_video_path, QJsonDocument(future_video).toJson());
     creative_suite::hub::BackupManager future_video_manager(
         QDir(root).filePath("video-future-vault"));

@@ -2,6 +2,7 @@
 
 #include "../media/video_metadata.h"
 #include "timeline_frame_rate.h"
+#include "audio_effects.h"
 #include "timeline_transform.h"
 #include "text_style.h"
 #include "../workspaces/color/model/color_graph.h"
@@ -40,99 +41,6 @@ struct AudioSend {
 
     friend bool operator==(const AudioSend&, const AudioSend&) = default;
 };
-
-struct AudioEqualizerParameters {
-    double low_shelf_frequency_hz = 120.0;
-    double low_shelf_gain_db = 0.0;
-    double mid_frequency_hz = 1000.0;
-    double mid_gain_db = 0.0;
-    double mid_q = 1.0;
-    double high_shelf_frequency_hz = 8000.0;
-    double high_shelf_gain_db = 0.0;
-
-    friend bool operator==(const AudioEqualizerParameters&,
-                           const AudioEqualizerParameters&) = default;
-};
-
-struct AudioCompressorParameters {
-    double threshold_db = -18.0;
-    double ratio = 4.0;
-    double attack_ms = 10.0;
-    double release_ms = 100.0;
-    double makeup_gain_db = 0.0;
-
-    friend bool operator==(const AudioCompressorParameters&,
-                           const AudioCompressorParameters&) = default;
-};
-
-using AudioEffectParameters = std::variant<
-    AudioEqualizerParameters, AudioCompressorParameters>;
-
-struct AudioEffectInstance {
-    AudioEffectParameters parameters = AudioEqualizerParameters{};
-    bool enabled = false;
-
-    friend bool operator==(const AudioEffectInstance&,
-                           const AudioEffectInstance&) = default;
-};
-
-[[nodiscard]] inline bool validAudioEffectChain(
-    const std::vector<AudioEffectInstance>& effects) noexcept {
-    if (effects.size() > 2) return false;
-    bool has_equalizer = false;
-    bool has_compressor = false;
-    for (const auto& effect : effects) {
-        if (const auto* eq = std::get_if<AudioEqualizerParameters>(
-                &effect.parameters)) {
-            if (has_equalizer ||
-                !std::isfinite(eq->low_shelf_frequency_hz) ||
-                eq->low_shelf_frequency_hz < 20.0 ||
-                eq->low_shelf_frequency_hz > 500.0 ||
-                !std::isfinite(eq->low_shelf_gain_db) ||
-                eq->low_shelf_gain_db < -18.0 ||
-                eq->low_shelf_gain_db > 18.0 ||
-                !std::isfinite(eq->mid_frequency_hz) ||
-                eq->mid_frequency_hz < 20.0 ||
-                eq->mid_frequency_hz > 20000.0 ||
-                !std::isfinite(eq->mid_gain_db) ||
-                eq->mid_gain_db < -18.0 || eq->mid_gain_db > 18.0 ||
-                !std::isfinite(eq->mid_q) || eq->mid_q < 0.1 ||
-                eq->mid_q > 10.0 ||
-                !std::isfinite(eq->high_shelf_frequency_hz) ||
-                eq->high_shelf_frequency_hz < 500.0 ||
-                eq->high_shelf_frequency_hz > 20000.0 ||
-                !std::isfinite(eq->high_shelf_gain_db) ||
-                eq->high_shelf_gain_db < -18.0 ||
-                eq->high_shelf_gain_db > 18.0) {
-                return false;
-            }
-            has_equalizer = true;
-        } else if (const auto* compressor = std::get_if<
-                       AudioCompressorParameters>(&effect.parameters)) {
-            if (has_compressor ||
-                !std::isfinite(compressor->threshold_db) ||
-                compressor->threshold_db < -60.0 ||
-                compressor->threshold_db > 0.0 ||
-                !std::isfinite(compressor->ratio) ||
-                compressor->ratio < 1.0 || compressor->ratio > 20.0 ||
-                !std::isfinite(compressor->attack_ms) ||
-                compressor->attack_ms < 0.1 ||
-                compressor->attack_ms > 200.0 ||
-                !std::isfinite(compressor->release_ms) ||
-                compressor->release_ms < 10.0 ||
-                compressor->release_ms > 1000.0 ||
-                !std::isfinite(compressor->makeup_gain_db) ||
-                compressor->makeup_gain_db < 0.0 ||
-                compressor->makeup_gain_db > 24.0) {
-                return false;
-            }
-            has_compressor = true;
-        } else {
-            return false;
-        }
-    }
-    return true;
-}
 
 struct AudioBus {
     AudioBusId bus_id = 0;
@@ -367,6 +275,7 @@ struct TimelineTrack {
     std::optional<AudioBusId> output_bus_id;
     std::vector<AudioSend> audio_sends;
     std::vector<AudioEffectInstance> audio_effects;
+    AudioDuckingSettings audio_ducking;
 
     friend bool operator==(const TimelineTrack&, const TimelineTrack&) = default;
 };
@@ -568,6 +477,7 @@ public:
     AudioParameterResult setTrackAudioEffects(
         TrackId track_id,
         std::vector<AudioEffectInstance> effects);
+    AudioParameterResult setTrackAudioDucking(TrackId track_id, AudioDuckingSettings settings);
     AudioParameterResult setAudioBusMix(
         AudioBusId bus_id,
         double gain,

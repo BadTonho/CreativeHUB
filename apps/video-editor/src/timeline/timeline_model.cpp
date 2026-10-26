@@ -1485,6 +1485,14 @@ TrackMutationResult TimelineModel::removeTrack(std::size_t track_index) {
     if (track_index >= tracks_.size()) return TrackMutationResult::InvalidIndex;
     if (!tracks_[track_index].clips.empty()) return TrackMutationResult::NotEmpty;
     if (tracks_.size() == 1) return TrackMutationResult::NoChange;
+    const auto removed_id = tracks_[track_index].track_id;
+    for (auto& track : tracks_) {
+        if (track.audio_ducking.source_track_id == removed_id) {
+            track.audio_ducking.source_track_id.reset();
+            if (track.audio_ducking.mode == AudioDuckingMode::Automatic)
+                track.audio_ducking.mode = AudioDuckingMode::Off;
+        }
+    }
     tracks_.erase(tracks_.begin() + static_cast<std::ptrdiff_t>(track_index));
     assertIdentityInvariants();
     return TrackMutationResult::Changed;
@@ -3243,6 +3251,17 @@ AudioParameterResult TimelineModel::setTrackAudioEffects(
     auto& track = tracks_[*track_index];
     if (track.audio_effects == effects) return AudioParameterResult::NoChange;
     track.audio_effects = std::move(effects);
+    return AudioParameterResult::Changed;
+}
+
+AudioParameterResult TimelineModel::setTrackAudioDucking(TrackId track_id, AudioDuckingSettings settings) {
+    const auto index = locateTrack(track_id);
+    if (!index) return AudioParameterResult::InvalidIndex;
+    if (!validAudioDucking(settings) || settings.source_track_id == track_id ||
+        (settings.source_track_id && !locateTrack(*settings.source_track_id))) return AudioParameterResult::InvalidValue;
+    auto& track = tracks_[*index];
+    if (track.audio_ducking == settings) return AudioParameterResult::NoChange;
+    track.audio_ducking = std::move(settings);
     return AudioParameterResult::Changed;
 }
 

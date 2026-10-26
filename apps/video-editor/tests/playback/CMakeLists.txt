@@ -344,4 +344,8 @@ add_creative_suite_test(
     COMMAND creative-suite-main-editor-timeline-audio-mix-tests
 )
 
+target_link_libraries(creative-suite-main-editor-playback-worker-tests PRIVATE creative-suite-video-audio-filters)
+target_link_libraries(creative-suite-main-editor-timeline-audio-mix-tests PRIVATE creative-suite-video-audio-filters)
+copy_ffmpeg_test_runtime(creative-suite-main-editor-timeline-audio-mix-tests)
+
 preserve_video_editor_test_working_directory()

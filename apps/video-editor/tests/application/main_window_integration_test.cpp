@@ -10,6 +10,9 @@
 #include "ui/workspace/workspace_host.h"
 #include "workspaces/fusion/ui/fusion_workspace.h"
 #include "workspaces/audio/ui/audio_workspace.h"
+#include "workspaces/audio/ui/audio_effect_chain_dialog.h"
+#include "workspaces/audio/ui/audio_ducking_dialog.h"
+#include "media/audio_ducking_analysis.h"
 #include "workspaces/color/ui/color_workspace.h"
 #include "workspaces/color/ui/color_node_canvas.h"
 #include "workspaces/fusion/nodes/ui/node_canvas.h"
@@ -54,6 +57,8 @@
 #include <QMenuBar>
 #include <QSaveFile>
 #include <QProgressDialog>
+#include <QElapsedTimer>
+#include <QThread>
 #include <QProgressBar>
 #include <QPushButton>
 #include <QSignalBlocker>
@@ -718,8 +723,43 @@ public:
         QSettings().clear();
         settings::setProjectAutosaveEnabled(false);
         settings::setWorkspacePageTransitionsEnabled(false);
+        {
+            const std::vector<timeline::AudioEffectInstance> original;
+            ui::AudioEffectChainDialog full(QStringLiteral("Processing"), original, nullptr);
+            full.findChild<QPushButton*>("audioEffectAddCleanup")->click();
+            require(full.effects().size() == 1 && std::holds_alternative<timeline::AudioDialogueCleanupParameters>(full.effects().front().parameters) &&
+                !full.effects().front().enabled, "Audio cleanup was not inserted disabled.");
+            full.findChild<QDoubleSpinBox*>("audioCleanupHighpass")->setValue(120);
+            require(std::get<timeline::AudioDialogueCleanupParameters>(full.effects().front().parameters).highpass_frequency_hz == 120,
+                "Cleanup parameter editing failed.");
+            full.reject(); require(original.empty(), "Cancelling the effect editor changed its input chain.");
+            ui::AudioEffectChainDialog basic(QStringLiteral("Basic"), full.effects(), nullptr, false);
+            require(basic.findChild<QPushButton*>("audioEffectAddCleanup")->isHidden() && basic.effects() == full.effects() &&
+                !basic.findChild<QCheckBox*>("audioEffectEnabled"), "Edit exposed or lost Audio-only processors.");
+            timeline::AudioDuckingSettings settings; settings.source_track_id = 1;
+            settings.mode = timeline::AudioDuckingMode::Automatic; settings.curve = {{0, 0}, {100000, 12}};
+            ui::AudioDuckingDialog duck(settings, {{1, QStringLiteral("Voice")}, {2, QStringLiteral("Music")}}, 2, nullptr);
+            require(duck.findChild<QComboBox*>("audioDuckingSource")->count() == 2 && duck.settings() == settings,
+                "Ducking editor allowed self-reference or changed the saved settings.");
+            duck.findChild<QPushButton*>("audioDuckingGenerateCurve")->click();
+            require(duck.generateRequested() && duck.result() == QDialog::Accepted, "The curve-generation action was not exposed.");
+        }
         const auto audio_source = directory / "audio-workspace.wav";
         createWaveformWav(audio_source);
+        {
+            project::ProjectDocument analysis;
+            project::ProjectTrack source; source.track_id = 1; source.name = "Voice"; source.kind = timeline::TrackKind::Audio;
+            project::ProjectClip clip; clip.clip_id = 1; clip.kind = timeline::ClipKind::Audio; clip.source_path = audio_source;
+            clip.duration_frames = 15; clip.source_duration_time_us = 500000; source.clips.push_back(clip);
+            analysis.timeline_tracks.push_back(source);
+            timeline::AudioDuckingSettings duck; duck.source_track_id = 1; duck.mode = timeline::AudioDuckingMode::Automatic;
+            int progress = -1;
+            const auto curve = media::generateAudioDuckingCurve(analysis, duck, [] { return false; }, [&](int value) { progress = value; });
+            require(!curve.empty() && progress == 100, "Ducking analysis did not produce a complete curve.");
+            int checks = 0;
+            const auto cancelled = media::generateAudioDuckingCurve(analysis, duck, [&] { return ++checks > 2; }, {});
+            require(cancelled.empty(), "Cancelled analysis returned a partial curve.");
+        }
         {
             MainWindow window;
             window.show();
@@ -1036,6 +1076,54 @@ public:
                         reopened_bus_solo != nullptr &&
                         !reopened_bus_solo->isChecked(),
                     "Solo must remain transient and clear when a project is reopened.");
+            const auto selected_clip = window.timeline_model_.tracks()[*reopened_track].clips.front().clip_id;
+            const auto selected_location = window.timeline_model_.locateClip(selected_clip);
+            window.audio_workspace_->setSelectedClip(&window.timeline_model_.tracks()[selected_location->track_index].clips[selected_location->clip_index]);
+            auto* clip_effects = window.audio_workspace_->mixerPanel()->findChild<QPushButton*>("audioSelectedClipEffects");
+            require(clip_effects && clip_effects->isEnabled(), "Audio did not expose processing for the selected clip.");
+            bool clip_edited = false;
+            QTimer::singleShot(0, &window, [&] {
+                auto* dialog = QApplication::activeModalWidget();
+                auto* add = dialog ? dialog->findChild<QPushButton*>("audioEffectAddNoiseReduction") : nullptr;
+                if (!add) { if (dialog) dialog->close(); return; }
+                add->click();
+                clip_edited = true;
+                dialog->findChild<QDialogButtonBox*>()->button(QDialogButtonBox::Ok)->click();
+            });
+            clip_effects->click();
+            const auto after_clip_edit = window.timeline_model_.locateClip(selected_clip);
+            const auto& clip_chain = window.timeline_model_.tracks()[after_clip_edit->track_index].clips[after_clip_edit->clip_index].audio_effects;
+            require(clip_edited && std::any_of(clip_chain.begin(), clip_chain.end(), [](const auto& effect) {
+                return std::holds_alternative<timeline::AudioNoiseReductionParameters>(effect.parameters);
+            }), "Audio's selected-clip editor did not commit through shared history.");
+            const auto voice_id = window.timeline_model_.tracks()[*reopened_track].track_id;
+            require(window.editor_session_.legacyTimelineForUi().addTrack("Music", timeline::TrackKind::Audio) == timeline::AddTrackResult::Added,
+                "Could not create a music track for async ducking checks.");
+            window.updateTimelineState();
+            const auto music_id = window.timeline_model_.tracks().back().track_id;
+            timeline::AudioDuckingSettings duck; duck.source_track_id = voice_id;
+            const auto wait_for_analysis = [&] {
+                QElapsedTimer timer; timer.start();
+                while (window.findChild<QProgressDialog*>("audioDuckingProgress") && timer.elapsed() < 5000) {
+                    QApplication::processEvents(); QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete); QThread::msleep(1);
+                }
+                require(!window.findChild<QProgressDialog*>("audioDuckingProgress"), "Ducking analysis did not finish or release its progress dialog.");
+            };
+            window.generateAudioDuckingCurve(music_id, duck);
+            wait_for_analysis();
+            require(window.timeline_model_.tracks().back().audio_ducking.mode == timeline::AudioDuckingMode::Curve &&
+                !window.timeline_model_.tracks().back().audio_ducking.curve.empty(), "Async curve generation did not apply its complete result.");
+            const auto before_cancel = window.currentProjectDocument();
+            duck.reduction_db = 24;
+            window.generateAudioDuckingCurve(music_id, duck);
+            window.findChild<QProgressDialog*>("audioDuckingProgress")->findChild<QPushButton*>()->click();
+            wait_for_analysis();
+            require(window.currentProjectDocument() == before_cancel, "Cancelling async analysis changed the saved curve.");
+            window.generateAudioDuckingCurve(music_id, duck);
+            window.clearProjectState(1920, 1080, timeline::FrameRate{30, 1});
+            const auto replacement = window.currentProjectDocument();
+            wait_for_analysis();
+            require(window.currentProjectDocument() == replacement, "A stale ducking result modified the replacement project.");
         }
         std::filesystem::remove_all(directory);
     }

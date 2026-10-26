@@ -39,9 +39,13 @@ public:
         const std::vector<std::pair<timeline::AudioBusId, float>>& bus_peaks,
         float master_peak);
     void clearPeaks();
+    void setSelectedClip(const timeline::TimelineClip* clip);
     void clearSoloState();
 
 signals:
+    void clipAudioEffectsChanged(timeline::ClipId clip_id, std::vector<timeline::AudioEffectInstance> effects);
+    void trackDuckingChanged(timeline::TrackId track_id, timeline::AudioDuckingSettings settings);
+    void generateDuckingCurveRequested(timeline::TrackId track_id, timeline::AudioDuckingSettings settings);
     void gainEditStarted();
     void gainEditFinished();
     void trackMixChanged(
@@ -111,6 +115,8 @@ private:
         QLabel* name = nullptr;
         QPushButton* edit = nullptr;
         std::vector<timeline::AudioEffectInstance> effects;
+        QPushButton* ducking_button = nullptr;
+        timeline::AudioDuckingSettings ducking;
     };
 
     void emitTrackMix(timeline::TrackId track_id);
@@ -119,6 +125,11 @@ private:
     void rebuildTrackSendRows(Strip& strip, const timeline::TimelineTrack& track,
                               const std::vector<timeline::AudioBus>& buses);
 
+    std::vector<std::pair<std::uint64_t, QString>> ducking_sources_;
+    QPushButton* selected_clip_effects_ = nullptr;
+    timeline::ClipId selected_clip_id_ = 0;
+    QString selected_clip_name_;
+    std::vector<timeline::AudioEffectInstance> selected_clip_chain_;
     QWidget* meter_page_ = nullptr;
     QWidget* mixer_panel_ = nullptr;
     QHBoxLayout* meter_layout_ = nullptr;

@@ -132,6 +132,10 @@ private:
         timeline::TrackId track_id, double gain, bool muted, double pan,
         std::optional<timeline::AudioBusId> output_bus_id,
         std::vector<timeline::AudioSend> sends);
+    void refreshAudioSelection();
+    void applyAudioClipEffects(timeline::ClipId id, std::vector<timeline::AudioEffectInstance> effects);
+    void applyAudioTrackDucking(timeline::TrackId id, timeline::AudioDuckingSettings settings);
+    void generateAudioDuckingCurve(timeline::TrackId id, timeline::AudioDuckingSettings settings);
     void applyAudioTrackEffects(
         timeline::TrackId track_id,
         std::vector<timeline::AudioEffectInstance> effects);

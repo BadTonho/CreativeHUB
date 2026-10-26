@@ -202,3 +202,16 @@ The isolated-test helper accepts an optional positive integer TIMEOUT (default
 and CTest, so the wrapper cannot silently impose a shorter timeout. Configuration
 must reject zero/noninteger values and generated commands must retain 120 s for
 ordinary tests and 300 s for this matrix.
+
+## Audio processing
+
+The Video Editor explicitly requires FFmpeg AVFILTER in addition to its existing
+codec/format/resampling components. The application-owned
+`creative-suite-video-audio-filters` static target wraps highpass, deesser,
+afftdn, bandreject and adeclick; it links the existing FFmpeg and diagnostics
+libraries. No new third-party package, model download or executable subprocess
+is introduced. The local libavfilter reports LGPL 2.1-or-later; existing FFmpeg
+notices and distribution obligations apply. Preview/export and the direct audio
+mix/playback regressions link this target and deploy the existing FFmpeg runtime.
+Build the Video Editor, Hub and affected tests; other application executables
+are outside this format/consumer change.

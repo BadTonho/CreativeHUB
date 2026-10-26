@@ -61,6 +61,14 @@ int main(int argc, char* argv[]) {
         std::fprintf(stderr, "The Audio effects editor did not use its pt-BR catalog entries.\n");
         return 1;
     }
+    if (QCoreApplication::translate("AudioWorkspace", "Generate curve") != QStringLiteral("Gerar curva") ||
+        QCoreApplication::translate("AudioWorkspace", "Dialogue cleanup") != QStringLiteral("Limpeza de diálogo") ||
+        QCoreApplication::translate("AudioWorkspace", "Noise reduction") != QStringLiteral("Redução de ruído") ||
+        QCoreApplication::translate("AudioWorkspace", "Clip audio effects — %1").arg("Voice") != QStringLiteral("Efeitos de áudio do clipe — Voice") ||
+        QCoreApplication::translate("AudioWorkspace", "Generating ducking curve…") != QStringLiteral("Gerando curva de ducking…")) {
+        std::fprintf(stderr, "The advanced Audio controls did not use the bundled pt-BR translations.\n");
+        return 1;
+    }
     if (QCoreApplication::translate("EditWorkspace", "Adjust %1").arg(100) !=
             QStringLiteral("Ajustar 100")) {
         std::fprintf(stderr, "A translated placeholder was not preserved.\n");

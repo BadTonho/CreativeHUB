@@ -100,7 +100,9 @@ mute, and Master controls use `TimelineCommandService`. The playback worker and
 offline renderer share the sample mixer; solo is temporary and Preview-only.
 Generation-gated level messages provide track, bus, and Master meters, and the
 meter path is disabled outside Audio. Panels are created on first entry. CSP
-v42 stores mixer and track effect state; the Hub accepts it and rejects v43. See the
+v44 stores mixer, ordered clip/track processors and per-track ducking. The Hub
+accepts v1-v44 and rejects v45. Audio owns cleanup/noise/repair controls and
+automatic or editable-curve ducking; Preview/export share their worker processing. See the
 [Audio Boundary](AUDIO.md) and [Audio Workspace Roadmap](../AUDIO_WORKSPACE_ROADMAP.md).
 
 The Video Editor is the suite's audiovisual application under

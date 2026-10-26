@@ -3,6 +3,7 @@
 #include "timeline/timeline_model.h"
 
 #include <QCheckBox>
+#include <QComboBox>
 #include <QCoreApplication>
 #include <QDialog>
 #include <QDialogButtonBox>
@@ -29,8 +30,8 @@ inline QString translated(const char* text) {
     return QCoreApplication::translate("AudioWorkspace", text);
 }
 inline QString effectName(const timeline::AudioEffectInstance& effect) {
-    return std::holds_alternative<timeline::AudioEqualizerParameters>(
-        effect.parameters) ? translated("Equalizer") : translated("Compressor");
+    static constexpr const char* names[] = {"Equalizer", "Compressor", "Dialogue cleanup", "Noise reduction", "Audio repair"};
+    return translated(names[effect.parameters.index()]);
 }
 inline void clearLayout(QLayout* layout) {
     while (auto* item = layout->takeAt(0)) {
@@ -44,8 +45,8 @@ public:
     AudioEffectChainDialog(
         QString title,
         std::vector<timeline::AudioEffectInstance> effects,
-        QWidget* parent)
-        : QDialog(parent), effects_(std::move(effects)) {
+        QWidget* parent, bool advanced = true)
+        : QDialog(parent), effects_(std::move(effects)), advanced_(advanced) {
         setObjectName("audioTrackEffectsDialog");
         setWindowTitle(title);
         setMinimumSize(700, 460);
@@ -66,6 +67,22 @@ public:
         add_row->addWidget(add_equalizer_);
         add_row->addWidget(add_compressor_);
         left_layout->addLayout(add_row);
+        static constexpr const char* labels[] = {"Add dialogue cleanup", "Add noise reduction", "Add audio repair"};
+        static constexpr const char* objects[] = {"audioEffectAddCleanup", "audioEffectAddNoiseReduction", "audioEffectAddRepair"};
+        for (std::size_t index = 0; index < advanced_add_.size(); ++index) {
+            auto* button = new QPushButton(audio_effect_dialog_detail::translated(labels[index]), left);
+            button->setObjectName(objects[index]);
+            button->setVisible(advanced_);
+            advanced_add_[index] = button;
+            left_layout->addWidget(button);
+            connect(button, &QPushButton::clicked, this, [this, index] {
+                timeline::AudioEffectInstance effect;
+                if (index == 0) effect.parameters = timeline::AudioDialogueCleanupParameters{};
+                if (index == 1) effect.parameters = timeline::AudioNoiseReductionParameters{};
+                if (index == 2) effect.parameters = timeline::AudioRepairParameters{};
+                addEffect(std::move(effect));
+            });
+        }
         auto* order_row = new QHBoxLayout;
         move_up_ = new QPushButton(audio_effect_dialog_detail::translated("Move up"), left);
         move_up_->setObjectName("audioEffectMoveUp");
@@ -160,7 +177,8 @@ private:
     void updateActions() {
         const auto row = effects_list_->currentRow();
         const bool has_selection = row >= 0 &&
-            static_cast<std::size_t>(row) < effects_.size();
+            static_cast<std::size_t>(row) < effects_.size() &&
+            (advanced_ || effects_[static_cast<std::size_t>(row)].parameters.index() < 2);
         const bool has_eq = std::any_of(effects_.begin(), effects_.end(),
             [](const auto& effect) {
                 return std::holds_alternative<timeline::AudioEqualizerParameters>(
@@ -173,6 +191,9 @@ private:
             });
         add_equalizer_->setEnabled(!has_eq);
         add_compressor_->setEnabled(!has_compressor);
+        for (std::size_t kind = 0; kind < advanced_add_.size(); ++kind)
+            advanced_add_[kind]->setEnabled(advanced_ && std::none_of(effects_.begin(), effects_.end(),
+                [kind](const auto& effect) { return effect.parameters.index() == kind + 2; }));
         remove_->setEnabled(has_selection);
         move_up_->setEnabled(has_selection && row > 0);
         move_down_->setEnabled(has_selection && row + 1 <
@@ -212,6 +233,10 @@ private:
             return;
         }
         const auto index = static_cast<std::size_t>(row);
+        if (!advanced_ && effects_[index].parameters.index() >= 2) {
+            editor_layout_->addWidget(new QLabel(audio_effect_dialog_detail::translated("Edit this effect in the Audio workspace."), editor_));
+            editor_layout_->addStretch(1); updateActions(); return;
+        }
         auto* enabled = new QCheckBox(audio_effect_dialog_detail::translated("Enabled"), editor_);
         enabled->setObjectName("audioEffectEnabled");
         enabled->setChecked(effects_[index].enabled);
@@ -302,6 +327,32 @@ private:
                         effects_[index].parameters).makeup_gain_db = value;
                 });
         }
+        if (auto* cleanup = std::get_if<timeline::AudioDialogueCleanupParameters>(&effects_[index].parameters)) {
+            addDoubleControl(form, "High-pass frequency", "audioCleanupHighpass", 20, 300, 1, QStringLiteral(" Hz"),
+                cleanup->highpass_frequency_hz, [this, index](double value) { std::get<timeline::AudioDialogueCleanupParameters>(effects_[index].parameters).highpass_frequency_hz = value; });
+            addDoubleControl(form, "De-esser intensity", "audioCleanupDeesser", 0, 100, 0, QStringLiteral("%"),
+                cleanup->deesser_intensity * 100, [this, index](double value) { std::get<timeline::AudioDialogueCleanupParameters>(effects_[index].parameters).deesser_intensity = value / 100; });
+        } else if (auto* noise = std::get_if<timeline::AudioNoiseReductionParameters>(&effects_[index].parameters)) {
+            addDoubleControl(form, "Noise reduction", "audioNoiseReduction", 0, 30, 1, QStringLiteral(" dB"),
+                noise->reduction_db, [this, index](double value) { std::get<timeline::AudioNoiseReductionParameters>(effects_[index].parameters).reduction_db = value; });
+            addDoubleControl(form, "Noise floor", "audioNoiseFloor", -80, -20, 1, QStringLiteral(" dB"),
+                noise->noise_floor_db, [this, index](double value) { std::get<timeline::AudioNoiseReductionParameters>(effects_[index].parameters).noise_floor_db = value; });
+        } else if (auto* repair = std::get_if<timeline::AudioRepairParameters>(&effects_[index].parameters)) {
+            auto* hum = new QComboBox(editor_); hum->setObjectName("audioRepairHum");
+            hum->addItem(audio_effect_dialog_detail::translated("Off"), 0); hum->addItem("50 Hz", 50); hum->addItem("60 Hz", 60);
+            hum->setCurrentIndex(hum->findData(repair->hum_frequency_hz));
+            form->addRow(audio_effect_dialog_detail::translated("Hum removal"), hum);
+            connect(hum, qOverload<int>(&QComboBox::currentIndexChanged), this, [this, index, hum](int) {
+                std::get<timeline::AudioRepairParameters>(effects_[index].parameters).hum_frequency_hz = hum->currentData().toInt();
+            });
+            auto* declick = new QCheckBox(audio_effect_dialog_detail::translated("Remove clicks"), editor_);
+            declick->setObjectName("audioRepairDeclick"); declick->setChecked(repair->declick_enabled); form->addRow(declick);
+            connect(declick, &QCheckBox::toggled, this, [this, index](bool value) {
+                std::get<timeline::AudioRepairParameters>(effects_[index].parameters).declick_enabled = value;
+            });
+            addDoubleControl(form, "Click detection threshold", "audioRepairSensitivity", 1, 10, 1, {},
+                repair->declick_sensitivity, [this, index](double value) { std::get<timeline::AudioRepairParameters>(effects_[index].parameters).declick_sensitivity = value; });
+        }
         editor_layout_->addStretch(1);
         updateActions();
     }
@@ -316,6 +367,8 @@ private:
     }
 
     std::vector<timeline::AudioEffectInstance> effects_;
+    bool advanced_ = true;
+    std::array<QPushButton*, 3> advanced_add_{};
     QListWidget* effects_list_ = nullptr;
     QWidget* editor_ = nullptr;
     QVBoxLayout* editor_layout_ = nullptr;

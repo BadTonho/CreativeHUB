@@ -1,8 +1,8 @@
 # Hub Regression Testing
 
-## Video Editor CSP v43 clip and track audio effects backup
+## Video Editor CSP v44 clip and track audio processing backup
 
-`hub-backup-format-test` saves a real CSP v43 document containing a clip EQ,
+`hub-backup-format-test` saves a real CSP v44 document containing a clip EQ,
 track compressor, buses, Master settings, track pan, a main route, a pre-fader
 send, and the ordered track effect chain, then compares the Hub snapshot and
 relocated restore with the producer document. `hub-backup-manager-test` accepts
@@ -552,3 +552,18 @@ Release on 2026-10-22; the manager gate required access to its user data
 directory outside the workspace sandbox. Native Hub UI/platform acceptance
 remains pending. See the
 [Curves contract](../../image-editor/features/CURVES.md).
+
+## Video Editor CSP v44 processing preservation
+
+Hub accepts CSP v44 with the expanded ordered clip/track processor chains and
+per-track ducking settings/absolute-time curves. Backup/restoration preserves
+these fields while rebasing media paths and retaining Gallery sidecars. Future
+v45 is rejected. `hub-backup-format-test` compares real saved/restored v44
+projects containing cleanup, noise reduction, hum/click repair and a ducking
+curve; `hub-backup-manager-test` covers the backup lifecycle.
+
+Windows Release verification (2026-10-26): Hub backup format and manager tests
+passed against the CSP v44 producer/consumer boundary, including future v45
+rejection. The canonical Hub target built at `build/apps/hub/Release/creative-suite-hub.exe`
+(868,352 bytes; modified 2026-10-26 14:53:10 UTC-03:00). Native UI and other-platform acceptance
+remain separate and pending.

@@ -160,7 +160,7 @@ Timeline Undo/Redo.
 
 CSP v43 stores `audio_effects` on every Video and Audio clip. Projects v1-v42
 open with empty clip chains; parameter values, effect kinds, uniqueness, and
-clip kind are validated. The Hub accepts CSP v1-v43 and rejects v44.
+clip kind are validated. The Hub accepts CSP v1-v44 and rejects v45.
 
 Video export remains a video file. Its duration reaches the end of the longest
 Timeline clip. If audio extends beyond visual content, the renderer emits black
@@ -194,3 +194,51 @@ a hard cut at the original cut: outgoing audio continues through the visual
 overlap, and incoming audio starts at the cut using the source position
 corresponding to incoming Timeline frame D. Fade to Black also leaves embedded
 video audio at the junction cut.
+
+## Dialogue processors and ducking (CSP v44)
+
+`AudioEffectParameters` additionally contains dialogue cleanup (20-300 Hz high
+pass, initially 80 Hz; de-esser intensity 0-1, initially 0.5), continuous-noise
+reduction (0-30 dB, initially 12 dB; noise floor -80 to -20 dB, initially
+-50 dB), and repair (hum Off/50/60 Hz; three Q=30 notches; optional declick,
+initially on, detection threshold 1-10, initially 2). A chain accepts one of
+each kind, in saved order. All instances start disabled. Basic Edit controls
+preserve advanced entries; Audio owns their authoring.
+
+The Video Editor's `AudioFilterSession` owns a move-only libavfilter graph per
+active processor. It consumes normalized interleaved float PCM at one output
+rate/layout, exposes available output, latency and drain, and checks FFmpeg
+errors. Its caller supplies bounded lookahead and silence past the visible
+boundary. FFT denoising's intrinsic delay is removed before mixing; overlap-save
+click repair preserves first-sample alignment. Persistent ordered pull chains
+feed clip processing before gain/envelope/crossfade and track processing after
+summation. Parameter changes join the new output over 10 ms. The legacy path
+is retained when no enabled advanced processor is present. Seeks/restarts clear
+state; clip processor and decoder lifetimes are bounded to their occurrence.
+
+Ducking settings belong to each track, outside its reorderable effects chain.
+Modes are Off (default), Automatic, and Curve. One other track supplies a
+20 ms RMS detector with 3 dB hysteresis, followed by attack/hold/release.
+Defaults are -30 dB threshold, 12 dB reduction, 50 ms attack, 200 ms hold and
+500 ms release. Ranges are -60 to 0 dB threshold, 0-36 dB reduction, 1-1000 ms
+attack, 0-2000 ms hold and 10-5000 ms release. One scalar reduction applies to
+all target channels, before its fader/pan and pre/post sends. All source taps
+are captured after track effects and gain but before any ducking or Preview
+solo filtering, so ordering and reciprocal source selections cannot create
+feedback. A muted or currently silent source releases the detector normally.
+
+Curve points store absolute `time_us` and positive `reduction_db` (0-36 dB),
+with strictly increasing times and linear dB interpolation. An empty curve or
+positions outside its range apply no reduction. Analysis uses the same detector
+at 48 kHz, incrementally simplifies to at most 0.1 dB error, and retains only bounded
+PCM blocks plus resulting control points. Cancellation/failure never publishes
+a partial curve; project generation and snapshot equality reject stale results.
+Curve mode preserves manual points across clip edits and mode switches.
+Deleting the source clears its reference and turns Automatic Off, preserving
+the saved curve; Undo restores the entire operation.
+
+Filter failures log FFmpeg cause/code plus the clip/track identity. Preview
+bypasses advanced processing for the failed chain and emits a warning; export
+propagates failure through its existing atomic-destination handling. Expected
+analysis cancellation and stale results are control flow, not error entries.
+Voice isolation, dereverberation and declipping remain outside this stage.

@@ -1,6 +1,7 @@
 #include "rendering/adjustment_composition.h"
 #include "rendering/graph_generators.h"
 #include "playback_worker.h"
+#include <QCoreApplication>
 #include "media/video_probe.h"
 #include <QOpenGLContext>
 
@@ -429,6 +430,7 @@ void PlaybackWorker::stop() {
     composition_audio_cursor_valid_ = false;
     pending_audio_bytes_.clear();
     composition_audio_mix_state_.reset();
+    audio_processor_warning_reported_ = false;
 }
 
 void PlaybackWorker::setAudioParameters(
@@ -936,6 +938,7 @@ void PlaybackWorker::setComposition(
             audio_clip.output_bus_id = prepared.output_bus_id;
             audio_clip.audio_sends = prepared.audio_sends;
             audio_clip.audio_effects = prepared.track_audio_effects;
+            audio_clip.audio_ducking = prepared.audio_ducking;
             audio_clip.clip_audio_effects = prepared.clip_audio_effects;
             audio_clip.source_channel_count = prepared.source_audio_channel_count;
         }
@@ -2907,93 +2910,44 @@ void PlaybackWorker::fillCompositionAudioOutput() {
             if (!source.audio_open_failed) source.audio_open_attempted = false;
         }
 
-        media::TimelineAudioMixAccumulator audio_mixer(
-            static_cast<std::size_t>(block_samples), output.channel_count,
-            composition_audio_mix_configuration_,
-            &composition_audio_mix_state_);
         const auto meter_now = std::chrono::steady_clock::now();
         const bool meter_this_block = audio_metering_enabled_ &&
             (last_audio_meter_emit_ == std::chrono::steady_clock::time_point{} ||
              meter_now - last_audio_meter_emit_ >= std::chrono::milliseconds(50));
-        const auto spans = media::planTimelineAudioMix(
-            composition_audio_mix_clips_,
-            composition_audio_mix_transitions_,
-            timeline_frame_rate_.asDouble(),
-            output.sample_rate,
-            next_composition_audio_sample_,
-            block_samples);
-
-        for (const auto& span : spans) {
-            if (span.source_index >= composition_sessions_.size()) continue;
-            auto& source = composition_sessions_[span.source_index];
-            if (source.audio_open_failed) continue;
-            if (!source.audio_open_attempted) {
-                source.audio_open_attempted = true;
-                try {
+        const auto read_source = [&](std::size_t index, std::int64_t start, std::size_t count) {
+            std::vector<float> silence(count * output.channel_count, 0.0F);
+            if (index >= composition_sessions_.size()) return silence;
+            auto& source = composition_sessions_[index];
+            if (source.audio_open_failed) return silence;
+            try {
+                if (!source.audio_open_attempted) {
+                    source.audio_open_attempted = true;
                     source.audio_session = media::AudioPlaybackSession::open(
                         QFileInfo(source.spec.source_path).filesystemFilePath(), output);
-                    if (!source.audio_session->has_audio()) {
-                        source.audio_session.reset();
-                    }
-                } catch (const media::MediaError& error) {
-                    source.audio_open_failed = true;
-                    reportCompositionAudioFailure(
-                        source.spec, error, "composition_source_open",
-                        error.error_code().value_or(-1));
-                    continue;
-                } catch (const std::exception& error) {
-                    source.audio_open_failed = true;
-                    reportCompositionAudioFailure(
-                        source.spec, error, "composition_source_open");
-                    continue;
+                    if (!source.audio_session->has_audio()) source.audio_session.reset();
                 }
-            }
-            if (source.audio_session == nullptr) continue;
-            if (span.source_index < composition_audio_mix_clips_.size()) {
-                composition_audio_mix_clips_[span.source_index].source_channel_count =
-                    source.audio_session->source_channel_count();
-            }
-
-            try {
-                if (source.audio_session->current_sample_index() !=
-                    span.source_start_sample) {
-                    source.audio_session->seek_to_sample_index(
-                        span.source_start_sample);
-                }
-                auto source_cursor = span.source_start_sample;
-                const auto source_end = span.source_start_sample + span.sample_count;
-                while (source_cursor < source_end) {
-                    const auto remaining = static_cast<std::size_t>(
-                        source_end - source_cursor);
-                    auto chunk = source.audio_session->decode_samples(
-                        std::min<std::size_t>(remaining, 8192U));
-                    if (!chunk.has_value() || chunk->sampleCount() == 0) break;
-                    if (span.source_index < composition_audio_mix_clips_.size()) {
-                        audio_mixer.accumulate(
-                            span, composition_audio_mix_clips_[span.source_index],
-                            *chunk);
-                    }
-                    const auto chunk_end = chunk->first_sample_index +
-                        static_cast<std::int64_t>(chunk->sampleCount());
-                    const auto consumed_end = std::min(source_end, chunk_end);
-                    if (consumed_end <= source_cursor) break;
-                    source_cursor = consumed_end;
-                }
+                if (!source.audio_session) return silence;
+                if (index < composition_audio_mix_clips_.size())
+                    composition_audio_mix_clips_[index].source_channel_count = source.audio_session->source_channel_count();
+                return media::readNormalizedAudio(*source.audio_session, start, count);
             } catch (const media::MediaError& error) {
-                source.audio_session.reset();
-                source.audio_open_failed = true;
-                reportCompositionAudioFailure(
-                    source.spec, error, "composition_source_decode",
-                    error.error_code().value_or(-1));
+                source.audio_session.reset(); source.audio_open_failed = true;
+                reportCompositionAudioFailure(source.spec, error, "composition_audio_read", error.error_code().value_or(-1));
             } catch (const std::exception& error) {
-                source.audio_session.reset();
-                source.audio_open_failed = true;
-                reportCompositionAudioFailure(
-                    source.spec, error, "composition_source_decode");
+                source.audio_session.reset(); source.audio_open_failed = true;
+                reportCompositionAudioFailure(source.spec, error, "composition_audio_read");
             }
+            return silence;
+        };
+        auto mixed = media::TimelineAudioMixAccumulator::render(
+            composition_audio_mix_clips_, composition_audio_mix_transitions_,
+            timeline_frame_rate_.asDouble(), output.sample_rate, output.channel_count,
+            next_composition_audio_sample_, block_samples, composition_audio_mix_configuration_,
+            composition_audio_mix_state_, read_source, true);
+        if (mixed.processor_bypassed && !audio_processor_warning_reported_) {
+            audio_processor_warning_reported_ = true;
+            emit audioWarning(QCoreApplication::translate("AudioWorkspace", "An audio processor failed and was bypassed. See the error log."), -1, generation_);
         }
-
-        auto mixed = audio_mixer.finish();
         if (meter_this_block) {
             last_audio_meter_emit_ = meter_now;
             QVector<quint64> track_ids;

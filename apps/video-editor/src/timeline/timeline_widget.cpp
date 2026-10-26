@@ -130,6 +130,7 @@ void TimelineWidget::setFrameRate(FrameRate frame_rate) noexcept {
 }
 
 void TimelineWidget::setTracks(const std::vector<TimelineTrack>& tracks) {
+    ducking_drag_.reset();
     // Model changes can arrive while this widget owns the mouse grab for a
     // seek, move, trim, or blade gesture. Resetting the gesture flags alone
     // would leave the grab active and route every subsequent click back to
@@ -202,6 +203,7 @@ void TimelineWidget::setStereoWaveformDisplayEnabled(bool enabled) noexcept {
 }
 
 void TimelineWidget::setAudioOnlyDisplayEnabled(bool enabled) noexcept {
+    if (!enabled && ducking_drag_) { ducking_drag_.reset(); releaseMouse(); }
     if (audio_only_display_enabled_ == enabled) return;
     audio_only_display_enabled_ = enabled;
     interaction_controller_.cancelAll();
@@ -377,6 +379,7 @@ bool TimelineWidget::moveRequiresAlt() const noexcept {
 }
 
 void TimelineWidget::setReadOnly(bool read_only) {
+    if (read_only && ducking_drag_) { ducking_drag_.reset(); releaseMouse(); }
     if (read_only_ == read_only) return;
     read_only_ = read_only;
     if (read_only_) {
@@ -1577,6 +1580,95 @@ void TimelineWidget::collapseSelectionTo(
         tracks_[location->track_index].clips[location->clip_index].clip_id};
 }
 
+QRectF TimelineWidget::duckingLaneRect(std::size_t index) const {
+    if (!audio_only_display_enabled_ || index >= tracks_.size() ||
+        tracks_[index].audio_ducking.mode != AudioDuckingMode::Curve) return {};
+    auto lane = trackContentRect(index);
+    if (lane.height() < 24) return {};
+    lane.setTop(lane.bottom() - std::min(42.0, lane.height() * .5));
+    return lane.adjusted(0, 2, 0, -2);
+}
+QPointF TimelineWidget::duckingPointPosition(const AudioDuckingKeyframe& point, const QRectF& lane) const {
+    return {contentXForFrame(0) + point.time_us * frameRate() / 1000000.0 * pixelsPerFrame(),
+        lane.top() + point.reduction_db / 36.0 * lane.height()};
+}
+void TimelineWidget::paintDuckingLanes(QPainter& painter) const {
+    for (std::size_t index = 0; index < tracks_.size(); ++index) {
+        const auto lane = duckingLaneRect(index);
+        if (lane.isEmpty()) continue;
+        painter.save(); painter.setClipRect(lane.intersected(trackViewLayout().audio_viewport));
+        painter.fillRect(lane, QColor(15, 30, 36, 235));
+        painter.setPen(QColor("#87d6c5"));
+        painter.drawText(lane.adjusted(5, 1, -5, -1), Qt::AlignLeft | Qt::AlignTop,
+            QCoreApplication::translate("AudioWorkspace", "Ducking"));
+        const auto& settings = ducking_drag_ && ducking_drag_->track_id == tracks_[index].track_id ?
+            ducking_drag_->settings : tracks_[index].audio_ducking;
+        QPainterPath path;
+        if (settings.curve.empty()) { path.moveTo(lane.topLeft()); path.lineTo(lane.topRight()); }
+        else {
+            const auto first = duckingPointPosition(settings.curve.front(), lane);
+            path.moveTo(lane.left(), lane.top()); path.lineTo(first);
+            for (const auto& point : settings.curve) path.lineTo(duckingPointPosition(point, lane));
+            path.lineTo(lane.right(), lane.top());
+        }
+        painter.setPen(QPen(QColor("#52d6b3"), 1.5)); painter.drawPath(path);
+        painter.setBrush(QColor("#9cf1d9"));
+        for (const auto& point : settings.curve) {
+            const auto position = duckingPointPosition(point, lane);
+            if (position.x() >= lane.left() - 4 && position.x() <= lane.right() + 4) painter.drawEllipse(position, 3.5, 3.5);
+        }
+        painter.restore();
+    }
+}
+bool TimelineWidget::beginDuckingEdit(QMouseEvent* event) {
+    if (read_only_ || !audio_only_display_enabled_ || (event->button() != Qt::LeftButton && event->button() != Qt::RightButton)) return false;
+    for (std::size_t index = 0; index < tracks_.size(); ++index) {
+        const auto lane = duckingLaneRect(index);
+        if (lane.isEmpty() || !lane.contains(event->position())) continue;
+        const auto track_id = tracks_[index].track_id;
+        auto settings = tracks_[index].audio_ducking;
+        auto selected = settings.curve.size();
+        for (std::size_t point = 0; point < settings.curve.size(); ++point)
+            if (QLineF(duckingPointPosition(settings.curve[point], lane), event->position()).length() <= 7) { selected = point; break; }
+        if (event->button() == Qt::RightButton) {
+            if (selected == settings.curve.size()) return false;
+            suppress_next_context_menu_ = true;
+            QMenu menu(this); auto* remove = menu.addAction(QCoreApplication::translate("AudioWorkspace", "Remove ducking point"));
+            if (menu.exec(event->globalPosition().toPoint()) == remove) {
+                settings.curve.erase(settings.curve.begin() + selected);
+                emit trackDuckingSettingsChanged(track_id, std::move(settings));
+            }
+            return true;
+        }
+        if (selected == settings.curve.size()) {
+            const auto time = static_cast<std::int64_t>(std::llround(std::max(0.0,
+                (event->position().x() - contentXForFrame(0)) / pixelsPerFrame()) * 1000000 / frameRate()));
+            const auto found = std::lower_bound(settings.curve.begin(), settings.curve.end(), time,
+                [](const auto& point, auto value) { return point.time_us < value; });
+            selected = static_cast<std::size_t>(found - settings.curve.begin());
+            if (found == settings.curve.end() || found->time_us != time) settings.curve.insert(found, {time, 0});
+        }
+        ducking_drag_ = DuckingDrag{track_id, std::move(settings), selected};
+        moveDuckingPoint(event->position()); grabMouse(); update(); return true;
+    }
+    return false;
+}
+void TimelineWidget::moveDuckingPoint(QPointF position) {
+    if (!ducking_drag_) return;
+    const auto found = std::find_if(tracks_.begin(), tracks_.end(), [&](const auto& track) { return track.track_id == ducking_drag_->track_id; });
+    if (found == tracks_.end()) { ducking_drag_.reset(); return; }
+    const auto lane = duckingLaneRect(static_cast<std::size_t>(found - tracks_.begin()));
+    if (lane.isEmpty()) return;
+    auto& points = ducking_drag_->settings.curve;
+    const auto index = ducking_drag_->index;
+    auto time = static_cast<std::int64_t>(std::llround(std::max(0.0,
+        (position.x() - contentXForFrame(0)) / pixelsPerFrame()) * 1000000 / frameRate()));
+    if (index > 0) time = std::max(time, points[index - 1].time_us + 1);
+    if (index + 1 < points.size()) time = std::min(time, points[index + 1].time_us - 1);
+    points[index] = {time, std::clamp((position.y() - lane.top()) / lane.height() * 36.0, 0.0, 36.0)};
+    update();
+}
+
 void TimelineWidget::paintEvent(QPaintEvent* event) {
     QPainter painter(this);
     painter.setRenderHint(QPainter::Antialiasing, true);
@@ -2130,6 +2222,7 @@ void TimelineWidget::paintEvent(QPaintEvent* event) {
     }
     TimelineInteractionPainter::paint(painter, interaction_paint);
 
+    paintDuckingLanes(painter);
     const bool active_clip_valid = active_clip_.has_value() &&
         active_clip_->track_index < tracks_.size() &&
         active_clip_->clip_index < tracks_[active_clip_->track_index].clips.size();
@@ -2687,6 +2780,7 @@ void TimelineWidget::leaveEvent(QEvent* event) {
 }
 
 void TimelineWidget::mousePressEvent(QMouseEvent* event) {
+    if (beginDuckingEdit(event)) { event->accept(); return; }
     if (event->button() == Qt::LeftButton &&
         trackSplitterRect().contains(event->position())) {
         splitter_hover_active_ = true;
@@ -2993,6 +3087,7 @@ void TimelineWidget::mousePressEvent(QMouseEvent* event) {
 }
 
 void TimelineWidget::mouseMoveEvent(QMouseEvent* event) {
+    if (ducking_drag_) { moveDuckingPoint(event->position()); event->accept(); return; }
     if (split_drag_active_) {
         constexpr double bottom_margin = 12.0;
         const auto available_height = std::max(
@@ -3171,6 +3266,11 @@ void TimelineWidget::mouseMoveEvent(QMouseEvent* event) {
 }
 
 void TimelineWidget::mouseReleaseEvent(QMouseEvent* event) {
+    if (ducking_drag_ && event->button() == Qt::LeftButton) {
+        auto drag = std::move(*ducking_drag_); ducking_drag_.reset(); releaseMouse();
+        emit trackDuckingSettingsChanged(drag.track_id, std::move(drag.settings));
+        update(); event->accept(); return;
+    }
     if (split_drag_active_ && event->button() == Qt::LeftButton) {
         split_drag_active_ = false;
         releaseMouse();

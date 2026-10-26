@@ -4,6 +4,8 @@
 #include "video_metadata.h"
 
 #include <cstdint>
+#include <algorithm>
+#include <stdexcept>
 #include <filesystem>
 #include <functional>
 #include <memory>
@@ -62,5 +64,33 @@ private:
 
     std::unique_ptr<Impl> impl_;
 };
+
+// Decoder-independent block adapter used by Preview, export and analysis.
+// Unavailable samples at EOF remain silence; errors and cancellation propagate.
+inline std::vector<float> readNormalizedAudio(AudioPlaybackSession& session,
+    std::int64_t start, std::size_t count,
+    const AudioPlaybackSession::CancellationPredicate& canceled = {}) {
+    const int channels = session.output_spec().channel_count;
+    std::vector<float> result(count * channels, 0.0F);
+    if (session.current_sample_index() != start) session.seek_to_sample_index(start);
+    std::size_t written = 0;
+    while (written < count) {
+        if (canceled && canceled()) throw std::runtime_error("Audio operation cancelled.");
+        auto chunk = session.decode_samples(std::min<std::size_t>(8192, count - written), canceled);
+        if (!chunk || chunk->sampleCount() == 0) break;
+        const auto begin = std::max(start, chunk->first_sample_index);
+        const auto end = std::min(start + static_cast<std::int64_t>(count),
+            chunk->first_sample_index + static_cast<std::int64_t>(chunk->sampleCount()));
+        if (end <= begin) break;
+        for (auto frame = begin; frame < end; ++frame)
+            for (int channel = 0; channel < channels; ++channel)
+                result[static_cast<std::size_t>(frame - start) * channels + channel] =
+                    chunk->samples[static_cast<std::size_t>(frame - chunk->first_sample_index) * channels + channel] / 32768.0F;
+        const auto next = static_cast<std::size_t>(end - start);
+        if (next <= written) break;
+        written = next;
+    }
+    return result;
+}
 
 } // namespace media

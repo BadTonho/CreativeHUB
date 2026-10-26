@@ -2175,7 +2175,7 @@ void EditWorkspaceController::editSelectedClipAudioEffects(QWidget* dialog_paren
         QCoreApplication::translate("EditWorkspaceController",
             "Clip audio effects — %1").arg(QString::fromUtf8(
                 clip.display_name.c_str())),
-        clip.audio_effects, dialog_parent);
+        clip.audio_effects, dialog_parent, false);
     if (dialog.exec() != QDialog::Accepted ||
         !timeline::validAudioEffectChain(dialog.effects())) {
         return;

@@ -1,4 +1,6 @@
 #include "media/timeline_audio_mix.h"
+#include "media/audio_ducking.h"
+#include "media/audio_filter_session.h"
 
 #include <cmath>
 #include <cstdint>
@@ -819,10 +821,130 @@ void testProcessedPreviewExportParityAndSendTaps() {
             "A pre-fader send did not tap the processed signal before track gain and pan.");
 }
 
+
+std::vector<float> renderAdvanced(timeline::AudioEffectInstance effect, bool track,
+    std::size_t block_size, const std::function<float(std::int64_t)>& signal, int channels = 2) {
+    media::TimelineAudioMixClip clip;
+    clip.kind = timeline::ClipKind::Audio; clip.has_audio = true;
+    clip.track_id = 1; clip.clip_id = 2; clip.duration_frames = 30;
+    clip.source_duration_time_us = 1000000; clip.source_channel_count = channels;
+    if (track) clip.audio_effects = {effect}; else clip.clip_audio_effects = {effect};
+    media::TimelineAudioMixState state;
+    const auto reader = [&](std::size_t, std::int64_t start, std::size_t count) {
+        std::vector<float> input(count * channels);
+        for (std::size_t frame = 0; frame < count; ++frame)
+            for (int channel = 0; channel < channels; ++channel)
+                input[frame * channels + channel] = signal(start + frame);
+        return input;
+    };
+    std::vector<float> result;
+    for (std::size_t start = 0; start < 48000; start += block_size) {
+        auto block = media::TimelineAudioMixAccumulator::render(std::span(&clip, 1), {}, 30, 48000, channels,
+            start, std::min(block_size, 48000 - start), {}, state, reader);
+        result.insert(result.end(), block.samples.begin(), block.samples.end());
+    }
+    return result;
+}
+double advancedRms(const std::vector<float>& samples, std::size_t begin = 10000) {
+    double energy = 0;
+    for (auto index = begin; index < samples.size(); ++index) energy += samples[index] * samples[index];
+    return std::sqrt(energy / (samples.size() - begin));
+}
+void testAdvancedProcessing() {
+    const auto tone = [](double frequency) {
+        return [frequency](std::int64_t sample) { return static_cast<float>(.25 * std::sin(2 * std::numbers::pi * frequency * sample / 48000)); };
+    };
+    timeline::AudioEffectInstance cleanup{timeline::AudioDialogueCleanupParameters{150, 0}, true};
+    const auto bass = renderAdvanced(cleanup, false, 997, tone(40));
+    const auto voice = renderAdvanced(cleanup, false, 997, tone(1000));
+    require(advancedRms(bass) < advancedRms(voice) * .12, "Dialogue cleanup did not attenuate low-frequency rumble.");
+    require(voice == renderAdvanced(cleanup, false, 4096, tone(1000)), "Cleanup changed with mixer block boundaries.");
+    timeline::AudioEffectInstance noise{timeline::AudioNoiseReductionParameters{24, -30}, true};
+    const auto hiss = [](std::int64_t sample) {
+        auto value = static_cast<std::uint32_t>(sample) * 747796405U + 2891336453U;
+        value = ((value >> ((value >> 28U) + 4U)) ^ value) * 277803737U;
+        value = (value >> 22U) ^ value;
+        return static_cast<float>((value / 4294967295.0 - .5) * .04);
+    };
+    const auto denoised = renderAdvanced(noise, false, 997, hiss);
+    auto bypassed = noise; bypassed.enabled = false;
+    const auto original = renderAdvanced(bypassed, false, 997, hiss);
+    require(advancedRms(denoised) < advancedRms(original) * .8, "Noise reduction did not attenuate continuous noise.");
+    require(denoised == renderAdvanced(noise, false, 4096, hiss), "Noise reduction lost state across blocks.");
+    const auto impulse = renderAdvanced(noise, true, 997, [](std::int64_t index) { return index == 12345 ? .8F : 0.0F; });
+    const auto peak = std::max_element(impulse.begin(), impulse.end(), [](float a, float b) { return std::abs(a) < std::abs(b); });
+    require(std::abs(static_cast<std::int64_t>((peak - impulse.begin()) / 2) - 12345) <= 1,
+        "Noise reduction left uncompensated latency on the timeline.");
+    timeline::AudioEffectInstance repair{timeline::AudioRepairParameters{60, false, 2}, true};
+    require(advancedRms(renderAdvanced(repair, true, 997, tone(60)), 48000) < .005,
+        "Hum repair did not remove the selected mains frequency.");
+    repair.parameters = timeline::AudioRepairParameters{0, true, 2};
+    const auto clicks = [](std::int64_t index) { return index % 4000 == 1000 ? .8F : static_cast<float>(.03 * std::sin(index * .13)); };
+    const auto repaired = renderAdvanced(repair, false, 997, clicks);
+    require(repaired.size() == 96000 && repaired == renderAdvanced(repair, false, 4096, clicks),
+        "Click repair changed duration or depended on block size.");
+    for (float sample : repaired) require(std::isfinite(sample), "Click repair emitted a non-finite sample.");
+    const auto mono = renderAdvanced(cleanup, false, 997, tone(1000), 1);
+    require(mono.size() == 48000, "Mono cleanup changed channel count or duration.");
+}
+void testDuckingAndCurveGeneration() {
+    timeline::AudioDuckingSettings settings;
+    settings.mode = timeline::AudioDuckingMode::Automatic; settings.source_track_id = 10;
+    settings.attack_ms = 5; settings.hold_ms = 20; settings.release_ms = 30;
+    media::AudioDuckingDetector detector; media::AudioDuckingCurveBuilder builder;
+    std::vector<double> reductions;
+    for (std::int64_t sample = 0; sample < 48000; ++sample) {
+        const float voice[] = {sample < 24000 ? .4F : 0.0F, sample < 24000 ? .4F : 0.0F};
+        const auto reduction = detector.process(voice, 48000, settings);
+        reductions.push_back(reduction);
+        builder.append(static_cast<std::int64_t>(std::llround(sample * 1000000.0 / 48000)), reduction);
+    }
+    const auto curve = builder.finish();
+    require(curve.size() < 1000 && reductions[12000] > 11.9 && reductions.back() < .01,
+        "Ducking detector or bounded curve simplification failed.");
+    for (std::size_t sample = 0; sample < reductions.size(); ++sample) {
+        const auto time = static_cast<std::int64_t>(std::llround(sample * 1000000.0 / 48000));
+        const auto actual = timeline::audioDuckingReductionAt(curve, time);
+        if (std::abs(actual - reductions[sample]) > .101) {
+            std::cerr << "Curve error at " << time << ": " << actual << " vs " << reductions[sample] << ", points=" << curve.size() << '\n';
+            for (const auto& point : curve) std::cerr << point.time_us << ':' << point.reduction_db << ' ';
+            std::cerr << '\n';
+            throw std::runtime_error("Generated ducking curve exceeded the 0.1 dB error bound.");
+        }
+    }
+    std::vector<media::TimelineAudioMixClip> clips(2);
+    for (std::size_t index = 0; index < clips.size(); ++index) {
+        auto& clip = clips[index]; clip.kind = timeline::ClipKind::Audio; clip.has_audio = true;
+        clip.source_index = index; clip.track_id = index == 0 ? 10 : 20; clip.clip_id = index + 1;
+        clip.duration_frames = 30; clip.source_duration_time_us = 1000000;
+    }
+    clips[1].audio_ducking = settings;
+    const auto reader = [](std::size_t index, std::int64_t start, std::size_t count) {
+        std::vector<float> output(count * 2);
+        for (std::size_t frame = 0; frame < count; ++frame)
+            output[frame * 2] = output[frame * 2 + 1] = index == 0 ? (start + frame < 24000 ? .4F : 0.0F) : .2F;
+        return output;
+    };
+    media::TimelineAudioMixState live, reversed;
+    media::TimelineAudioMixConfiguration config; config.solo_track_ids = {20};
+    const auto automatic = media::TimelineAudioMixAccumulator::render(clips, {}, 30, 48000, 2, 0, 48000, config, live, reader);
+    std::reverse(clips.begin(), clips.end());
+    const auto swapped = media::TimelineAudioMixAccumulator::render(clips, {}, 30, 48000, 2, 0, 48000, config, reversed, reader);
+    require(automatic.samples == swapped.samples && automatic.samples[24000] < .06F && automatic.samples.back() > .19F,
+        "Automatic ducking depended on track order, soloed away its source, or failed to release.");
+    clips.front().audio_ducking.mode = timeline::AudioDuckingMode::Curve; clips.front().audio_ducking.curve = curve;
+    media::TimelineAudioMixState baked;
+    const auto curve_mix = media::TimelineAudioMixAccumulator::render(clips, {}, 30, 48000, 2, 0, 48000, config, baked, reader);
+    require(std::abs(curve_mix.samples[24000] - automatic.samples[24000]) < .001F,
+        "Curve ducking was applied twice or at a different mix stage.");
+}
+
 } // namespace
 
 int main() {
     try {
+        testAdvancedProcessing();
+        testDuckingAndCurveGeneration();
         testMixesEveryActiveTrack();
         testMuteGainAndGaps();
         testTrimmedSourcePositionUsesTimelineElapsedTime();

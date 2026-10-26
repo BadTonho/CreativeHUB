@@ -181,3 +181,8 @@ Image Editor imported-image gestures: Selection drags move the image; corner
 handles preserve proportions, Alt allows independent dimensions, the top handle
 rotates freely, Shift snaps rotation to 15 degrees, and Esc cancels the gesture.
 Import Image as Layer and Relink Image have no default keyboard shortcut.
+
+Audio ducking curve points use mouse gestures: click the track's ducking lane
+to add a point, drag a point to move it, and right-click a point to remove it.
+Each action uses the shared Undo/Redo shortcuts. These controls do not add a
+new keyboard shortcut or change clip-volume automation shortcuts.

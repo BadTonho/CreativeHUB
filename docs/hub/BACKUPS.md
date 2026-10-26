@@ -7,7 +7,7 @@ Image `.cimg` v28 is accepted, including independent Hue/Saturation Colorize val
 Named Fusion Compositions retain optional `display_name`, including Background
 presets, through snapshot and restored projects. The existing graph/media path
 adapter preserves node colors, masks and input offsets while relocating external
-Input sources. The current range is CSP v1-v43; future v44 is refused. The actual
+Input sources. The current range is CSP v1-v44; future v45 is refused. The actual
 Video Editor reader verifies the Hub restore in `hub-backup-format-test`.
 
 ## Video Editor v28 masks
@@ -15,7 +15,7 @@ Video Editor reader verifies the Hub restore in `hub-backup-format-test`.
 The backup adapter preserves Rectangle/Ellipse node types, geometry, curves and
 Mask input 2 alongside generators and composition input offsets. Masks carry no
 media references; external Input paths continue to be rewritten on snapshot and
-restore. Current Video Editor schemas v1-v43 are supported; future v44 is rejected.
+restore. Current Video Editor schemas v1-v44 are supported; future v45 is rejected.
 The Video Editor reader reopens restored fixtures in `hub-backup-format-test`.
 
 ## Video Editor v27 compositions
@@ -323,3 +323,12 @@ Colorize values while rebasing media paths through vault and relocated restore.
 compares the decoded document, including enabled Colorize controls. The recovery
 envelope and published PNG protocol remain unchanged. Native Hub UI/platform
 acceptance remains pending.
+
+## Video Editor CSP v44 processing preservation
+
+Hub accepts CSP v44 with the expanded ordered clip/track processor chains and
+per-track ducking settings/absolute-time curves. Backup/restoration preserves
+these fields while rebasing media paths and retaining Gallery sidecars. Future
+v45 is rejected. `hub-backup-format-test` compares real saved/restored v44
+projects containing cleanup, noise reduction, hum/click repair and a ducking
+curve; `hub-backup-manager-test` covers the backup lifecycle.

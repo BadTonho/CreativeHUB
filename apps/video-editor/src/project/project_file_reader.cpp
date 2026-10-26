@@ -66,6 +66,43 @@ std::int64_t requiredInteger(
 std::filesystem::path resolvedPath(const std::filesystem::path& project_path,
                                    const QString& stored_path);
 
+timeline::AudioDuckingSettings readAudioDucking(const QJsonValue& value,
+    const std::filesystem::path& path) {
+    if (!value.isObject()) throwJson(ProjectErrorCode::MissingField, path, "Missing audio ducking settings.");
+    const auto object = value.toObject();
+    timeline::AudioDuckingSettings settings;
+    const auto mode = object.value("mode");
+    if (mode == QLatin1String("off")) settings.mode = timeline::AudioDuckingMode::Off;
+    else if (mode == QLatin1String("automatic")) settings.mode = timeline::AudioDuckingMode::Automatic;
+    else if (mode == QLatin1String("curve")) settings.mode = timeline::AudioDuckingMode::Curve;
+    else throwJson(ProjectErrorCode::InvalidValue, path, "Invalid audio ducking mode.");
+    const auto source = object.value("source_track_id");
+    if (!source.isNull()) {
+        const auto id = requiredInteger(object, "source_track_id", path);
+        if (id <= 0) throwJson(ProjectErrorCode::InvalidValue, path, "Invalid ducking source identifier.");
+        settings.source_track_id = static_cast<std::uint64_t>(id);
+    }
+    const auto number = [&](const char* key) {
+        if (!object.value(key).isDouble()) throwJson(ProjectErrorCode::MissingField, path, "Missing ducking parameter.");
+        return object.value(key).toDouble();
+    };
+    settings.threshold_db = number("threshold_db");
+    settings.reduction_db = number("reduction_db");
+    settings.attack_ms = number("attack_ms");
+    settings.hold_ms = number("hold_ms");
+    settings.release_ms = number("release_ms");
+    if (!object.value("curve").isArray()) throwJson(ProjectErrorCode::MissingField, path, "Missing ducking curve.");
+    for (const auto& item : object.value("curve").toArray()) {
+        if (!item.isObject() || !item.toObject().value("reduction_db").isDouble())
+            throwJson(ProjectErrorCode::InvalidValue, path, "Invalid ducking curve point.");
+        settings.curve.push_back({requiredInteger(item.toObject(), "time_us", path),
+            item.toObject().value("reduction_db").toDouble()});
+    }
+    if (!timeline::validAudioDucking(settings))
+        throwJson(ProjectErrorCode::InvalidValue, path, "Invalid audio ducking settings or curve.");
+    return settings;
+}
+
 std::vector<timeline::AudioEffectInstance> readAudioEffectChain(
     const QJsonValue& effects_value,
     const std::filesystem::path& project_path,
@@ -114,6 +151,19 @@ std::vector<timeline::AudioEffectInstance> readAudioEffectChain(
             parameters.release_ms = read_parameter("release_ms");
             parameters.makeup_gain_db = read_parameter("makeup_gain_db");
             effect.parameters = parameters;
+        } else if (type.toString() == QLatin1String("dialogue_cleanup")) {
+            effect.parameters = timeline::AudioDialogueCleanupParameters{
+                read_parameter("highpass_frequency_hz"), read_parameter("deesser_intensity")};
+        } else if (type.toString() == QLatin1String("noise_reduction")) {
+            effect.parameters = timeline::AudioNoiseReductionParameters{
+                read_parameter("reduction_db"), read_parameter("noise_floor_db")};
+        } else if (type.toString() == QLatin1String("repair")) {
+            const auto hum = read_parameter("hum_frequency_hz");
+            const auto enabled_declick = effect_object.value("declick_enabled");
+            if ((hum != 0 && hum != 50 && hum != 60) || !enabled_declick.isBool())
+                throwJson(ProjectErrorCode::InvalidValue, project_path, "Invalid audio repair settings.");
+            effect.parameters = timeline::AudioRepairParameters{
+                static_cast<int>(hum), enabled_declick.toBool(), read_parameter("declick_sensitivity")};
         } else {
             throwJson(ProjectErrorCode::InvalidValue, project_path,
                       "Project JSON contains an unsupported audio effect type.");
@@ -1471,6 +1521,8 @@ ProjectDocument detail::load(const std::filesystem::path& project_path) {
                     track_object.value("audio_effects"), project_path,
                     "CSP v42 is missing the track audio effects array.");
             }
+            if (version >= audio_processing_format_version)
+                track.audio_ducking = readAudioDucking(track_object.value("audio_ducking"), project_path);
             const auto track_clips = track_object.value("clips");
             if (!track_clips.isArray()) {
                 throwJson(ProjectErrorCode::MissingField, project_path, "Project JSON is missing a track clips array.");
@@ -1900,6 +1952,15 @@ ProjectDocument detail::load(const std::filesystem::path& project_path) {
             }
             still.image_unavailable = !still.image_png || still.image_png->empty();
             document.color_gallery_stills.push_back(std::move(still));
+        }
+    }
+    if (version < audio_processing_format_version) {
+        const auto advanced = [](const auto& effects) { return std::any_of(effects.begin(), effects.end(),
+            [](const auto& effect) { return effect.parameters.index() >= 2; }); };
+        for (const auto& track : document.timeline_tracks) {
+            if (advanced(track.audio_effects) || std::any_of(track.clips.begin(), track.clips.end(),
+                [&](const auto& clip) { return advanced(clip.audio_effects); }))
+                throwJson(ProjectErrorCode::InvalidValue, project_path, "Advanced audio effects require CSP v44.");
         }
     }
     detail::validateDocument(document, project_path);

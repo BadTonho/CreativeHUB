@@ -451,6 +451,47 @@ int main(int argc, char** argv) {
             std::istreambuf_iterator<char>()};
         saved_file.close();
         {
+            auto processing = original;
+            auto& target = processing.timeline_tracks.front();
+            target.audio_effects = {{timeline::AudioDialogueCleanupParameters{95, .7}, true},
+                {timeline::AudioNoiseReductionParameters{18, -45}, true},
+                {timeline::AudioRepairParameters{60, true, 3}, true}};
+            target.clips.front().audio_effects = target.audio_effects;
+            target.audio_ducking.mode = timeline::AudioDuckingMode::Automatic;
+            target.audio_ducking.source_track_id = processing.timeline_tracks.back().track_id;
+            target.audio_ducking.curve = {{0, 0}, {100000, 12}, {200000, 0}};
+            const auto processing_path = directory / "audio-processing-v44.csp";
+            project::save(processing_path, processing);
+            require(project::load(processing_path) == processing, "CSP v44 lost audio processing, sidechain or curve data.");
+            for (int invalid = 0; invalid < 5; ++invalid) {
+                auto broken = processing;
+                auto& track = broken.timeline_tracks.front();
+                if (invalid == 0) track.audio_ducking.source_track_id = track.track_id;
+                if (invalid == 1) track.audio_ducking.curve.push_back({100000, 0});
+                if (invalid == 2) track.audio_ducking.reduction_db = 37;
+                if (invalid == 3) std::get<timeline::AudioDialogueCleanupParameters>(track.audio_effects.front().parameters).deesser_intensity = 2;
+                if (invalid == 4) track.audio_effects.push_back(track.audio_effects.front());
+                bool rejected = false;
+                try { project::save(directory / "invalid-processing.csp", broken); } catch (const project::ProjectError&) { rejected = true; }
+                require(rejected, "CSP v44 accepted invalid audio processing settings.");
+            }
+            auto legacy = QJsonDocument::fromJson(QByteArray::fromStdString(saved_json)).object();
+            legacy.insert("version", 43);
+            auto timeline_json = legacy.value("timeline").toObject();
+            auto tracks_json = timeline_json.value("tracks").toArray();
+            for (qsizetype index = 0; index < tracks_json.size(); ++index) {
+                auto track = tracks_json[index].toObject(); track.remove("audio_ducking"); tracks_json[index] = track;
+            }
+            timeline_json.insert("tracks", tracks_json); legacy.insert("timeline", timeline_json);
+            const auto legacy_path = directory / "audio-processing-v43.csp";
+            writeText(legacy_path, QJsonDocument(legacy).toJson().toStdString());
+            const auto migrated = project::load(legacy_path);
+            require(std::all_of(migrated.timeline_tracks.begin(), migrated.timeline_tracks.end(), [](const auto& track) {
+                return track.audio_ducking == timeline::AudioDuckingSettings{};
+            }), "CSP v43 migration enabled ducking.");
+        }
+
+        {
             auto legacy_v40 = QJsonDocument::fromJson(
                 QByteArray::fromStdString(saved_json)).object();
             legacy_v40.insert("version", 40);
@@ -568,13 +609,13 @@ int main(int argc, char** argv) {
         {
             auto future = QJsonDocument::fromJson(
                 QByteArray::fromStdString(saved_json)).object();
-            future.insert("version", 44);
-            const auto future_path = directory / "future-v44.csp";
+            future.insert("version", 45);
+            const auto future_path = directory / "future-v45.csp";
             writeText(future_path, QJsonDocument(future).toJson().toStdString());
             bool rejected = false;
             try { static_cast<void>(project::load(future_path)); }
             catch (const project::ProjectError&) { rejected = true; }
-            require(rejected, "A project version newer than CSP v43 was accepted.");
+            require(rejected, "A project version newer than CSP v44 was accepted.");
         }
         {
             auto invalid_effects = QJsonDocument::fromJson(
@@ -949,7 +990,7 @@ int main(int argc, char** argv) {
         require(saved_json.find("\"track_id\": 1") != std::string::npos &&
                     saved_json.find("\"clip_id\": 1") != std::string::npos,
                 "Stable track and clip identifiers were not written to the project.");
-        require(saved_json.find("\"version\": 43") != std::string::npos &&
+        require(saved_json.find("\"version\": 44") != std::string::npos &&
                     saved_json.find("\"render_start_time_us\": 1234567") != std::string::npos &&
                     saved_json.find("\"frame_rate\"") != std::string::npos &&
                     saved_json.find("\"numerator\": 30000") != std::string::npos &&
@@ -1794,10 +1835,10 @@ int main(int argc, char** argv) {
 
         writeText(
             project_path,
-            R"({"format":"creative-suite.main-editor","version":44,"media":[],"timeline":{"clips":[]}})");
+            R"({"format":"creative-suite.main-editor","version":45,"media":[],"timeline":{"clips":[]}})");
         try {
             static_cast<void>(project::load(project_path));
-            throw std::runtime_error("CSP v44 was accepted by the v43 reader.");
+            throw std::runtime_error("CSP v45 was accepted by the v44 reader.");
         } catch (const project::ProjectError& error) {
             require(error.code() == project::ProjectErrorCode::UnsupportedVersion,
                     "Unsupported version returned the wrong error category.");

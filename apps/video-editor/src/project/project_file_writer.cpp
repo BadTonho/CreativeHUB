@@ -61,6 +61,27 @@ const char* trackKindName(timeline::TrackKind kind) {
     return kind == timeline::TrackKind::Audio ? "audio" : "video";
 }
 
+QJsonObject audioDuckingJson(const timeline::AudioDuckingSettings& settings) {
+    QJsonObject object;
+    object.insert("mode", settings.mode == timeline::AudioDuckingMode::Automatic ? "automatic" :
+        settings.mode == timeline::AudioDuckingMode::Curve ? "curve" : "off");
+    object.insert("source_track_id", settings.source_track_id ? QJsonValue(static_cast<qint64>(*settings.source_track_id)) : QJsonValue(QJsonValue::Null));
+    object.insert("threshold_db", settings.threshold_db);
+    object.insert("reduction_db", settings.reduction_db);
+    object.insert("attack_ms", settings.attack_ms);
+    object.insert("hold_ms", settings.hold_ms);
+    object.insert("release_ms", settings.release_ms);
+    QJsonArray points;
+    for (const auto& point : settings.curve) {
+        QJsonObject item;
+        item.insert("time_us", static_cast<qint64>(point.time_us));
+        item.insert("reduction_db", point.reduction_db);
+        points.append(item);
+    }
+    object.insert("curve", points);
+    return object;
+}
+
 QJsonArray audioEffectChainJson(
     const std::vector<timeline::AudioEffectInstance>& effects) {
     QJsonArray audio_effects;
@@ -86,6 +107,20 @@ QJsonArray audioEffectChainJson(
             effect_item.insert("attack_ms", compressor->attack_ms);
             effect_item.insert("release_ms", compressor->release_ms);
             effect_item.insert("makeup_gain_db", compressor->makeup_gain_db);
+        }
+        if (const auto* cleanup = std::get_if<timeline::AudioDialogueCleanupParameters>(&effect.parameters)) {
+            effect_item.insert("type", "dialogue_cleanup");
+            effect_item.insert("highpass_frequency_hz", cleanup->highpass_frequency_hz);
+            effect_item.insert("deesser_intensity", cleanup->deesser_intensity);
+        } else if (const auto* noise = std::get_if<timeline::AudioNoiseReductionParameters>(&effect.parameters)) {
+            effect_item.insert("type", "noise_reduction");
+            effect_item.insert("reduction_db", noise->reduction_db);
+            effect_item.insert("noise_floor_db", noise->noise_floor_db);
+        } else if (const auto* repair = std::get_if<timeline::AudioRepairParameters>(&effect.parameters)) {
+            effect_item.insert("type", "repair");
+            effect_item.insert("hum_frequency_hz", repair->hum_frequency_hz);
+            effect_item.insert("declick_enabled", repair->declick_enabled);
+            effect_item.insert("declick_sensitivity", repair->declick_sensitivity);
         }
         audio_effects.append(effect_item);
     }
@@ -464,6 +499,7 @@ void save(const std::filesystem::path& project_path, const ProjectDocument& docu
         }
         track.insert("audio_sends", audio_sends);
         track.insert("audio_effects", audioEffectChainJson(track_source.audio_effects));
+        track.insert("audio_ducking", audioDuckingJson(track_source.audio_ducking));
         track.insert("kind", trackKindName(track_source.kind));
         QJsonArray clips;
         for (const auto& clip : track_source.clips) {

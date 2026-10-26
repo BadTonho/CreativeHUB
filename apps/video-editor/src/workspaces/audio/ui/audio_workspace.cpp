@@ -1,5 +1,6 @@
 #include "workspaces/audio/ui/audio_workspace.h"
 #include "workspaces/audio/ui/audio_effect_chain_dialog.h"
+#include "workspaces/audio/ui/audio_ducking_dialog.h"
 
 #include <QCheckBox>
 #include <QComboBox>
@@ -208,6 +209,15 @@ void AudioWorkspace::createPanels(QWidget* parent) {
     tracks_section_layout->addLayout(track_mixer_layout_);
     mixer_layout_->addWidget(tracks_section);
 
+    selected_clip_effects_ = new QPushButton(translated("Select an audio clip to edit its effects"), mixer_content);
+    selected_clip_effects_->setObjectName("audioSelectedClipEffects"); selected_clip_effects_->setEnabled(false);
+    mixer_layout_->addWidget(selected_clip_effects_);
+    connect(selected_clip_effects_, &QPushButton::clicked, this, [this] {
+        if (selected_clip_id_ == 0) return;
+        const auto id = selected_clip_id_;
+        AudioEffectChainDialog dialog(translated("Clip audio effects — %1").arg(selected_clip_name_), selected_clip_chain_, mixer_panel_);
+        if (dialog.exec() == QDialog::Accepted) emit clipAudioEffectsChanged(id, dialog.effects());
+    });
     auto* effects_section = new QWidget(mixer_content);
     effects_section->setObjectName("audioTrackEffectsSection");
     auto* effects_section_layout = new QVBoxLayout(effects_section);
@@ -225,6 +235,8 @@ void AudioWorkspace::refreshTracks(
     const std::vector<timeline::AudioBus>& buses,
     const timeline::MasterAudioMix& master) {
     if (meter_page_ == nullptr || mixer_panel_ == nullptr) return;
+    ducking_sources_.clear();
+    for (const auto& track : tracks) ducking_sources_.emplace_back(track.track_id, QString::fromUtf8(track.name.c_str()));
     std::vector<const timeline::TimelineTrack*> audio_tracks;
     for (const auto& track : tracks) {
         if (track.kind == timeline::TrackKind::Audio) audio_tracks.push_back(&track);
@@ -532,6 +544,18 @@ void AudioWorkspace::refreshTracks(
                     emit trackAudioEffectsChanged(id, dialog.effects());
                 }
             });
+            row.ducking_button = new QPushButton(translated("Ducking"), widget);
+            row.ducking_button->setObjectName("audioTrackDucking");
+            widget->layout()->addWidget(row.ducking_button);
+            connect(row.ducking_button, &QPushButton::clicked, this, [this, id = row.id] {
+                const auto found = std::find_if(track_effects_rows_.begin(), track_effects_rows_.end(),
+                    [id](const auto& item) { return item.id == id; });
+                if (found == track_effects_rows_.end()) return;
+                AudioDuckingDialog dialog(found->ducking, ducking_sources_, id, mixer_panel_);
+                if (dialog.exec() != QDialog::Accepted) return;
+                if (dialog.generateRequested()) emit generateDuckingCurveRequested(id, dialog.settings());
+                else emit trackDuckingChanged(id, dialog.settings());
+            });
             track_effects_layout_->addWidget(widget);
             track_effects_rows_.push_back(std::move(row));
         }
@@ -544,6 +568,7 @@ void AudioWorkspace::refreshTracks(
         if (found == track_effects_rows_.end()) continue;
         found->name->setText(QString::fromUtf8(track.name.c_str()));
         found->effects = track.audio_effects;
+        found->ducking = track.audio_ducking;
     }
 
     for (const auto& bus : buses) {
@@ -743,6 +768,18 @@ void AudioWorkspace::clearSoloState() {
         strip.solo->setChecked(false);
     }
     emitSoloState();
+}
+
+void AudioWorkspace::setSelectedClip(const timeline::TimelineClip* clip) {
+    const bool valid = clip && (clip->kind == timeline::ClipKind::Audio || clip->kind == timeline::ClipKind::Video);
+    selected_clip_id_ = valid ? clip->clip_id : 0;
+    selected_clip_chain_ = valid ? clip->audio_effects : std::vector<timeline::AudioEffectInstance>{};
+    selected_clip_name_ = valid ? QString::fromUtf8(clip->display_name.c_str()) : QString();
+    if (selected_clip_effects_) {
+        selected_clip_effects_->setEnabled(valid);
+        selected_clip_effects_->setText(valid ? translated("Clip audio effects — %1").arg(selected_clip_name_) :
+            translated("Select an audio clip to edit its effects"));
+    }
 }
 
 }  // namespace ui

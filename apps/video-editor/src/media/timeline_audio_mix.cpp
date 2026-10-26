@@ -1,4 +1,7 @@
 #include "timeline_audio_mix.h"
+#include "audio_filter_session.h"
+#include "audio_ducking.h"
+#include "logging/logger.h"
 
 #include <algorithm>
 #include <array>
@@ -362,7 +365,117 @@ std::optional<std::int64_t> sampleAtSourceTimeUs(
 
 } // namespace
 
+namespace {
+using AudioSource = std::function<std::vector<float>(std::int64_t, std::size_t)>;
+class PullEffectChain {
+    struct Node {
+        timeline::AudioEffectInstance effect;
+        TrackDspState native;
+        std::unique_ptr<AudioFilterSession> filter;
+        std::vector<float> pending;
+        std::size_t head = 0;
+        std::int64_t input_cursor = 0;
+    };
+    std::vector<Node> nodes_;
+    int rate_, channels_;
+    std::vector<float> pull(std::size_t index, std::int64_t start, std::size_t count, const AudioSource& source) {
+        if (index == 0) return source(start, count);
+        auto& node = nodes_[index - 1];
+        if (!node.filter) {
+            auto result = pull(index - 1, start, count, source);
+            runTrackEffectChain(result, channels_, rate_, {node.effect}, node.native);
+            return result;
+        }
+        const auto needed = count * channels_;
+        while (node.pending.size() - node.head < needed) {
+            constexpr std::size_t quantum = 256;
+            auto input = pull(index - 1, node.input_cursor, quantum, source);
+            node.input_cursor += quantum;
+            node.filter->push(input);
+            auto output = node.filter->pull();
+            node.pending.insert(node.pending.end(), output.begin(), output.end());
+        }
+        std::vector<float> result(node.pending.begin() + node.head, node.pending.begin() + node.head + needed);
+        node.head += needed;
+        if (node.head > 8192 || node.head == node.pending.size()) {
+            node.pending.erase(node.pending.begin(), node.pending.begin() + node.head);
+            node.head = 0;
+        }
+        return result;
+    }
+public:
+    PullEffectChain(const std::vector<timeline::AudioEffectInstance>& effects, int rate, int channels, std::int64_t start)
+        : rate_(rate), channels_(channels) {
+        for (const auto& effect : effects) {
+            if (!effect.enabled) continue;
+            Node node; node.effect = effect; node.input_cursor = start;
+            if (effect.parameters.index() >= 2) node.filter = std::make_unique<AudioFilterSession>(effect, rate, channels);
+            nodes_.push_back(std::move(node));
+        }
+    }
+    std::vector<float> read(std::int64_t start, std::size_t count, const AudioSource& source) {
+        return pull(nodes_.size(), start, count, source);
+    }
+};
+struct PullEffectState {
+    std::vector<timeline::AudioEffectInstance> effects;
+    std::unique_ptr<PullEffectChain> chain;
+    std::int64_t next = -1;
+    int rate = 0, channels = 0;
+    std::vector<float> last_frame;
+    std::size_t transition_remaining = 0;
+    bool failed = false;
+    std::vector<float> read(const std::vector<timeline::AudioEffectInstance>& next_effects,
+        int next_rate, int next_channels, std::int64_t start, std::size_t count,
+        const AudioSource& source, bool bypass, std::uint64_t id, const char* kind) {
+        const bool contiguous = next == start && rate == next_rate && channels == next_channels;
+        if (!chain || !contiguous || effects != next_effects) {
+            transition_remaining = contiguous ? static_cast<std::size_t>(next_rate / 100) : 0;
+            effects = next_effects; rate = next_rate; channels = next_channels; failed = false;
+            chain.reset();
+            try { chain = std::make_unique<PullEffectChain>(effects, rate, channels, start); }
+            catch (const std::exception& error) {
+                logging::Logger::instance().log(logging::Level::Error, "audio_processing", "configure_chain",
+                    error.what(), {{kind, std::to_string(id)}});
+                if (!bypass) throw;
+                failed = true;
+                auto basic = effects;
+                for (auto& effect : basic) if (effect.parameters.index() >= 2) effect.enabled = false;
+                chain = std::make_unique<PullEffectChain>(basic, rate, channels, start);
+            }
+        }
+        std::vector<float> result;
+        try { result = chain->read(start, count, source); }
+        catch (const AudioFilterError& error) {
+            logging::Logger::instance().log(logging::Level::Error, "audio_processing", "process_chain",
+                error.what(), {{kind, std::to_string(id)}});
+            if (!bypass) throw;
+            auto basic = effects;
+            for (auto& effect : basic) if (effect.parameters.index() >= 2) effect.enabled = false;
+            chain = std::make_unique<PullEffectChain>(basic, rate, channels, start);
+            failed = true;
+            result = chain->read(start, count, source);
+        }
+        const auto transition_length = static_cast<std::size_t>(std::max(1, rate / 100));
+        if (last_frame.size() == static_cast<std::size_t>(channels)) {
+            for (std::size_t frame = 0; frame < count && transition_remaining > 0; ++frame, --transition_remaining) {
+                const auto old_weight = static_cast<float>(transition_remaining) / transition_length;
+                for (int ch = 0; ch < channels; ++ch)
+                    result[frame * channels + ch] = old_weight * last_frame[ch] + (1 - old_weight) * result[frame * channels + ch];
+            }
+        }
+        if (count) last_frame.assign(result.end() - channels, result.end());
+        next = start + count;
+        return result;
+    }
+};
+}
+
 struct TimelineAudioMixState::Impl {
+    std::unordered_map<timeline::ClipId, PullEffectState> pull_clips;
+    std::unordered_map<timeline::TrackId, PullEffectState> pull_tracks;
+    std::unordered_map<timeline::TrackId, AudioDuckingDetector> ducking;
+    std::int64_t next_block = -1;
     std::unordered_map<timeline::TrackId, TrackDspState> tracks;
     std::unordered_map<timeline::ClipId, TrackDspState> clips;
 };
@@ -377,6 +490,10 @@ TimelineAudioMixState& TimelineAudioMixState::operator=(
 
 void TimelineAudioMixState::reset() noexcept {
     if (impl_ != nullptr) {
+        impl_->pull_clips.clear();
+        impl_->pull_tracks.clear();
+        impl_->ducking.clear();
+        impl_->next_block = -1;
         impl_->tracks.clear();
         impl_->clips.clear();
     }
@@ -691,6 +808,7 @@ void TimelineAudioMixAccumulator::accumulate(
         track_buffer->second.output_bus_id = clip.output_bus_id;
         track_buffer->second.sends = clip.audio_sends;
         track_buffer->second.effects = clip.audio_effects;
+        track_buffer->second.ducking = clip.audio_ducking;
     } else if (track_buffer->second.source_channel_count !=
                clip.source_channel_count) {
         track_buffer->second.source_channel_count = std::max(
@@ -723,16 +841,6 @@ TimelineAudioMixResult TimelineAudioMixAccumulator::finish() {
 
     result.track_peaks.reserve(track_samples_.size());
     for (auto& [track_id, track] : track_samples_) {
-        const bool track_solo = any_solo_ && trackSoloed(track_id);
-        const bool include_main_route = !any_solo_ || track_solo ||
-            (track.output_bus_id.has_value() &&
-             busSoloed(*track.output_bus_id));
-        const bool include_any_send = std::any_of(
-            track.sends.begin(), track.sends.end(),
-            [this, track_solo](const timeline::AudioSend& send) {
-                return send.gain > 0.0 && (!any_solo_ || track_solo ||
-                    busSoloed(send.destination_bus_id));
-            });
         const bool has_effect_processing =
             hasActiveAudioEffectProcessing(track.effects);
         auto& dsp_state = persistent_state_->impl_->tracks[track_id];
@@ -760,6 +868,46 @@ TimelineAudioMixResult TimelineAudioMixAccumulator::finish() {
             }
         }
 
+    }
+    std::unordered_map<timeline::TrackId, std::vector<float>> reductions;
+    for (auto& [track_id, track] : track_samples_) {
+        if (track.ducking.mode == timeline::AudioDuckingMode::Off) continue;
+        auto& curve = reductions[track_id]; curve.resize(sample_count_);
+        auto& detector = persistent_state_->impl_->ducking[track_id];
+        const auto source = track.ducking.source_track_id ? track_samples_.find(*track.ducking.source_track_id) : track_samples_.end();
+        for (std::size_t frame = 0; frame < sample_count_; ++frame) {
+            if (track.ducking.mode == timeline::AudioDuckingMode::Curve) {
+                const auto time = static_cast<std::int64_t>(std::llround(
+                    static_cast<long double>(configuration_.block_start_sample + frame) * 1000000 / configuration_.sample_rate));
+                curve[frame] = static_cast<float>(timeline::audioDuckingReductionAt(track.ducking.curve, time));
+            } else {
+                std::span<const float> input;
+                if (source != track_samples_.end() && !source->second.muted)
+                    input = std::span<const float>(source->second.post_fader).subspan(frame * channel_count_, channel_count_);
+                curve[frame] = static_cast<float>(detector.process(input, configuration_.sample_rate, track.ducking));
+            }
+        }
+    }
+    for (auto& [track_id, track] : track_samples_) {
+        if (const auto reduction = reductions.find(track_id); reduction != reductions.end()) {
+            for (std::size_t frame = 0; frame < sample_count_; ++frame) {
+                const auto gain = static_cast<float>(std::pow(10.0, -reduction->second[frame] / 20.0));
+                for (int channel = 0; channel < channel_count_; ++channel) {
+                    track.pre_fader[frame * channel_count_ + channel] *= gain;
+                    track.post_fader[frame * channel_count_ + channel] *= gain;
+                }
+            }
+        }
+        const bool track_solo = any_solo_ && trackSoloed(track_id);
+        const bool include_main_route = !any_solo_ || track_solo ||
+            (track.output_bus_id.has_value() &&
+             busSoloed(*track.output_bus_id));
+        const bool include_any_send = std::any_of(
+            track.sends.begin(), track.sends.end(),
+            [this, track_solo](const timeline::AudioSend& send) {
+                return send.gain > 0.0 && (!any_solo_ || track_solo ||
+                    busSoloed(send.destination_bus_id));
+            });
         if (track.muted || (!include_main_route && !include_any_send)) continue;
 
         result.track_peaks.emplace_back(
@@ -939,4 +1087,111 @@ void accumulateTimelineAudioFloatSamples(
         span, samples, first_sample_index, mixed, output_channel_count,
         [](float sample) { return sample; });
 }
+TimelineAudioMixResult TimelineAudioMixAccumulator::render(
+    std::span<const TimelineAudioMixClip> clips, std::span<const TimelineAudioMixTransition> transitions,
+    double frame_rate, int rate, int channels, std::int64_t start, std::size_t count,
+    TimelineAudioMixConfiguration configuration, TimelineAudioMixState& state,
+    const SourceReader& reader, bool bypass) {
+    if (rate <= 0 || channels <= 0 || start < 0 || count > static_cast<std::size_t>(std::numeric_limits<std::int64_t>::max() - start))
+        throw std::invalid_argument("Invalid audio block interval.");
+    configuration.block_start_sample = start; configuration.sample_rate = rate;
+    auto& persistent = *state.impl_;
+    if (persistent.next_block != start) persistent.ducking.clear();
+    persistent.next_block = start + count;
+    TimelineAudioMixAccumulator mixer(count, channels, configuration, &state);
+    const auto advanced = [](const auto& effects) {
+        return std::any_of(effects.begin(), effects.end(), [](const auto& effect) {
+            return effect.enabled && effect.parameters.index() >= 2;
+        });
+    };
+    if (std::none_of(clips.begin(), clips.end(), [&](const auto& clip) {
+            return advanced(clip.audio_effects) || advanced(clip.clip_audio_effects);
+        })) {
+        const auto spans = planTimelineAudioMix(clips, transitions, frame_rate, rate, start, count);
+        for (const auto& span : spans) {
+            const auto clip = std::find_if(clips.begin(), clips.end(), [&](const auto& item) { return item.source_index == span.source_index; });
+            if (clip == clips.end()) continue;
+            auto samples = reader(span.source_index, span.source_start_sample, span.sample_count);
+            AudioPcmChunk chunk{rate, channels, span.source_start_sample, {}};
+            chunk.samples.reserve(samples.size());
+            for (float sample : samples) chunk.samples.push_back(static_cast<std::int16_t>(
+                std::clamp(std::lround(sample * 32768.0), -32768L, 32767L)));
+            mixer.accumulate(span, *clip, chunk);
+        }
+        return mixer.finish();
+    }
+    std::unordered_map<timeline::TrackId, const TimelineAudioMixClip*> tracks;
+    for (const auto& clip : clips) if (clip.has_audio && !clip.audio_extracted) tracks.try_emplace(clip.track_id, &clip);
+    for (const auto& [track_id, metadata] : tracks) {
+        const bool active_now = std::any_of(clips.begin(), clips.end(), [&](const auto& clip) {
+            return clip.track_id == track_id && clip.has_audio && !clip.audio_extracted &&
+                start < static_cast<long double>(clip.timeline_start_frame + clip.duration_frames) * rate / frame_rate &&
+                start + count > static_cast<long double>(clip.timeline_start_frame) * rate / frame_rate;
+        });
+        if (!active_now && !persistent.pull_tracks.contains(track_id)) continue;
+        AudioSource summed = [&](std::int64_t position, std::size_t frames) {
+            std::vector<float> output(frames * channels, 0.0F);
+            for (const auto& clip : clips) {
+                if (clip.track_id != track_id || !clip.has_audio || clip.audio_extracted || clip.clip_muted) continue;
+                const auto spans = planTimelineAudioMix(std::span<const TimelineAudioMixClip>(&clip, 1),
+                    transitions, frame_rate, rate, position, frames);
+                if (spans.empty()) continue;
+                const auto& span = spans.front();
+                const auto local_start = position + span.destination_start_sample;
+                AudioSource decoded = [&](std::int64_t input_start, std::size_t input_count) {
+                    auto raw_clip = clip;
+                    raw_clip.track_muted = false; raw_clip.clip_muted = false;
+                    raw_clip.track_gain = 1; raw_clip.clip_gain = 1; raw_clip.audio_gain_keyframes.clear();
+                    auto raw_spans = planTimelineAudioMix(std::span<const TimelineAudioMixClip>(&raw_clip, 1),
+                        {}, frame_rate, rate, input_start, input_count);
+                    std::vector<float> raw(input_count * channels, 0.0F);
+                    for (const auto& raw_span : raw_spans) {
+                        auto samples = reader(clip.source_index, raw_span.source_start_sample, raw_span.sample_count);
+                        samples.resize(static_cast<std::size_t>(raw_span.sample_count) * channels, 0.0F);
+                        std::copy(samples.begin(), samples.end(), raw.begin() + raw_span.destination_start_sample * channels);
+                    }
+                    return raw;
+                };
+                auto processed = persistent.pull_clips[clip.clip_id].read(clip.clip_audio_effects,
+                    rate, channels, local_start, span.sample_count, decoded, bypass, clip.clip_id, "clip_id");
+                auto scheduled = span;
+                scheduled.gain = clip.clip_gain;
+                accumulateTimelineAudioFloatSamples(scheduled, processed, span.source_start_sample, output, channels);
+            }
+            return output;
+        };
+        auto pre = persistent.pull_tracks[track_id].read(metadata->audio_effects,
+            rate, channels, start, count, summed, bypass, track_id, "track_id");
+        auto& track = mixer.track_samples_[track_id];
+        track.pre_fader = std::move(pre); track.post_fader = track.pre_fader;
+        track.gain = metadata->track_gain; track.pan = metadata->track_pan; track.muted = metadata->track_muted;
+        track.output_bus_id = metadata->output_bus_id; track.sends = metadata->audio_sends;
+        track.source_channel_count = metadata->source_channel_count; track.ducking = metadata->audio_ducking;
+        for (const auto& clip : clips) if (clip.track_id == track_id &&
+            start < static_cast<long double>(clip.timeline_start_frame + clip.duration_frames) * rate / frame_rate &&
+            start + count > static_cast<long double>(clip.timeline_start_frame) * rate / frame_rate &&
+            clip.source_channel_count != track.source_channel_count)
+            track.source_channel_count = std::max(2, std::max(track.source_channel_count, clip.source_channel_count));
+        for (std::size_t offset = 0; offset < track.post_fader.size(); offset += channels)
+            applyTrackGainAndPan(track.post_fader.data() + offset, channels, track.source_channel_count, track.gain, track.pan);
+    }
+    // Stateful processors are released after their occurrence, not retained for
+    // every clip visited in a long project. Backward seeks recreate them on demand.
+    std::erase_if(persistent.pull_clips, [&](const auto& item) {
+        const auto clip = std::find_if(clips.begin(), clips.end(), [&](const auto& candidate) { return candidate.clip_id == item.first; });
+        return clip == clips.end() || start > static_cast<long double>(clip->timeline_start_frame + clip->duration_frames) * rate / frame_rate + rate;
+    });
+    std::erase_if(persistent.pull_tracks, [&](const auto& item) {
+        return std::none_of(clips.begin(), clips.end(), [&](const auto& clip) {
+            return clip.track_id == item.first && start <=
+                static_cast<long double>(clip.timeline_start_frame + clip.duration_frames) * rate / frame_rate + rate;
+        });
+    });
+    auto result = mixer.finish();
+    result.processor_bypassed = std::any_of(persistent.pull_clips.begin(), persistent.pull_clips.end(),
+        [](const auto& item) { return item.second.failed; }) ||
+        std::any_of(persistent.pull_tracks.begin(), persistent.pull_tracks.end(), [](const auto& item) { return item.second.failed; });
+    return result;
+}
+
 } // namespace media

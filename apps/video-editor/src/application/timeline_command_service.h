@@ -229,6 +229,10 @@ struct SetTrackAudioEffectsCommand {
     timeline::TrackId track_id = 0;
     std::vector<timeline::AudioEffectInstance> effects;
 };
+struct SetTrackAudioDuckingCommand {
+    timeline::TrackId track_id = 0;
+    timeline::AudioDuckingSettings settings;
+};
 struct SetAudioBusMixCommand {
     timeline::AudioBusId bus_id = 0;
     double gain = 1.0;
@@ -312,6 +316,7 @@ public:
         const SetTrackAudioEffectsCommand& command);
     [[nodiscard]] TimelineEditResult execute(
         const SetAudioBusMixCommand& command);
+    [[nodiscard]] TimelineEditResult execute(const SetTrackAudioDuckingCommand& command);
     [[nodiscard]] TimelineEditResult execute(const AddAudioBusCommand& command);
     [[nodiscard]] TimelineEditResult execute(const RenameAudioBusCommand& command);
     [[nodiscard]] TimelineEditResult execute(const RemoveAudioBusCommand& command);

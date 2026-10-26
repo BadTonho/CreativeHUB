@@ -343,6 +343,12 @@ void validateDocument(const ProjectDocument& document,
             throwJson(ProjectErrorCode::InvalidValue, project_path,
                       "Project JSON contains invalid track audio routing settings.");
         }
+        if (!timeline::validAudioDucking(track.audio_ducking) ||
+            track.audio_ducking.source_track_id == track.track_id ||
+            (track.audio_ducking.source_track_id && std::none_of(document.timeline_tracks.begin(),
+                document.timeline_tracks.end(), [&](const auto& candidate) {
+                    return candidate.track_id == *track.audio_ducking.source_track_id;
+                }))) throwJson(ProjectErrorCode::InvalidValue, project_path, "Invalid audio ducking source or settings.");
         if (!timeline::validAudioEffectChain(track.audio_effects)) {
             throwJson(ProjectErrorCode::InvalidValue, project_path,
                       "Project JSON contains invalid or duplicate audio effects.");

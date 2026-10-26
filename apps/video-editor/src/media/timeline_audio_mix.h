@@ -5,6 +5,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <span>
 #include <unordered_map>
@@ -46,6 +47,7 @@ struct TimelineAudioMixClip {
     timeline::ClipId clip_id = 0;
     std::vector<timeline::AudioEffectInstance> clip_audio_effects;
     int source_channel_count = 2;
+    timeline::AudioDuckingSettings audio_ducking;
 };
 
 struct TimelineAudioMixTransition {
@@ -84,6 +86,8 @@ struct TimelineAudioMixConfiguration {
     std::vector<timeline::TrackId> solo_track_ids;
     std::vector<timeline::AudioBusId> solo_bus_ids;
     bool apply_solo = true;
+    std::int64_t block_start_sample = 0;
+    int sample_rate = 48000;
 };
 
 struct TimelineAudioMixResult {
@@ -91,6 +95,7 @@ struct TimelineAudioMixResult {
     std::vector<std::pair<timeline::TrackId, float>> track_peaks;
     std::vector<std::pair<timeline::AudioBusId, float>> bus_peaks;
     float master_peak = 0.0F;
+    bool processor_bypassed = false;
 };
 
 // Persistent per-clip and per-track DSP state shared by consecutive Preview or
@@ -122,6 +127,15 @@ public:
         TimelineAudioMixConfiguration configuration,
         TimelineAudioMixState* persistent_state = nullptr);
 
+    using SourceReader = std::function<std::vector<float>(std::size_t, std::int64_t, std::size_t)>;
+    // Pull-based block renderer compensates per-node lookahead before envelopes,
+    // summation and routing. Reader returns exactly count interleaved frames.
+    static TimelineAudioMixResult render(
+        std::span<const TimelineAudioMixClip> clips,
+        std::span<const TimelineAudioMixTransition> transitions,
+        double frame_rate, int sample_rate, int channels,
+        std::int64_t start, std::size_t count, TimelineAudioMixConfiguration configuration,
+        TimelineAudioMixState& state, const SourceReader& reader, bool bypass_failed_processors = false);
     void accumulate(
         const TimelineAudioMixSpan& span,
         const TimelineAudioMixClip& clip,
@@ -139,6 +153,7 @@ private:
         std::optional<timeline::AudioBusId> output_bus_id;
         std::vector<timeline::AudioSend> sends;
         std::vector<timeline::AudioEffectInstance> effects;
+        timeline::AudioDuckingSettings ducking;
     };
 
     [[nodiscard]] bool trackSoloed(timeline::TrackId track_id) const noexcept;

@@ -1145,7 +1145,7 @@ void validateEmbeddedAudioMixing(
     compressor.enabled = true;
     compressor.parameters = timeline::AudioCompressorParameters{
         -24.0, 4.0, 0.1, 100.0, 0.0};
-    effects_track.audio_effects = {equalizer, compressor};
+    effects_track.audio_effects = {equalizer, compressor, {timeline::AudioDialogueCleanupParameters{20, 0}, true}};
     renderJob(effects_job, canceled);
     const auto plain_quiet_rms = decodedAudioRmsRange(
         pathFromQString(job.settings.output_path), 0, 8000);

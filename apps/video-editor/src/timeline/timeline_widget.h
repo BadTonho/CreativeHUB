@@ -115,6 +115,7 @@ public:
         double frame_rate);
 
 signals:
+    void trackDuckingSettingsChanged(timeline::TrackId track_id, timeline::AudioDuckingSettings settings);
     void clipSelected(timeline::TrackId track_id, timeline::ClipId clip_id);
     void openFusionClipRequested(timeline::ClipId clip_id);
     void editImageClipRequested(timeline::ClipId clip_id);
@@ -199,6 +200,17 @@ protected:
     void resizeEvent(QResizeEvent* event) override;
 
 private:
+    struct DuckingDrag {
+        TrackId track_id = 0;
+        AudioDuckingSettings settings;
+        std::size_t index = 0;
+    };
+    std::optional<DuckingDrag> ducking_drag_;
+    [[nodiscard]] QRectF duckingLaneRect(std::size_t track) const;
+    [[nodiscard]] QPointF duckingPointPosition(const AudioDuckingKeyframe& point, const QRectF& lane) const;
+    void paintDuckingLanes(QPainter& painter) const;
+    bool beginDuckingEdit(QMouseEvent* event);
+    void moveDuckingPoint(QPointF position);
     struct TrackScrollAnchor final {
         TrackId track_id = 0;
         double row_edge_offset = 0.0;

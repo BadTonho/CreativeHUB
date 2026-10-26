@@ -1085,3 +1085,19 @@ effects and Fusion graphs. Both its tooltip and the independent export GPU
 checkbox explain this scope. Hardware video decoding has a separate global
 preview checkbox and a separate, default-off per-export checkbox. New hardware
 encoders remain labeled experimental and are never selected implicitly.
+
+## Audio dialogue processing and ducking
+
+Audio's mixer exposes track effects and a selected-clip effects button. Both
+edit the shared ordered EQ/compressor/cleanup/noise-reduction/repair model;
+Cancel leaves the document untouched. Edit's Inspector continues to author only
+EQ/compressor and displays other processors as Audio-owned read-only entries.
+
+Each track has a Ducking dialog with source selection, Off/Automatic/Curve mode,
+threshold, reduction, attack, hold and release. Generate Curve runs snapshot
+analysis with nonmodal progress and cancellation, then applies one undoable
+result if the project is unchanged. Curve mode displays a ducking lane at the
+bottom of that Audio Timeline row. Click/drag edits its absolute-time points;
+a point's context menu removes it. These gestures do not move or edit clips.
+Generating again replaces the curve; Undo restores the previous curve/settings.
+All new controls use the bundled pt-BR AudioWorkspace translations.

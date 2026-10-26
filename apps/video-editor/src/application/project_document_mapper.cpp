@@ -46,6 +46,7 @@ project::ProjectDocument ProjectDocumentMapper::toDocument(
         project_track.output_bus_id = track.output_bus_id;
         project_track.audio_sends = track.audio_sends;
         project_track.audio_effects = track.audio_effects;
+        project_track.audio_ducking = track.audio_ducking;
         project_track.kind = track.kind;
         project_track.clips.reserve(track.clips.size());
         for (const auto& clip : track.clips) {

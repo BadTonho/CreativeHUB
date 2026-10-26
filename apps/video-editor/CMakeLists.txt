@@ -5,7 +5,7 @@ set(CMAKE_AUTORCC ON)
 
 find_package(Qt6 CONFIG REQUIRED COMPONENTS Core Widgets OpenGL OpenGLWidgets LinguistTools)
 find_package(Qt6 CONFIG QUIET COMPONENTS Multimedia)
-find_package(FFMPEG MODULE REQUIRED COMPONENTS AVCODEC AVFORMAT AVUTIL SWRESAMPLE SWSCALE)
+find_package(FFMPEG MODULE REQUIRED COMPONENTS AVCODEC AVFORMAT AVUTIL AVFILTER SWRESAMPLE SWSCALE)
 
 if(TARGET Qt6::Multimedia)
     set(CREATIVE_SUITE_HAS_QT_MULTIMEDIA TRUE)
@@ -14,7 +14,16 @@ else()
     message(WARNING "Qt6::Multimedia was not found; audio output will use the diagnostic fallback.")
 endif()
 
+add_library(creative-suite-video-audio-filters STATIC src/media/audio_filter_session.cpp)
+set_target_properties(creative-suite-video-audio-filters PROPERTIES AUTOMOC OFF)
+target_compile_features(creative-suite-video-audio-filters PUBLIC cxx_std_20)
+target_include_directories(creative-suite-video-audio-filters PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src ${FFMPEG_INCLUDE_DIRS})
+target_link_directories(creative-suite-video-audio-filters PUBLIC ${FFMPEG_LIBRARY_DIRS})
+target_link_libraries(creative-suite-video-audio-filters PUBLIC creative-suite::diagnostics ${FFMPEG_LIBRARIES})
+
 set(MAIN_EDITOR_CORE_SOURCES
+    src/main_window/main_window_audio.cpp
+    src/media/audio_ducking_analysis.cpp
     src/main_window/main_window.cpp
     src/main_window/main_window.h
     src/application/composition_interchange.cpp
@@ -271,6 +280,7 @@ add_custom_target(update-video-editor-translations
 )
 
 target_link_libraries(creative-suite-main-editor-core PUBLIC
+    creative-suite-video-audio-filters
     creative-suite::composition-exchange
     creative-suite::motion-handoff
     creative-suite::translations

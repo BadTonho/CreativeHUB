@@ -1,6 +1,6 @@
 # Audio Workspace Roadmap
 
-Status: **the editable Audio workspace, one-level mixer, track EQ/compressor, and per-clip EQ/compressor are implemented; device and native UI acceptance remain pending**.
+Status: **the editable Audio workspace, one-level mixer, track EQ/compressor, per-clip EQ/compressor, dialogue cleanup, noise reduction, repair, and automatic/editable-curve ducking are implemented; device and native UI acceptance remain pending**.
 
 The Audio workspace is a fourth view of the Video Editor's current project. It
 uses the Edit timeline document, stable clip and track identities, shared edit
@@ -50,6 +50,34 @@ Master meters.
   Projects v1-v40 load with no buses or sends, centered pan, all tracks routed
   to Master, and a neutral Master.
 
+## Dialogue processing and ducking (CSP v44)
+
+- Audio owns ordered clip and track chains with up to one each of EQ,
+  compressor, dialogue cleanup, noise reduction, and repair. New processors
+  start disabled. Edit retains basic EQ/compressor editing and preserves
+  Audio-only processors as read-only entries.
+- Dialogue cleanup combines a high-pass filter and de-esser. Noise reduction
+  treats continuous noise using a fixed noise floor. Repair offers optional
+  50/60 Hz hum removal (fundamental plus two harmonics) and click removal.
+- Preview/export share persistent, worker-owned FFmpeg filter sessions and
+  bounded pull processing. Lookahead compensates filter delay before clip
+  envelopes and track summation; visible clip/project durations are unchanged.
+- Per-track ducking has Off, Automatic and Curve modes. One source track feeds
+  an RMS detector before ducking/solo, after its own effects and gain. Source
+  mute silences detection. Ducking precedes target fader/pan and both send taps.
+- Generate Curve analyzes a project snapshot at 48 kHz with progress/cancel.
+  Only a complete, still-current result becomes one undoable edit. A generated
+  curve has absolute microsecond positions and linear dB interpolation, with
+  incremental simplification bounded to 0.1 dB error. Switching modes preserves
+  the saved curve and never applies both modes together.
+- Curve mode exposes a ducking lane in the Audio Timeline. Click to add a point,
+  drag to move it, or use its right-click removal action. Each gesture is one
+  history edit. Moving/replacing clips leaves this track curve fixed; regenerating
+  replaces it and can be undone.
+- CSP v1-v43 migrate with ducking Off. CSP v44 persists expanded clip/track
+  chains, ducking source/settings and curve. Hub backup/restoration preserves
+  v44 and rejects v45. Application version metadata is unchanged.
+
 ## Audio workspace acceptance
 
 - Automated regressions cover mixer model/commands, Undo/Redo, routing and
@@ -66,8 +94,8 @@ Master meters.
 
 ## Remaining candidates
 
-1. **Processing:** dialogue cleanup, noise reduction, repair, and ducking.
-   Keep Preview and export equal.
+1. **Advanced processing:** voice isolation, dereverberation, and clipped-audio
+   restoration after a separate quality, cost, dependency and licensing review.
 2. **Measurement and automation:** loudness, true-peak analysis, normalization,
    track automation, and richer clip automation.
 3. **Production workflows:** recording, voiceover/ADR, and a locally managed

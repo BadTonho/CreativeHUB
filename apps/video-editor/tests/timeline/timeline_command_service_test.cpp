@@ -1132,7 +1132,7 @@ void runLinkedVideoAudioCommands() {
     timeline::AudioEffectInstance clip_compressor;
     clip_compressor.parameters = timeline::AudioCompressorParameters{};
     const std::vector<timeline::AudioEffectInstance> clip_chain{
-        clip_equalizer, clip_compressor};
+        clip_equalizer, clip_compressor, {timeline::AudioDialogueCleanupParameters{}, true}};
     const auto clip_effect_edit = service.execute(
         application::SetClipAudioEffectsCommand{video_id, clip_chain});
     video_location = session.timeline().locateClip(video_id);
@@ -2039,6 +2039,32 @@ void runAudioEffectCommands() {
                 invalid.reason == application::EditReason::InvalidValue &&
                 session.timeline().tracks().back().audio_effects == chain,
             "The model accepted duplicate or out-of-range audio effects.");
+    auto expanded = chain;
+    expanded.push_back({timeline::AudioDialogueCleanupParameters{}, true});
+    expanded.push_back({timeline::AudioNoiseReductionParameters{}, true});
+    expanded.push_back({timeline::AudioRepairParameters{}, true});
+    require(service.execute(application::SetTrackAudioEffectsCommand{track_id, expanded}).changed() &&
+        session.timeline().tracks().back().audio_effects == expanded, "Full processing chain was not accepted.");
+    timeline::AudioDuckingSettings duck;
+    duck.mode = timeline::AudioDuckingMode::Automatic;
+    const auto source_id = session.timeline().tracks().front().track_id;
+    duck.source_track_id = source_id;
+    duck.curve = {{0, 0}, {100000, 12}, {200000, 0}};
+    require(service.execute(application::SetTrackAudioDuckingCommand{track_id, duck}).changed(), "Ducking command was rejected.");
+    require(service.undo().changed() && session.timeline().tracks().back().audio_ducking.mode == timeline::AudioDuckingMode::Off &&
+        service.redo().changed() && session.timeline().tracks().back().audio_ducking == duck, "Ducking history lost settings or curve.");
+    auto invalid_duck = duck; invalid_duck.source_track_id = track_id;
+    require(!service.execute(application::SetTrackAudioDuckingCommand{track_id, invalid_duck}).changed(), "Ducking accepted its own track as source.");
+    invalid_duck = duck; invalid_duck.curve.push_back({100000, 0});
+    require(!service.execute(application::SetTrackAudioDuckingCommand{track_id, invalid_duck}).changed(), "Ducking accepted unsorted curve points.");
+    require(service.execute(application::RemoveTrackCommand{source_id}).changed() &&
+        !session.timeline().tracks().back().audio_ducking.source_track_id &&
+        session.timeline().tracks().back().audio_ducking.mode == timeline::AudioDuckingMode::Off &&
+        session.timeline().tracks().back().audio_ducking.curve == duck.curve,
+        "Removing a voice source did not disable automatic ducking while preserving its curve.");
+    require(service.undo().changed() && session.timeline().tracks().back().audio_ducking == duck,
+        "Undo of source-track deletion did not restore ducking references.");
+
 }
 
 } // namespace

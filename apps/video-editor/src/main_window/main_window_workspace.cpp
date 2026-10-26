@@ -598,6 +598,15 @@ void MainWindow::createWorkspace() {
             });
     connect(audio_workspace_, &ui::AudioWorkspace::trackMixChanged,
             this, &MainWindow::applyAudioTrackMix);
+    connect(audio_workspace_, &ui::AudioWorkspace::clipAudioEffectsChanged, this, &MainWindow::applyAudioClipEffects);
+    connect(audio_workspace_, &ui::AudioWorkspace::trackDuckingChanged, this, &MainWindow::applyAudioTrackDucking);
+    connect(audio_workspace_, &ui::AudioWorkspace::generateDuckingCurveRequested, this, &MainWindow::generateAudioDuckingCurve);
+    connect(editUi().timeline, &timeline::TimelineWidget::trackDuckingSettingsChanged, this, &MainWindow::applyAudioTrackDucking);
+    connect(editUi().timeline, &timeline::TimelineWidget::clipSelected, this, [this](auto, auto id) {
+        const auto location = timeline_model_.locateClip(id);
+        audio_workspace_->setSelectedClip(location ? &timeline_model_.tracks()[location->track_index].clips[location->clip_index] : nullptr);
+    });
+    connect(editUi().timeline, &timeline::TimelineWidget::clipSelectionCleared, this, [this] { audio_workspace_->setSelectedClip(nullptr); });
     connect(audio_workspace_, &ui::AudioWorkspace::trackAudioEffectsChanged,
             this, &MainWindow::applyAudioTrackEffects);
     connect(audio_workspace_, &ui::AudioWorkspace::busMixChanged,
@@ -725,6 +734,7 @@ void MainWindow::createWorkspace() {
         if (audio_workspace_ == nullptr || workspace_host_ == nullptr ||
             audio_workspace_->meterPage() != nullptr) return;
         audio_workspace_->createPanels(this);
+        refreshAudioSelection();
         audio_workspace_->refreshTracks(timeline_model_.tracks(),
             timeline_model_.audioBuses(), timeline_model_.masterAudioMix());
         workspace_host_->setAudioPanels(

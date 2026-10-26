@@ -160,7 +160,7 @@ std::filesystem::path createAacFixture(int sample_rate) {
     settings.width = 32;
     settings.height = 32;
     settings.frame_rate_numerator = 30;
-    settings.audio = creative_suite::media::AudioEncodingSettings{"aac", 192, sample_rate, 2};
+    if (sample_rate > 0) settings.audio = creative_suite::media::AudioEncodingSettings{"aac", 192, sample_rate, 2};
     creative_suite::media::VideoEncoder encoder(settings);
     const creative_suite::media::RgbaFrame frame{
         32, 32, 128, std::vector<std::uint8_t>(32 * 128, 255)};
@@ -265,10 +265,17 @@ int main(int argc, char** argv) {
             testSeekPcmContent(compressed);
             std::filesystem::remove(compressed);
         }
+        const auto silent_video = createAacFixture(0);
+        testMissingAudioDoesNotBecomeAnError(silent_video);
+        std::filesystem::remove(silent_video);
         testDisabledAudioOutputFallback();
         testMonitorVolumeNormalization();
         if (argc > 1) {
-            testMissingAudioDoesNotBecomeAnError(argv[1]);
+            auto reference = media::AudioPlaybackSession::open(argv[1]);
+            const auto first = reference->decode_samples();
+            CS_TEST_CHECK(reference->has_audio() == first.has_value());
+            if (first) CS_TEST_CHECK(first->sampleCount() > 0 && first->sample_rate > 0);
+
         }
         std::error_code remove_error;
         std::filesystem::remove(wav_path, remove_error);

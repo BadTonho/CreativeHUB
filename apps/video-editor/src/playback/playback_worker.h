@@ -107,6 +107,7 @@ struct CompositionLayerSpec {
     std::optional<timeline::AudioBusId> output_bus_id;
     std::vector<timeline::AudioSend> audio_sends;
     std::vector<timeline::AudioEffectInstance> track_audio_effects;
+    timeline::AudioDuckingSettings audio_ducking;
     std::vector<timeline::AudioEffectInstance> clip_audio_effects;
     int source_audio_channel_count = 2;
 };
@@ -400,6 +401,7 @@ private:
     bool gpu_composition_enabled_ = false;
     bool hardware_decoding_enabled_ = false;
     bool gpu_composition_failed_ = false;
+    bool audio_processor_warning_reported_ = false;
     bool gpu_warning_reported_ = false;
     bool last_composition_gpu_ = false;
     bool last_composition_cancelled_ = false;

@@ -625,8 +625,10 @@ int main(int argc, char* argv[]) {
             Qt::LeftButton,
             Qt::NoModifier);
         QApplication::sendEvent(&widget, &visual_filter_drop);
-        require(visual_filter_drop_received,
-                "A visual filter could not be dropped onto a video clip.");
+        // The current workspace catalog reserves visual filter insertion for
+        // Fusion/Color; Edit's Timeline must reject those catalog entries.
+        require(!visual_filter_drop_received && !visual_filter_drop.isAccepted(),
+                "The Edit Timeline accepted a Fusion/Color-only visual filter.");
 
         int invalid_catalog_drops = 0;
         QObject::connect(&widget, &timeline::TimelineWidget::effectDropRequested,
@@ -4100,6 +4102,32 @@ int main(int argc, char* argv[]) {
                 "Returning the Timeline to Edit did not restore normal interaction.");
         read_only_widget.close();
 
+        {
+            timeline::TimelineWidget ducking_widget;
+            ducking_widget.resize(900, 260);
+            ducking_widget.setAudioOnlyDisplayEnabled(true);
+            ducking_widget.setTrackRowHeight(timeline::TrackKind::Audio, 120);
+            timeline::TimelineTrack music; music.track_id = 99; music.name = "Music"; music.kind = timeline::TrackKind::Audio;
+            music.audio_ducking.mode = timeline::AudioDuckingMode::Curve;
+            auto music_clip = makeClip("music.wav", 0, 120, "Music"); music_clip.kind = timeline::ClipKind::Audio;
+            music_clip.track_id = music.track_id; music.clips.push_back(music_clip);
+            std::vector<timeline::TimelineTrack> tracks{music}; ducking_widget.setTracks(tracks);
+            int commits = 0, clip_moves = 0;
+            QObject::connect(&ducking_widget, &timeline::TimelineWidget::trackDuckingSettingsChanged,
+                [&](auto id, auto settings) { require(id == 99, "Ducking gesture changed the wrong track.");
+                    ++commits; tracks[0].audio_ducking = std::move(settings); ducking_widget.setTracks(tracks); });
+            QObject::connect(&ducking_widget, &timeline::TimelineWidget::clipMoveRequested, [&](auto, auto, auto) { ++clip_moves; });
+            ducking_widget.show(); QApplication::processEvents();
+            const QPointF point(ducking_widget.contentXForFrame(30), ducking_widget.trackBounds(0).bottom() - 12);
+            sendMouse(ducking_widget, QEvent::MouseButtonPress, point, Qt::LeftButton);
+            sendMouse(ducking_widget, QEvent::MouseMove, point - QPointF(0, 10), Qt::LeftButton);
+            require(commits == 0, "A ducking gesture committed before release.");
+            sendMouse(ducking_widget, QEvent::MouseButtonRelease, point - QPointF(0, 10), Qt::NoButton);
+            require(commits == 1 && clip_moves == 0 && tracks[0].audio_ducking.curve.size() == 1 &&
+                tracks[0].audio_ducking.curve.front().time_us == 1000000,
+                "The ducking lane did not create one absolute-time point in one gesture.");
+            ducking_widget.close();
+        }
         widget.close();
         return 0;
     } catch (const std::exception& error) {

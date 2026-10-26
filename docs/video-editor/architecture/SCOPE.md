@@ -252,3 +252,13 @@ encoding, shortcuts, and system monitoring. See
 [Repository Structure](REPOSITORY_STRUCTURE.md) and the
 [cross-application compatibility proposal](../../CROSS_APPLICATION_COMPATIBILITY.md)
 for the current library boundaries.
+
+## Audio dialogue processing
+
+Audio supports per-clip and per-track dialogue cleanup, continuous-noise
+reduction, hum/click repair, and per-track ducking with automatic and editable
+curve modes. Both modes use the shared Preview/export mixer. Curves are
+absolute-time track attenuation, not general-purpose track automation. AI voice
+isolation, dereverberation, declipping, recording, loudness normalization and
+audio-only export remain future work. CSP v44 and Hub backup preservation are
+implemented; native device/UI acceptance remains a separate status.

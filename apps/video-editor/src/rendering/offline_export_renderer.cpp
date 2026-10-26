@@ -856,6 +856,7 @@ std::vector<media::TimelineAudioMixClip> audioMixClips(
         audio_clip.output_bus_id = render_clip.track->output_bus_id;
         audio_clip.audio_sends = render_clip.track->audio_sends;
         audio_clip.audio_effects = render_clip.track->audio_effects;
+        audio_clip.audio_ducking = render_clip.track->audio_ducking;
         audio_clip.clip_audio_effects = clip.audio_effects;
         audio_clip.source_channel_count = render_clip.audio != nullptr
             ? render_clip.audio->source_channel_count() : 2;
@@ -891,38 +892,16 @@ void mixAudioBlock(
     std::vector<float>& mixed,
     const std::atomic_bool& canceled) {
     constexpr int sample_rate = 48000;
-    media::TimelineAudioMixAccumulator audio_mixer(
-        static_cast<std::size_t>(sample_count), 2, audio_mix_configuration,
-        &audio_mix_state);
-    const auto spans = media::planTimelineAudioMix(
-        audio_clips, transitions, timeline_fps, sample_rate,
-        block_start, sample_count);
-    for (const auto& span : spans) {
+    const auto reader = [&](std::size_t index, std::int64_t start, std::size_t count) {
         checkCanceled(canceled);
-        if (span.source_index >= clips.size()) continue;
-        auto& render_clip = clips[span.source_index];
-        if (!render_clip.audio || !render_clip.audio->has_audio()) continue;
-        render_clip.audio->seek_to_sample_index(span.source_start_sample);
-        auto source_cursor = span.source_start_sample;
-        const auto source_end = span.source_start_sample + span.sample_count;
-        auto remaining = static_cast<std::size_t>(span.sample_count);
-        while (remaining > 0) {
-            auto chunk = render_clip.audio->decode_samples(
-                std::min<std::size_t>(remaining + 2048, 8192),
-                [&canceled] { return canceled.load(std::memory_order_acquire); });
-            if (!chunk.has_value() || chunk->sampleCount() == 0) break;
-            audio_mixer.accumulate(span, audio_clips[span.source_index], *chunk);
-            const auto chunk_end = chunk->first_sample_index +
-                static_cast<std::int64_t>(chunk->sampleCount());
-            const auto consumed_end = std::min(source_end, chunk_end);
-            const auto consumed = static_cast<std::size_t>(
-                std::max<std::int64_t>(0, consumed_end - source_cursor));
-            if (consumed == 0) break;
-            remaining -= std::min(remaining, consumed);
-            source_cursor = consumed_end;
-        }
-    }
-    mixed = audio_mixer.finish().samples;
+        if (index >= clips.size() || !clips[index].audio || !clips[index].audio->has_audio())
+            return std::vector<float>(count * 2, 0.0F);
+        return media::readNormalizedAudio(*clips[index].audio, start, count,
+            [&canceled] { return canceled.load(std::memory_order_acquire); });
+    };
+    mixed = media::TimelineAudioMixAccumulator::render(audio_clips, transitions,
+        timeline_fps, sample_rate, 2, block_start, sample_count,
+        audio_mix_configuration, audio_mix_state, reader).samples;
 }
 
 bool verifyOutput(const std::filesystem::path& path, bool expect_audio) {
