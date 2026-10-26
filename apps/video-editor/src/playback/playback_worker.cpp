@@ -520,6 +520,12 @@ void PlaybackWorker::setAudioMeteringEnabled(bool enabled) {
     audio_metering_enabled_ = enabled;
 }
 
+void PlaybackWorker::setVoiceIsolationContext(std::shared_ptr<const media::VoiceIsolationContext> context) {
+    composition_audio_mix_configuration_.voice_isolation = std::move(context);
+    composition_audio_mix_state_.reset();
+    voice_isolation_transition_remaining_ = audio_output_ ? audio_output_->sampleRate() / 100 : 0;
+}
+
 void PlaybackWorker::setAudioMixConfiguration(
     media::TimelineAudioMixConfiguration configuration) {
     composition_audio_mix_configuration_ = std::move(configuration);
@@ -2944,6 +2950,15 @@ void PlaybackWorker::fillCompositionAudioOutput() {
             timeline_frame_rate_.asDouble(), output.sample_rate, output.channel_count,
             next_composition_audio_sample_, block_samples, composition_audio_mix_configuration_,
             composition_audio_mix_state_, read_source, true);
+        if (voice_isolation_last_frame_.size() == static_cast<std::size_t>(output.channel_count)) {
+            const auto length = std::max(1, output.sample_rate / 100);
+            for (std::size_t frame = 0; frame < static_cast<std::size_t>(block_samples) && voice_isolation_transition_remaining_ > 0; ++frame, --voice_isolation_transition_remaining_) {
+                const float old_weight = static_cast<float>(voice_isolation_transition_remaining_) / length;
+                for (int channel = 0; channel < output.channel_count; ++channel)
+                    mixed.samples[frame * output.channel_count + channel] = old_weight * voice_isolation_last_frame_[channel] + (1 - old_weight) * mixed.samples[frame * output.channel_count + channel];
+            }
+        }
+        if (!mixed.samples.empty()) voice_isolation_last_frame_.assign(mixed.samples.end() - output.channel_count, mixed.samples.end());
         if (mixed.processor_bypassed && !audio_processor_warning_reported_) {
             audio_processor_warning_reported_ = true;
             emit audioWarning(QCoreApplication::translate("AudioWorkspace", "An audio processor failed and was bypassed. See the error log."), -1, generation_);

@@ -101,7 +101,7 @@ offline renderer share the sample mixer; solo is temporary and Preview-only.
 Generation-gated level messages provide track, bus, and Master meters, and the
 meter path is disabled outside Audio. Panels are created on first entry. CSP
 v44 stores mixer, ordered clip/track processors and per-track ducking. The Hub
-accepts v1-v44 and rejects v45. Audio owns cleanup/noise/repair controls and
+accepts v1-v45 and rejects v46. Audio owns cleanup/noise/repair controls and
 automatic or editable-curve ducking; Preview/export share their worker processing. See the
 [Audio Boundary](AUDIO.md) and [Audio Workspace Roadmap](../AUDIO_WORKSPACE_ROADMAP.md).
 
@@ -171,3 +171,12 @@ No application input selection, dependency, format or version changes. See the
 [4K evidence](../performance/VULKAN_DECODE_4K_WINDOWS_2026-10-17.md).
 
 Shared primitive-mask coverage accepts an optional logical receiver/raster origin for Motion Bezier rasters. Video keeps default arguments and existing pixels, UI and document format; composition/exchange/mask consumer regressions protect this maintenance boundary.
+
+## Voice isolation (CSP v45)
+
+Audio provides reversible clip/track speech enhancement, generated locally in a
+single background queue using the bundled RNNoise model and existing FFmpeg.
+Preview, export and ducking analysis consume prepared audio at the same stage.
+Settings survive history, linked clips, attributes and persistence; derived PCM
+is a regenerable local cache, excluded from project/backup content. Hub accepts
+v45 and rejects v46. See the [voice isolation contract](../features/VOICE_ISOLATION.md).

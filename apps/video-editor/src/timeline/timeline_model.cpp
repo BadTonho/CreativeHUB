@@ -1635,6 +1635,7 @@ AddClipResult TimelineModel::addAudioCompanion(
     audio_clip.audio_gain = refreshed_video.audio_gain;
     audio_clip.audio_muted = refreshed_video.audio_muted;
     audio_clip.audio_effects = refreshed_video.audio_effects;
+    audio_clip.voice_isolation = refreshed_video.voice_isolation;
     audio_clip.clip_id = next_clip_id_++;
     audio_clip.track_id = audio_track.track_id;
     audio_clip.kind = ClipKind::Audio;
@@ -1674,6 +1675,7 @@ bool TimelineModel::linkAudio(ClipId video_clip_id, ClipId audio_clip_id) {
     video_clip.audio_companion_pending = false;
     audio_clip.linked_clip_id = video_clip_id;
     audio_clip.audio_effects = video_clip.audio_effects;
+    audio_clip.voice_isolation = video_clip.voice_isolation;
     return true;
 }
 
@@ -3251,6 +3253,23 @@ AudioParameterResult TimelineModel::setTrackAudioEffects(
     auto& track = tracks_[*track_index];
     if (track.audio_effects == effects) return AudioParameterResult::NoChange;
     track.audio_effects = std::move(effects);
+    return AudioParameterResult::Changed;
+}
+
+AudioParameterResult TimelineModel::setVoiceIsolation(TrackId track_id, std::optional<ClipId> clip_id, VoiceIsolationSettings settings) {
+    if (!validVoiceIsolation(settings)) return AudioParameterResult::InvalidValue;
+    const auto track = locateTrack(track_id);
+    if (!track) return AudioParameterResult::InvalidIndex;
+    auto* target = &tracks_[*track].voice_isolation;
+    if (clip_id) {
+        const auto clip = locateClip(*clip_id);
+        if (!clip || clip->track_index != *track) return AudioParameterResult::InvalidIndex;
+        auto& item = tracks_[*track].clips[clip->clip_index];
+        if (item.kind != ClipKind::Audio && item.kind != ClipKind::Video) return AudioParameterResult::InvalidValue;
+        target = &item.voice_isolation;
+    }
+    if (*target == settings) return AudioParameterResult::NoChange;
+    *target = std::move(settings);
     return AudioParameterResult::Changed;
 }
 

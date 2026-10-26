@@ -15,7 +15,8 @@
 
 namespace project {
 
-inline constexpr int current_format_version = 44;
+inline constexpr int current_format_version = 45;
+inline constexpr int voice_isolation_format_version = 45;
 inline constexpr int audio_processing_format_version = 44;
 inline constexpr int audio_mixing_format_version = 41;
 inline constexpr int audio_effects_format_version = 42;
@@ -76,6 +77,7 @@ struct ProjectClip {
     bool audio_muted = false;
     std::vector<timeline::AudioGainKeyframe> audio_gain_keyframes;
     std::vector<timeline::AudioEffectInstance> audio_effects;
+    timeline::VoiceIsolationSettings voice_isolation;
     std::vector<creative_suite::effects::EffectInstance> effects;
     std::optional<color::Graph> color_graph;
     std::vector<timeline::ColorGradeVersion> color_grade_versions;
@@ -106,7 +108,7 @@ struct ProjectClip {
         return std::tie(left.source_path, left.timeline_start_frame,
                         left.source_start_frame, left.duration_frames,
                         left.audio_gain, left.audio_muted,
-                        left.audio_gain_keyframes, left.audio_effects, left.node_graph,
+                        left.audio_gain_keyframes, left.audio_effects, left.voice_isolation, left.node_graph,
                         left.transform, left.keyframes, left.kind, left.text,
                         left.clip_id, left.image_editor_variant, left.motion_link,
                         left.source_duration_frames, left.source_duration_migration_pending,
@@ -117,7 +119,7 @@ struct ProjectClip {
             std::tie(right.source_path, right.timeline_start_frame,
                      right.source_start_frame, right.duration_frames,
                      right.audio_gain, right.audio_muted,
-                     right.audio_gain_keyframes, right.audio_effects, right.node_graph,
+                     right.audio_gain_keyframes, right.audio_effects, right.voice_isolation, right.node_graph,
                      right.transform, right.keyframes, right.kind, right.text,
                      right.clip_id, right.image_editor_variant, right.motion_link,
                      right.source_duration_frames, right.source_duration_migration_pending,
@@ -150,6 +152,7 @@ struct ProjectTrack {
     std::optional<timeline::AudioBusId> output_bus_id;
     std::vector<timeline::AudioSend> audio_sends;
     std::vector<timeline::AudioEffectInstance> audio_effects;
+    timeline::VoiceIsolationSettings voice_isolation;
 
     timeline::AudioDuckingSettings audio_ducking;
 

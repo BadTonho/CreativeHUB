@@ -1159,6 +1159,15 @@ void validateEmbeddedAudioMixing(
                 effected_loud_rms < plain_loud_rms * 0.9,
             "Offline export did not apply the saved EQ and compressor chain.");
 
+    auto isolation_job = effects_job;
+    isolation_job.id = 413;
+    isolation_job.settings.output_path = pathToQString(root / ("voice-isolation." + extension));
+    isolation_job.project_snapshot.timeline_tracks.front().voice_isolation = {true, 0, "rnnoise-std-v1"};
+    isolation_job.project_snapshot.timeline_tracks.front().clips.front().voice_isolation = {true, 0, "rnnoise-std-v1"};
+    renderJob(isolation_job, canceled);
+    require(std::abs(decodedAudioRmsRange(pathFromQString(isolation_job.settings.output_path), 32000, 8000) - effected_loud_rms) < .001,
+        "Zero-intensity isolation changed export or ran at the wrong stage.");
+
     auto linked_job = makeImageJob(
         output, source, root / ("linked-video-audio." + extension), 407, 24);
     linked_job.project_snapshot.timeline_frame_rate = {24, 1};
@@ -1939,6 +1948,7 @@ int main(int argc, char* argv[]) {
     try {
         QTemporaryDir temporary_directory;
         require(temporary_directory.isValid(), "Could not create a temporary export-test directory.");
+        qputenv("CREATIVE_SUITE_VOICE_ISOLATION_CACHE_ROOT", (temporary_directory.path() + "/voice-cache").toUtf8());
         const auto root = pathFromQString(temporary_directory.path());
         require(logging::Logger::instance().initialize(root), "Export test log unavailable.");
         auto surface = native_gpu_mode ? creative_suite::composition::OpenGlFrameCompositor::createSurface() : nullptr;

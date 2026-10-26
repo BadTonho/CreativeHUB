@@ -31,6 +31,7 @@ project::ProjectDocument document() {
     result.bins = {"Unsorted"};
     result.timeline_tracks.push_back({"Video 1"});
     result.timeline_tracks.back().track_id = 1;
+    result.timeline_tracks.back().voice_isolation = {true, .8, "rnnoise-std-v1"};
     result.timeline_tracks.back().audio_effects = {{timeline::AudioNoiseReductionParameters{18, -45}, true},
         {timeline::AudioRepairParameters{50, true, 3}, true}};
     result.timeline_tracks.back().audio_ducking.mode = timeline::AudioDuckingMode::Curve;

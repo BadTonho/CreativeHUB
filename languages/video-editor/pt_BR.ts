@@ -197,6 +197,19 @@
         <source>An audio processor failed and was bypassed. See the error log.</source>
         <translation>Um processador de áudio falhou e foi ignorado. Consulte o registro de erros.</translation>
     </message>
+    <message><source>Voice isolation</source><translation>Isolamento de fala</translation></message>
+    <message><source>Configure voice isolation…</source><translation>Configurar isolamento de fala…</translation></message>
+    <message><source>Generate again</source><translation>Gerar novamente</translation></message>
+    <message><source>Cancel processing</source><translation>Cancelar processamento</translation></message>
+    <message><source>Cancel the current voice isolation queue.</source><translation>Cancelar a fila atual de isolamento de fala.</translation></message>
+    <message><source>Intensity: %1%</source><translation>Intensidade: %1%</translation></message>
+    <message><source>Reduces background sounds around speech. The original audio is preserved.</source><translation>Reduz os sons de fundo ao redor da fala. O áudio original é preservado.</translation></message>
+    <message><source>Processing</source><translation>Processando</translation></message>
+    <message><source>Ready</source><translation>Pronto</translation></message>
+    <message><source>Cancelled</source><translation>Cancelado</translation></message>
+    <message><source>Error</source><translation>Erro</translation></message>
+    <message><source>Voice isolation is enabled. Edit it in the Audio workspace.</source><translation>O isolamento de fala está ativado. Edite-o na aba Áudio.</translation></message>
+    <message><source>Unavailable</source><translation>Áudio indisponível</translation></message>
 </context>
 <context>
     <name>ColorWorkspace</name>

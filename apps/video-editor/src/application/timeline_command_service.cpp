@@ -1642,6 +1642,33 @@ TimelineEditResult TimelineCommandService::execute(
     return output;
 }
 
+TimelineEditResult TimelineCommandService::execute(const SetVoiceIsolationCommand& command) {
+    const auto before = session_.captureEditState();
+    const auto mutation = session_.timeline_.setVoiceIsolation(command.track_id, command.clip_id, command.settings);
+    bool changed = mutation == timeline::AudioParameterResult::Changed;
+    if (mutation != timeline::AudioParameterResult::Changed && mutation != timeline::AudioParameterResult::NoChange) return result(EditStatus::Rejected, reasonForAudio(mutation));
+    auto output = result(EditStatus::Applied);
+    output.affected_track_ids = {command.track_id};
+    if (command.clip_id) {
+        output.affected_clip_ids = {*command.clip_id};
+        const auto location = session_.timeline_.locateClip(*command.clip_id);
+        const auto peer = session_.timeline_.tracks()[location->track_index].clips[location->clip_index].linked_clip_id;
+        if (peer) {
+            const auto other = session_.timeline_.locateClip(*peer);
+            if (!other) { session_.restoreEditState(before); return result(EditStatus::Rejected, EditReason::InvalidTarget); }
+            const auto peer_mutation = session_.timeline_.setVoiceIsolation(session_.timeline_.tracks()[other->track_index].track_id, peer, command.settings);
+            if (peer_mutation != timeline::AudioParameterResult::Changed && peer_mutation != timeline::AudioParameterResult::NoChange) {
+                session_.restoreEditState(before); return result(EditStatus::Rejected, EditReason::InvalidTarget);
+            }
+            changed |= peer_mutation == timeline::AudioParameterResult::Changed;
+            output.affected_clip_ids.push_back(*peer);
+            output.affected_track_ids.push_back(session_.timeline_.tracks()[other->track_index].track_id);
+        }
+    }
+    if (!changed) return result(EditStatus::NoChange);
+    recordSuccessfulEdit(before); output.invalidate_playback = true; return output;
+}
+
 TimelineEditResult TimelineCommandService::execute(
     const SetTrackAudioDuckingCommand& command) {
     if (!session_.timeline_.locateTrack(command.track_id).has_value()) {
@@ -1945,6 +1972,13 @@ TimelineEditResult TimelineCommandService::execute(
         }
     }
     if (command.options.audio_effects) {
+        for (const auto id : {std::optional<timeline::ClipId>(command.clip_id), target_clip.linked_clip_id}) {
+            if (!id) continue;
+            const auto at = candidate.locateClip(*id);
+            if (!at || !timeline::validVoiceIsolation(command.attributes.voice_isolation))
+                return result(EditStatus::Rejected, EditReason::InvalidValue);
+            candidate.setVoiceIsolation(candidate.tracks()[at->track_index].track_id, id, command.attributes.voice_isolation);
+        }
         const auto mutation = candidate.setClipAudioEffects(
             target_location->track_index, target_location->clip_index,
             command.attributes.audio_effects);
@@ -2134,6 +2168,17 @@ TimelineEditResult TimelineCommandService::execute(
             }
         }
         if (command.options.audio_effects && compatibility.audio_effects) {
+            if (!timeline::validVoiceIsolation(command.attributes.voice_isolation)) return result(EditStatus::Rejected, EditReason::InvalidValue);
+            for (const auto id : {std::optional<timeline::ClipId>(clip_id), target_clip.linked_clip_id}) {
+                if (!id) continue;
+                const auto at = candidate.locateClip(*id);
+                if (!at) return result(EditStatus::Rejected, EditReason::InvalidTarget);
+                const auto isolation_mutation = candidate.setVoiceIsolation(candidate.tracks()[at->track_index].track_id, id, command.attributes.voice_isolation);
+                if (isolation_mutation != timeline::AudioParameterResult::Changed && isolation_mutation != timeline::AudioParameterResult::NoChange)
+                    return result(EditStatus::Rejected, reasonForAudio(isolation_mutation));
+                target_changed |= isolation_mutation == timeline::AudioParameterResult::Changed;
+                if (*id != clip_id) linked_clip_changed |= isolation_mutation == timeline::AudioParameterResult::Changed;
+            }
             const auto mutation = candidate.setClipAudioEffects(
                 target_location->track_index, target_location->clip_index,
                 command.attributes.audio_effects);

@@ -349,3 +349,12 @@ target_link_libraries(creative-suite-main-editor-timeline-audio-mix-tests PRIVAT
 copy_ffmpeg_test_runtime(creative-suite-main-editor-timeline-audio-mix-tests)
 
 preserve_video_editor_test_working_directory()
+
+add_executable(creative-suite-main-editor-voice-isolation-tests voice_isolation_test.cpp)
+target_link_libraries(creative-suite-main-editor-voice-isolation-tests PRIVATE creative-suite-main-editor-core)
+target_compile_features(creative-suite-main-editor-voice-isolation-tests PRIVATE cxx_std_20)
+copy_ffmpeg_test_runtime(creative-suite-main-editor-voice-isolation-tests)
+deploy_qt_test_runtime(creative-suite-main-editor-voice-isolation-tests)
+add_creative_suite_test(NAME creative-suite-main-editor-voice-isolation
+    COMMAND creative-suite-main-editor-voice-isolation-tests "${PROJECT_SOURCE_DIR}/apps/video-editor/tests/fixtures/voice-isolation/speech.flac")
+set_tests_properties(creative-suite-main-editor-voice-isolation PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen;CREATIVE_SUITE_DISABLE_AUDIO_OUTPUT=1")

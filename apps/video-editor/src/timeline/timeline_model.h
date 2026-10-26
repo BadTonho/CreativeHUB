@@ -174,6 +174,7 @@ struct TimelineClip {
     bool audio_muted = false;
     std::vector<AudioGainKeyframe> audio_gain_keyframes;
     std::vector<AudioEffectInstance> audio_effects;
+    VoiceIsolationSettings voice_isolation;
     std::vector<creative_suite::effects::EffectInstance> effects;
     // Canonical Color correction graph. `effects` is a compatibility projection
     // used by existing Edit controls and linear GPU effect paths.
@@ -217,6 +218,7 @@ struct TimelineClipAttributes {
     double audio_gain = 1.0;
     bool audio_muted = false;
     std::vector<AudioEffectInstance> audio_effects;
+    VoiceIsolationSettings voice_isolation;
     std::optional<std::vector<AudioGainKeyframe>> audio_volume_envelope;
     TextStyle text;
 };
@@ -275,6 +277,7 @@ struct TimelineTrack {
     std::optional<AudioBusId> output_bus_id;
     std::vector<AudioSend> audio_sends;
     std::vector<AudioEffectInstance> audio_effects;
+    VoiceIsolationSettings voice_isolation;
     AudioDuckingSettings audio_ducking;
 
     friend bool operator==(const TimelineTrack&, const TimelineTrack&) = default;
@@ -477,6 +480,7 @@ public:
     AudioParameterResult setTrackAudioEffects(
         TrackId track_id,
         std::vector<AudioEffectInstance> effects);
+    AudioParameterResult setVoiceIsolation(TrackId track_id, std::optional<ClipId> clip_id, VoiceIsolationSettings settings);
     AudioParameterResult setTrackAudioDucking(TrackId track_id, AudioDuckingSettings settings);
     AudioParameterResult setAudioBusMix(
         AudioBusId bus_id,

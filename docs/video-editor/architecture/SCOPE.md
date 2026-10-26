@@ -262,3 +262,12 @@ absolute-time track attenuation, not general-purpose track automation. AI voice
 isolation, dereverberation, declipping, recording, loudness normalization and
 audio-only export remain future work. CSP v44 and Hub backup preservation are
 implemented; native device/UI acceptance remains a separate status.
+
+## Voice isolation (CSP v45)
+
+Audio provides reversible clip/track speech enhancement, generated locally in a
+single background queue using the bundled RNNoise model and existing FFmpeg.
+Preview, export and ducking analysis consume prepared audio at the same stage.
+Settings survive history, linked clips, attributes and persistence; derived PCM
+is a regenerable local cache, excluded from project/backup content. Hub accepts
+v45 and rejects v46. See the [voice isolation contract](../features/VOICE_ISOLATION.md).

@@ -218,6 +218,12 @@ void AudioWorkspace::createPanels(QWidget* parent) {
         AudioEffectChainDialog dialog(translated("Clip audio effects — %1").arg(selected_clip_name_), selected_clip_chain_, mixer_panel_);
         if (dialog.exec() == QDialog::Accepted) emit clipAudioEffectsChanged(id, dialog.effects());
     });
+    selected_clip_isolation_ = new VoiceIsolationPanel(mixer_content);
+    selected_clip_isolation_->setObjectName("audioSelectedClipIsolation");
+    selected_clip_isolation_->setEnabled(selected_clip_id_ != 0); mixer_layout_->addWidget(selected_clip_isolation_);
+    selected_clip_isolation_->apply = [this](auto settings) { if (selected_clip_id_) emit voiceIsolationChanged(true, selected_clip_id_, std::move(settings)); };
+    selected_clip_isolation_->regenerate = [this] { if (selected_clip_id_) emit voiceIsolationRegenerate(true, selected_clip_id_); };
+    selected_clip_isolation_->cancel = [this] { emit voiceIsolationCancel(); };
     auto* effects_section = new QWidget(mixer_content);
     effects_section->setObjectName("audioTrackEffectsSection");
     auto* effects_section_layout = new QVBoxLayout(effects_section);
@@ -556,7 +562,13 @@ void AudioWorkspace::refreshTracks(
                 if (dialog.generateRequested()) emit generateDuckingCurveRequested(id, dialog.settings());
                 else emit trackDuckingChanged(id, dialog.settings());
             });
+            row.isolation = new VoiceIsolationPanel(mixer_panel_);
+            row.isolation->setProperty("trackId", QVariant::fromValue<qulonglong>(row.id));
+            row.isolation->apply = [this, id = row.id](auto settings) { emit voiceIsolationChanged(false, id, std::move(settings)); };
+            row.isolation->regenerate = [this, id = row.id] { emit voiceIsolationRegenerate(false, id); };
+            row.isolation->cancel = [this] { emit voiceIsolationCancel(); };
             track_effects_layout_->addWidget(widget);
+            track_effects_layout_->addWidget(row.isolation);
             track_effects_rows_.push_back(std::move(row));
         }
     }
@@ -569,6 +581,10 @@ void AudioWorkspace::refreshTracks(
         found->name->setText(QString::fromUtf8(track.name.c_str()));
         found->effects = track.audio_effects;
         found->ducking = track.audio_ducking;
+        found->isolation->setSettings(track.voice_isolation);
+        const auto state = isolation_states_.find({false, track.track_id});
+        found->isolation->setState(state == isolation_states_.end() ? (track.voice_isolation.enabled ? "Processing" : "Off") : state->second.first,
+            state == isolation_states_.end() ? 0 : state->second.second);
     }
 
     for (const auto& bus : buses) {
@@ -770,9 +786,23 @@ void AudioWorkspace::clearSoloState() {
     emitSoloState();
 }
 
+void AudioWorkspace::setIsolationState(bool clip, quint64 id, QString state, int progress) {
+    isolation_states_[{clip, id}] = {state, progress};
+    if (clip && id == selected_clip_id_ && selected_clip_isolation_) selected_clip_isolation_->setState(state, progress);
+    if (!clip) for (auto& row : track_effects_rows_) if (row.id == id && row.isolation) row.isolation->setState(state, progress);
+}
+
 void AudioWorkspace::setSelectedClip(const timeline::TimelineClip* clip) {
     const bool valid = clip && (clip->kind == timeline::ClipKind::Audio || clip->kind == timeline::ClipKind::Video);
     selected_clip_id_ = valid ? clip->clip_id : 0;
+    selected_clip_isolation_settings_ = valid ? clip->voice_isolation : timeline::VoiceIsolationSettings{};
+    if (selected_clip_isolation_) {
+        selected_clip_isolation_->apply = [this, id = selected_clip_id_](auto settings) { if (id) emit voiceIsolationChanged(true, id, std::move(settings)); };
+        selected_clip_isolation_->setEnabled(valid); selected_clip_isolation_->setSettings(selected_clip_isolation_settings_);
+        const auto state = isolation_states_.find({true, selected_clip_id_});
+        selected_clip_isolation_->setState(state == isolation_states_.end() ? (selected_clip_isolation_settings_.enabled ? "Processing" : "Off") : state->second.first,
+            state == isolation_states_.end() ? 0 : state->second.second);
+    }
     selected_clip_chain_ = valid ? clip->audio_effects : std::vector<timeline::AudioEffectInstance>{};
     selected_clip_name_ = valid ? QString::fromUtf8(clip->display_name.c_str()) : QString();
     if (selected_clip_effects_) {

@@ -3,6 +3,8 @@
 #include "timeline/timeline_model.h"
 
 #include <QObject>
+#include <map>
+#include "voice_isolation_panel.h"
 #include <QWidget>
 
 #include <optional>
@@ -41,8 +43,12 @@ public:
     void clearPeaks();
     void setSelectedClip(const timeline::TimelineClip* clip);
     void clearSoloState();
+    void setIsolationState(bool clip, quint64 id, QString state, int progress);
 
 signals:
+    void voiceIsolationChanged(bool clip, quint64 id, timeline::VoiceIsolationSettings settings);
+    void voiceIsolationRegenerate(bool clip, quint64 id);
+    void voiceIsolationCancel();
     void clipAudioEffectsChanged(timeline::ClipId clip_id, std::vector<timeline::AudioEffectInstance> effects);
     void trackDuckingChanged(timeline::TrackId track_id, timeline::AudioDuckingSettings settings);
     void generateDuckingCurveRequested(timeline::TrackId track_id, timeline::AudioDuckingSettings settings);
@@ -117,6 +123,7 @@ private:
         std::vector<timeline::AudioEffectInstance> effects;
         QPushButton* ducking_button = nullptr;
         timeline::AudioDuckingSettings ducking;
+        VoiceIsolationPanel* isolation = nullptr;
     };
 
     void emitTrackMix(timeline::TrackId track_id);
@@ -127,6 +134,9 @@ private:
 
     std::vector<std::pair<std::uint64_t, QString>> ducking_sources_;
     QPushButton* selected_clip_effects_ = nullptr;
+    VoiceIsolationPanel* selected_clip_isolation_ = nullptr;
+    timeline::VoiceIsolationSettings selected_clip_isolation_settings_;
+    std::map<std::pair<bool, quint64>, std::pair<QString, int>> isolation_states_;
     timeline::ClipId selected_clip_id_ = 0;
     QString selected_clip_name_;
     std::vector<timeline::AudioEffectInstance> selected_clip_chain_;

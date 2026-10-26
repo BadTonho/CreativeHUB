@@ -160,7 +160,7 @@ Timeline Undo/Redo.
 
 CSP v43 stores `audio_effects` on every Video and Audio clip. Projects v1-v42
 open with empty clip chains; parameter values, effect kinds, uniqueness, and
-clip kind are validated. The Hub accepts CSP v1-v44 and rejects v45.
+clip kind are validated. The Hub accepts CSP v1-v45 and rejects v46.
 
 Video export remains a video file. Its duration reaches the end of the longest
 Timeline clip. If audio extends beyond visual content, the renderer emits black
@@ -242,3 +242,12 @@ bypasses advanced processing for the failed chain and emits a warning; export
 propagates failure through its existing atomic-destination handling. Expected
 analysis cancellation and stale results are control flow, not error entries.
 Voice isolation, dereverberation and declipping remain outside this stage.
+
+## Voice isolation (CSP v45)
+
+Audio provides reversible clip/track speech enhancement, generated locally in a
+single background queue using the bundled RNNoise model and existing FFmpeg.
+Preview, export and ducking analysis consume prepared audio at the same stage.
+Settings survive history, linked clips, attributes and persistence; derived PCM
+is a regenerable local cache, excluded from project/backup content. Hub accepts
+v45 and rejects v46. See the [voice isolation contract](../features/VOICE_ISOLATION.md).

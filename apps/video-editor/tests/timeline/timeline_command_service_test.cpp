@@ -1133,10 +1133,13 @@ void runLinkedVideoAudioCommands() {
     clip_compressor.parameters = timeline::AudioCompressorParameters{};
     const std::vector<timeline::AudioEffectInstance> clip_chain{
         clip_equalizer, clip_compressor, {timeline::AudioDialogueCleanupParameters{}, true}};
+    require(service.execute(application::SetVoiceIsolationCommand{session.timeline().tracks()[video_location->track_index].track_id, video_id, {true, .7, "rnnoise-std-v1"}}).changed(), "Linked isolation command failed.");
     const auto clip_effect_edit = service.execute(
         application::SetClipAudioEffectsCommand{video_id, clip_chain});
     video_location = session.timeline().locateClip(video_id);
     audio_location = session.timeline().locateClip(audio_id);
+    require(session.timeline().tracks()[audio_location->track_index].clips[audio_location->clip_index].voice_isolation ==
+        timeline::VoiceIsolationSettings{true, .7, "rnnoise-std-v1"}, "Isolation did not mirror to the linked audio companion.");
     require(clip_effect_edit.changed() && clip_effect_edit.invalidate_playback,
             "The clip audio effect command did not report a playback edit.");
     require(session.timeline().tracks()[video_location->track_index]
@@ -1190,6 +1193,7 @@ void runLinkedVideoAudioCommands() {
                 session.timeline().tracks()[right_audio_location->track_index]
                     .clips[right_audio_location->clip_index].linked_clip_id == right_video_id,
             "The two split pairs do not retain reciprocal links.");
+    require(session.timeline().tracks()[right_audio_location->track_index].clips[right_audio_location->clip_index].voice_isolation.enabled, "Split lost voice isolation settings.");
     require(session.timeline().tracks()[right_video_location->track_index]
                     .clips[right_video_location->clip_index].audio_effects == clip_chain &&
                 session.timeline().tracks()[right_audio_location->track_index]
@@ -1610,6 +1614,7 @@ void runClipAttributeCommands() {
     attribute_eq_parameters.high_shelf_gain_db = 4.0;
     attribute_eq.parameters = attribute_eq_parameters;
     attributes.audio_effects = {attribute_eq};
+    attributes.voice_isolation = {true, .4, "rnnoise-std-v1"};
 
     const auto short_location = session.timeline().locateClip(short_video_id);
     require(short_location.has_value(), "The short paste target could not be located.");
@@ -1635,6 +1640,7 @@ void runClipAttributeCommands() {
     require(pasted_video.audio_gain == 0.6 && pasted_video.audio_muted &&
                 pasted_audio.audio_gain == 0.6 && pasted_audio.audio_muted,
             "Short-target paste did not apply gain and mute to the linked pair.");
+    require(pasted_video.voice_isolation == attributes.voice_isolation && pasted_audio.voice_isolation == attributes.voice_isolation, "Audio Effects paste lost isolation on linked targets.");
     require(pasted_video.audio_effects == attributes.audio_effects &&
                 pasted_audio.audio_effects == attributes.audio_effects,
             "Audio Effects copy/paste did not apply the same chain to a linked pair.");
@@ -2039,6 +2045,13 @@ void runAudioEffectCommands() {
                 invalid.reason == application::EditReason::InvalidValue &&
                 session.timeline().tracks().back().audio_effects == chain,
             "The model accepted duplicate or out-of-range audio effects.");
+    const timeline::VoiceIsolationSettings isolation{true, .65, "rnnoise-std-v1"};
+    require(service.execute(application::SetVoiceIsolationCommand{track_id, {}, isolation}).changed() &&
+        session.timeline().tracks().back().voice_isolation == isolation, "Track voice isolation command failed.");
+    require(service.undo().changed() && !session.timeline().tracks().back().voice_isolation.enabled &&
+        service.redo().changed() && session.timeline().tracks().back().voice_isolation == isolation, "Voice isolation history failed.");
+    auto invalid_isolation = isolation; invalid_isolation.amount = 2;
+    require(!service.execute(application::SetVoiceIsolationCommand{track_id, {}, invalid_isolation}).changed(), "Invalid isolation amount was accepted.");
     auto expanded = chain;
     expanded.push_back({timeline::AudioDialogueCleanupParameters{}, true});
     expanded.push_back({timeline::AudioNoiseReductionParameters{}, true});

@@ -486,6 +486,8 @@ void testVideoDocuments(const QString& root) {
     clip_eq.parameters = clip_eq_parameters;
     color_document.timeline_tracks.front().clips.front().audio_effects = {clip_eq};
     auto& processing_track = color_document.timeline_tracks.front();
+    processing_track.voice_isolation = {true, .8, "rnnoise-std-v1"};
+    processing_track.clips.front().voice_isolation = {true, .6, "rnnoise-std-v1"};
     processing_track.audio_effects.push_back({timeline::AudioDialogueCleanupParameters{}, true});
     processing_track.audio_effects.push_back({timeline::AudioNoiseReductionParameters{}, true});
     processing_track.audio_effects.push_back({timeline::AudioRepairParameters{60, true, 3}, true});
@@ -508,7 +510,7 @@ void testVideoDocuments(const QString& root) {
     auto future_video = QJsonDocument::fromJson(readBytes(color_path)).object();
     future_video.insert("version", project::current_format_version + 1);
     const auto future_video_path = QDir(QFileInfo(assets).absolutePath())
-        .filePath("video-future-v45.csp");
+        .filePath("video-future-v46.csp");
     writeBytes(future_video_path, QJsonDocument(future_video).toJson());
     creative_suite::hub::BackupManager future_video_manager(
         QDir(root).filePath("video-future-vault"));

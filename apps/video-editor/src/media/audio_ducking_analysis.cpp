@@ -1,5 +1,6 @@
 #include "audio_ducking_analysis.h"
 #include "audio_ducking.h"
+#include "voice_isolation_render.h"
 #include "audio_playback.h"
 #include "timeline_audio_mix.h"
 #include "video_probe.h"
@@ -56,6 +57,7 @@ std::vector<timeline::AudioDuckingKeyframe> generateAudioDuckingCurve(
     const auto samples = static_cast<std::int64_t>(std::llround(static_cast<long double>(end_frame) * rate / fps));
     TimelineAudioMixState state;
     TimelineAudioMixConfiguration configuration; configuration.apply_solo = false;
+    configuration.voice_isolation = prepareVoiceIsolation(document, canceled);
     AudioDuckingDetector detector;
     AudioDuckingCurveBuilder builder;
     int last_progress = -1;

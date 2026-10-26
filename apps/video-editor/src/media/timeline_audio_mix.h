@@ -1,6 +1,7 @@
 #pragma once
 
 #include "audio_frame.h"
+#include "voice_isolation_pcm.h"
 #include "../timeline/timeline_model.h"
 
 #include <cstddef>
@@ -86,6 +87,7 @@ struct TimelineAudioMixConfiguration {
     std::vector<timeline::TrackId> solo_track_ids;
     std::vector<timeline::AudioBusId> solo_bus_ids;
     bool apply_solo = true;
+    std::shared_ptr<const VoiceIsolationContext> voice_isolation;
     std::int64_t block_start_sample = 0;
     int sample_rate = 48000;
 };

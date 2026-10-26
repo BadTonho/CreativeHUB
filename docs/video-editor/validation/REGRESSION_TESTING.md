@@ -2418,3 +2418,54 @@ Video Editor and Hub Release application targets built successfully; no
 installers or release packages were generated. The canonical Video Editor is
 `build/apps/video-editor/Release/creative-suite-video-editor.exe` (4,785,152 bytes; modified 2026-10-26 15:15:59 UTC-03:00).
 Native device/visual and macOS/Linux runtime acceptance remain pending.
+
+
+## Voice isolation (CSP v45)
+
+| Behavior | Verification |
+| --- | --- |
+| Licensed speech preservation and noise attenuation; duration, partial blocks, mono/stereo/multichannel, seeks and persistent resampling | `creative-suite-main-editor-voice-isolation` ([source](../../../apps/video-editor/tests/playback/voice_isolation_test.cpp), [registration](../../../apps/video-editor/tests/playback/CMakeLists.txt)) |
+| Clip/track stage order and amount, dependency preparation, source-cache reuse after movement, post-fader independence, input invalidation, cancellation, corrupted cache and I/O failure | `creative-suite-main-editor-voice-isolation` |
+| Background completion/cancel, configuration confirm/cancel | `creative-suite-main-editor-voice-isolation`, `creative-suite-main-editor-audio-workspace` |
+| Typed settings, linked clip mirroring, one-edit history and invalid amount rejection | `creative-suite-main-editor-timeline-command-service` |
+| CSP v45 round-trip and invalid model/amount; migration and future v46 rejection | `creative-suite-main-editor-project` |
+| Recovery retains voice-isolation settings, excluding derived PCM | `creative-suite-main-editor-autosave` |
+| Real export prepares clip and track artifacts; zero-intensity preserves existing effects | `creative-suite-main-editor-render-export` |
+| Real producer/consumer backup and restoration retain settings without the PCM cache; reject v46 | `hub-backup-format-test`, `hub-backup-manager-test` |
+| Bundled pt-BR controls and catalog/source parity | `creative-suite-main-editor-translation-catalog`, `creative-suite-video-editor-translation-catalog` build target |
+
+The dedicated signal test embeds no private media. Its short LibriSpeech fixture
+is CC BY 4.0 with attribution and hash beside the file; noise is deterministic.
+The test sets `CREATIVE_SUITE_VOICE_ISOLATION_CACHE_ROOT` to an isolated temporary
+directory. The application uses its platform CacheLocation by default.
+
+Native manual workflow (pending device/UI acceptance on Windows/macOS/Linux):
+open speech with background sounds, enable clip isolation in Audio and compare
+0/50/100% intensity. Cancel a configuration dialog and a generation; confirm no
+partial audio or history entries from completion. Enable track isolation with
+multiple clips and effects, audition routing/sends/ducking, then edit clip gain,
+envelopes, effects, trim and placement. Verify automatic regeneration, current
+original audio while processing, ready transition, and no audio-duration drift.
+Test Undo/Redo, linked clips, split/duplicate, attributes, Save As and recovery.
+Generate a ducking curve from the isolated source. Export with a cold cache and
+cancel during preparation; an existing destination must survive. Back up and
+restore through Hub with an empty cache and compare regenerated output. Check
+technical errors in the local log; cancellation must not create error entries.
+
+Windows Release execution (2026-10-26): all 15 selected CTest entries passed:
+Audio workspace, MainWindow, playback worker errors/reference, playback
+controller, Timeline audio mix, voice isolation, project, autosave, Timeline
+commands, render/export, Edit controller, translation catalog and both Hub backup
+tests. The dedicated isolation target also verifies forced dependency
+regeneration and source modification before artifact publication. Edit's real
+batch attribute-paste path has a direct isolation regression. Export uses an
+isolated temporary cache rather than a developer's platform cache.
+
+Video Editor and Hub Release targets built successfully. The confirmed direct
+launcher is `build/apps/video-editor/Release/creative-suite-video-editor.exe`
+(5,196,288 bytes; modified 2026-10-26 16:44:03 UTC-03:00). Hub is
+`build/apps/hub/Release/creative-suite-hub.exe` (868,352 bytes; modified
+2026-10-26 16:33:00 UTC-03:00). Both retain application version 0.1.0. The tracked
+pt-BR catalog matches its generated counterpart. No installer/release package
+was generated. Native visual/device and macOS/Linux runtime acceptance remain
+pending; automated offscreen UI checks do not establish those statuses.

@@ -5,6 +5,7 @@
 
 #include "logging/logger.h"
 #include "media/audio_playback.h"
+#include "media/voice_isolation_render.h"
 #include "media/media_library.h"
 #include "media/timeline_audio_mix.h"
 #include "media/still_image_decoder.h"
@@ -953,7 +954,10 @@ void OfflineExportRenderer::render(
     if (remove_error) throw std::runtime_error("A stale temporary output file could not be removed.");
     bool published = false;
     int last_reported_progress = -1;
-    const auto reportProgress = [&report_progress, &last_reported_progress](int progress) {
+    const bool isolation_requested = job.settings.export_audio && media::hasVoiceIsolation(job.project_snapshot);
+    bool preparing_isolation = isolation_requested;
+    const auto reportProgress = [&report_progress, &last_reported_progress, &preparing_isolation, isolation_requested](int progress) {
+        if (isolation_requested && !preparing_isolation) progress = 10 + progress * 90 / 100;
         progress = std::clamp(progress, 0, 100);
         if (report_progress && progress != last_reported_progress) {
             last_reported_progress = progress;
@@ -977,6 +981,11 @@ void OfflineExportRenderer::render(
         audio_mix_configuration.buses = job.project_snapshot.audio_buses;
         audio_mix_configuration.master = job.project_snapshot.master_audio_mix;
         audio_mix_configuration.apply_solo = false;
+        try {
+            if (isolation_requested) audio_mix_configuration.voice_isolation = media::prepareVoiceIsolation(job.project_snapshot,
+                [&] { return cancel_requested.load(); }, [&](auto, int value) { reportProgress(value / 10); });
+        } catch (const media::VoiceIsolationCancelled&) { checkCanceled(cancel_requested); throw; }
+        preparing_isolation = false;
         const auto duration_frames = timelineDuration(job.project_snapshot);
         if (duration_frames <= 0) throw std::runtime_error("The project timeline has no renderable duration.");
         const long double duration_seconds = static_cast<long double>(duration_frames) / timeline_fps;

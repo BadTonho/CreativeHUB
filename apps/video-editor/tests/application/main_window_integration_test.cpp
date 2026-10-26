@@ -744,6 +744,7 @@ public:
             duck.findChild<QPushButton*>("audioDuckingGenerateCurve")->click();
             require(duck.generateRequested() && duck.result() == QDialog::Accepted, "The curve-generation action was not exposed.");
         }
+        qputenv("CREATIVE_SUITE_VOICE_ISOLATION_CACHE_ROOT", QString::fromStdU16String((directory / "isolation-cache").u16string()).toUtf8());
         const auto audio_source = directory / "audio-workspace.wav";
         createWaveformWav(audio_source);
         {
@@ -1096,6 +1097,19 @@ public:
             require(clip_edited && std::any_of(clip_chain.begin(), clip_chain.end(), [](const auto& effect) {
                 return std::holds_alternative<timeline::AudioNoiseReductionParameters>(effect.parameters);
             }), "Audio's selected-clip editor did not commit through shared history.");
+            auto* isolation_panel = window.audio_workspace_->mixerPanel()->findChild<QGroupBox*>("audioSelectedClipIsolation");
+            require(isolation_panel && isolation_panel->isEnabled(), "Selected clip isolation controls were not available in Audio.");
+            QTimer::singleShot(0, &window, [&] {
+                auto* dialog = QApplication::activeModalWidget();
+                auto* enabled = dialog ? dialog->findChild<QCheckBox*>("audioVoiceIsolationEnabled") : nullptr;
+                if (!enabled) { if (dialog) dialog->close(); return; }
+                enabled->setChecked(true);
+                dialog->findChild<QDialogButtonBox*>()->button(QDialogButtonBox::Ok)->click();
+            });
+            isolation_panel->findChild<QPushButton*>("audioVoiceIsolationConfigure")->click();
+            const auto isolated_location = window.timeline_model_.locateClip(selected_clip);
+            require(window.timeline_model_.tracks()[isolated_location->track_index].clips[isolated_location->clip_index].voice_isolation.enabled,
+                "Audio's voice isolation controls did not commit through shared history.");
             const auto voice_id = window.timeline_model_.tracks()[*reopened_track].track_id;
             require(window.editor_session_.legacyTimelineForUi().addTrack("Music", timeline::TrackKind::Audio) == timeline::AddTrackResult::Added,
                 "Could not create a music track for async ducking checks.");

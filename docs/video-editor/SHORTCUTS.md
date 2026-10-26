@@ -186,3 +186,6 @@ Audio ducking curve points use mouse gestures: click the track's ducking lane
 to add a point, drag a point to move it, and right-click a point to remove it.
 Each action uses the shared Undo/Redo shortcuts. These controls do not add a
 new keyboard shortcut or change clip-volume automation shortcuts.
+
+Voice isolation is configured from Audio's clip/track controls. It adds no default
+keyboard shortcut; confirmed settings use the shared Undo/Redo shortcuts.

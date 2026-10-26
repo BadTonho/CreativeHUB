@@ -323,6 +323,7 @@ void migrateAudioCompanions(
         audio_clip.audio_gain = video_snapshot.audio_gain;
         audio_clip.audio_muted = video_snapshot.audio_muted;
         audio_clip.audio_effects = video_snapshot.audio_effects;
+        audio_clip.voice_isolation = video_snapshot.voice_isolation;
         audio_clip.source_start_time_us = *source_start_us;
         audio_clip.source_duration_time_us = source_duration_us;
         audio_clip.linked_clip_id = video_snapshot.clip_id;
@@ -673,6 +674,7 @@ ProjectOpenResult ProjectOpenService::prepare(
             prepared_track.output_bus_id = project_track.output_bus_id;
             prepared_track.audio_sends = project_track.audio_sends;
             prepared_track.audio_effects = project_track.audio_effects;
+            prepared_track.voice_isolation = project_track.voice_isolation;
             prepared_track.audio_ducking = project_track.audio_ducking;
             snapshot.tracks.push_back(std::move(prepared_track));
 
@@ -809,6 +811,7 @@ ProjectOpenResult ProjectOpenService::prepare(
                     audio_clip.audio_gain_keyframes =
                         project_clip.audio_gain_keyframes;
                     audio_clip.audio_effects = project_clip.audio_effects;
+                    audio_clip.voice_isolation = project_clip.voice_isolation;
                     audio_clip.clip_id = project_clip.clip_id;
                     audio_clip.track_id = track_id;
                     audio_clip.transform = project_clip.transform;
@@ -857,6 +860,7 @@ ProjectOpenResult ProjectOpenService::prepare(
                 clip.audio_muted = project_clip.audio_muted;
                 clip.audio_gain_keyframes = project_clip.audio_gain_keyframes;
                 clip.audio_effects = project_clip.audio_effects;
+                clip.voice_isolation = project_clip.voice_isolation;
                 clip.effects = project_clip.effects;
                 clip.color_graph = project_clip.color_graph.value_or(
                     color::fromEffectStack(project_clip.effects));

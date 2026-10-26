@@ -1,6 +1,6 @@
 # Audio Workspace Roadmap
 
-Status: **the editable Audio workspace, one-level mixer, track EQ/compressor, per-clip EQ/compressor, dialogue cleanup, noise reduction, repair, and automatic/editable-curve ducking are implemented; device and native UI acceptance remain pending**.
+Status: **the editable Audio workspace, one-level mixer, track EQ/compressor, per-clip EQ/compressor, dialogue cleanup, noise reduction, repair, and automatic/editable-curve ducking and reversible clip/track voice isolation are implemented; device and native UI acceptance remain pending**.
 
 The Audio workspace is a fourth view of the Video Editor's current project. It
 uses the Edit timeline document, stable clip and track identities, shared edit
@@ -78,6 +78,20 @@ Master meters.
   chains, ducking source/settings and curve. Hub backup/restoration preserves
   v44 and rejects v45. Application version metadata is unchanged.
 
+## Voice isolation (CSP v45)
+
+- Audio owns reversible clip/track speech enhancement, using the bundled RNNoise
+  model through FFmpeg on CPU. It targets spoken dialogue, not singer or speaker
+  separation. Controls include enable, intensity, state/progress, cancellation
+  and regeneration. Edit identifies enabled treatment as Audio-owned.
+- A single worker regenerates affected inputs after a 300 ms debounce, processing
+  clip dependencies before the track sum. Preview temporarily uses original audio;
+  export prepares all required results before encoding. Cache completion does not
+  edit history or dirty state. CSP v45 retains settings, not derived PCM; Hub
+  backup preserves v45 and rejects v46.
+- See the [voice isolation contract](features/VOICE_ISOLATION.md) for pipeline,
+  model/license, cache keys and lifetime, errors and persistence.
+
 ## Audio workspace acceptance
 
 - Automated regressions cover mixer model/commands, Undo/Redo, routing and
@@ -94,7 +108,7 @@ Master meters.
 
 ## Remaining candidates
 
-1. **Advanced processing:** voice isolation, dereverberation, and clipped-audio
+1. **Advanced processing:** further voice separation, dereverberation, and clipped-audio
    restoration after a separate quality, cost, dependency and licensing review.
 2. **Measurement and automation:** loudness, true-peak analysis, normalization,
    track automation, and richer clip automation.

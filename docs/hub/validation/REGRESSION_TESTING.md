@@ -567,3 +567,16 @@ passed against the CSP v44 producer/consumer boundary, including future v45
 rejection. The canonical Hub target built at `build/apps/hub/Release/creative-suite-hub.exe`
 (868,352 bytes; modified 2026-10-26 14:53:10 UTC-03:00). Native UI and other-platform acceptance
 remain separate and pending.
+
+## Video Editor CSP v45 voice isolation
+
+Hub accepts CSP v1-v45 and rejects future v46. Backup/restoration preserves
+clip/track voice-isolation settings and original media, without adding local
+regenerable PCM caches or requiring a neural runtime in Hub. The real Video
+Editor reader reopens restored documents in `hub-backup-format-test`.
+
+Windows Release execution (2026-10-26): CSP v45 backup format and backup manager
+regressions passed, including restored producer-document equality and future
+v46 rejection. Hub built at `build/apps/hub/Release/creative-suite-hub.exe`
+(868,352 bytes; modified 2026-10-26 16:33:00 UTC-03:00), retaining version 0.1.0.
+Native UI/platform acceptance remains separate and pending.

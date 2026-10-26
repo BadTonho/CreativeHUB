@@ -472,6 +472,7 @@ struct PullEffectState {
 }
 
 struct TimelineAudioMixState::Impl {
+    std::unordered_map<std::string, bool> failed_isolation;
     std::unordered_map<timeline::ClipId, PullEffectState> pull_clips;
     std::unordered_map<timeline::TrackId, PullEffectState> pull_tracks;
     std::unordered_map<timeline::TrackId, AudioDuckingDetector> ducking;
@@ -490,6 +491,7 @@ TimelineAudioMixState& TimelineAudioMixState::operator=(
 
 void TimelineAudioMixState::reset() noexcept {
     if (impl_ != nullptr) {
+        impl_->failed_isolation.clear();
         impl_->pull_clips.clear();
         impl_->pull_tracks.clear();
         impl_->ducking.clear();
@@ -1099,12 +1101,28 @@ TimelineAudioMixResult TimelineAudioMixAccumulator::render(
     if (persistent.next_block != start) persistent.ducking.clear();
     persistent.next_block = start + count;
     TimelineAudioMixAccumulator mixer(count, channels, configuration, &state);
+    bool isolation_failed = !persistent.failed_isolation.empty();
+    const auto blend_isolation = [&](const VoiceIsolationBinding& binding, std::vector<float>& dry, std::int64_t position, std::size_t frames, std::uint64_t id, const char* kind) {
+        const auto target = std::string(kind) + std::to_string(id);
+        if (bypass && persistent.failed_isolation.contains(target)) return;
+        try {
+            auto wet = binding.audio->read(position, frames, rate, channels);
+            if (wet.size() != dry.size()) throw std::runtime_error("Invalid isolated PCM block size.");
+            for (std::size_t sample = 0; sample < dry.size(); ++sample)
+                dry[sample] += static_cast<float>(binding.amount) * (wet[sample] - dry[sample]);
+        } catch (const std::exception& error) {
+            logging::Logger::instance().log(logging::Level::Error, "voice_isolation", "read_cache", error.what(), {{kind, std::to_string(id)}});
+            if (!bypass) throw;
+            persistent.failed_isolation[target] = true;
+            isolation_failed = true;
+        }
+    };
     const auto advanced = [](const auto& effects) {
         return std::any_of(effects.begin(), effects.end(), [](const auto& effect) {
             return effect.enabled && effect.parameters.index() >= 2;
         });
     };
-    if (std::none_of(clips.begin(), clips.end(), [&](const auto& clip) {
+    if ((!configuration.voice_isolation || (configuration.voice_isolation->clips.empty() && configuration.voice_isolation->tracks.empty())) && std::none_of(clips.begin(), clips.end(), [&](const auto& clip) {
             return advanced(clip.audio_effects) || advanced(clip.clip_audio_effects);
         })) {
         const auto spans = planTimelineAudioMix(clips, transitions, frame_rate, rate, start, count);
@@ -1148,6 +1166,12 @@ TimelineAudioMixResult TimelineAudioMixAccumulator::render(
                     for (const auto& raw_span : raw_spans) {
                         auto samples = reader(clip.source_index, raw_span.source_start_sample, raw_span.sample_count);
                         samples.resize(static_cast<std::size_t>(raw_span.sample_count) * channels, 0.0F);
+                        if (configuration.voice_isolation) {
+                            const auto found = configuration.voice_isolation->clips.find(clip.clip_id);
+                            if (found != configuration.voice_isolation->clips.end() && found->second.audio) {
+                                blend_isolation(found->second, samples, raw_span.source_start_sample, raw_span.sample_count, clip.clip_id, "clip_id");
+                            }
+                        }
                         std::copy(samples.begin(), samples.end(), raw.begin() + raw_span.destination_start_sample * channels);
                     }
                     return raw;
@@ -1160,8 +1184,18 @@ TimelineAudioMixResult TimelineAudioMixAccumulator::render(
             }
             return output;
         };
+        AudioSource isolated = [&](std::int64_t position, std::size_t frames) {
+            auto dry = summed(position, frames);
+            if (configuration.voice_isolation) {
+                const auto found = configuration.voice_isolation->tracks.find(track_id);
+                if (found != configuration.voice_isolation->tracks.end() && found->second.audio) {
+                    blend_isolation(found->second, dry, position, frames, track_id, "track_id");
+                }
+            }
+            return dry;
+        };
         auto pre = persistent.pull_tracks[track_id].read(metadata->audio_effects,
-            rate, channels, start, count, summed, bypass, track_id, "track_id");
+            rate, channels, start, count, isolated, bypass, track_id, "track_id");
         auto& track = mixer.track_samples_[track_id];
         track.pre_fader = std::move(pre); track.post_fader = track.pre_fader;
         track.gain = metadata->track_gain; track.pan = metadata->track_pan; track.muted = metadata->track_muted;
@@ -1188,7 +1222,7 @@ TimelineAudioMixResult TimelineAudioMixAccumulator::render(
         });
     });
     auto result = mixer.finish();
-    result.processor_bypassed = std::any_of(persistent.pull_clips.begin(), persistent.pull_clips.end(),
+    result.processor_bypassed = isolation_failed || std::any_of(persistent.pull_clips.begin(), persistent.pull_clips.end(),
         [](const auto& item) { return item.second.failed; }) ||
         std::any_of(persistent.pull_tracks.begin(), persistent.pull_tracks.end(), [](const auto& item) { return item.second.failed; });
     return result;

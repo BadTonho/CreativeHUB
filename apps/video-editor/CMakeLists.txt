@@ -21,7 +21,16 @@ target_include_directories(creative-suite-video-audio-filters PUBLIC ${CMAKE_CUR
 target_link_directories(creative-suite-video-audio-filters PUBLIC ${FFMPEG_LIBRARY_DIRS})
 target_link_libraries(creative-suite-video-audio-filters PUBLIC creative-suite::diagnostics ${FFMPEG_LIBRARIES})
 
+add_library(creative-suite-video-voice-isolation STATIC src/media/voice_isolation.cpp resources/voice_isolation.qrc)
+set_target_properties(creative-suite-video-voice-isolation PROPERTIES AUTOMOC OFF)
+target_compile_features(creative-suite-video-voice-isolation PUBLIC cxx_std_20)
+target_include_directories(creative-suite-video-voice-isolation PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src ${FFMPEG_INCLUDE_DIRS})
+target_link_libraries(creative-suite-video-voice-isolation PUBLIC creative-suite-video-audio-filters Qt6::Core)
+
 set(MAIN_EDITOR_CORE_SOURCES
+    src/media/voice_isolation_render.cpp
+    src/application/voice_isolation_coordinator.cpp
+    src/application/voice_isolation_coordinator.h
     src/main_window/main_window_audio.cpp
     src/media/audio_ducking_analysis.cpp
     src/main_window/main_window.cpp
@@ -280,6 +289,7 @@ add_custom_target(update-video-editor-translations
 )
 
 target_link_libraries(creative-suite-main-editor-core PUBLIC
+    creative-suite-video-voice-isolation
     creative-suite-video-audio-filters
     creative-suite::composition-exchange
     creative-suite::motion-handoff
@@ -419,3 +429,10 @@ if(WIN32)
         VERBATIM
     )
 endif()
+
+add_custom_command(TARGET creative-suite-main-editor POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:creative-suite-main-editor>/licenses/rnnoise-std-v1"
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/resources/audio-models/rnnoise-std-v1/COPYING" "${CMAKE_CURRENT_SOURCE_DIR}/resources/audio-models/rnnoise-std-v1/README.md" "$<TARGET_FILE_DIR:creative-suite-main-editor>/licenses/rnnoise-std-v1"
+    VERBATIM)
+install(FILES resources/audio-models/rnnoise-std-v1/COPYING resources/audio-models/rnnoise-std-v1/README.md
+    DESTINATION ${CMAKE_INSTALL_DATADIR}/creative-suite/video-editor/licenses/rnnoise-std-v1)

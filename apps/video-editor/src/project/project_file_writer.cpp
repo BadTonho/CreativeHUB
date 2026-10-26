@@ -61,6 +61,10 @@ const char* trackKindName(timeline::TrackKind kind) {
     return kind == timeline::TrackKind::Audio ? "audio" : "video";
 }
 
+QJsonObject voiceIsolationJson(const timeline::VoiceIsolationSettings& settings) {
+    return {{"enabled", settings.enabled}, {"amount", settings.amount}, {"model_id", QString::fromStdString(settings.model_id)}};
+}
+
 QJsonObject audioDuckingJson(const timeline::AudioDuckingSettings& settings) {
     QJsonObject object;
     object.insert("mode", settings.mode == timeline::AudioDuckingMode::Automatic ? "automatic" :
@@ -499,6 +503,7 @@ void save(const std::filesystem::path& project_path, const ProjectDocument& docu
         }
         track.insert("audio_sends", audio_sends);
         track.insert("audio_effects", audioEffectChainJson(track_source.audio_effects));
+        track.insert("voice_isolation", voiceIsolationJson(track_source.voice_isolation));
         track.insert("audio_ducking", audioDuckingJson(track_source.audio_ducking));
         track.insert("kind", trackKindName(track_source.kind));
         QJsonArray clips;
@@ -565,6 +570,7 @@ void save(const std::filesystem::path& project_path, const ProjectDocument& docu
             if (clip.kind == timeline::ClipKind::Audio ||
                 clip.kind == timeline::ClipKind::Video) {
                 item.insert("audio_effects", audioEffectChainJson(clip.audio_effects));
+                item.insert("voice_isolation", voiceIsolationJson(clip.voice_isolation));
             }
             if (timeline::supportsClipEffects(clip.kind)) {
                 const auto graph = clip.color_graph.value_or(

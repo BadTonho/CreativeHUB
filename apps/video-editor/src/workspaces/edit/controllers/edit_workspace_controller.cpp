@@ -659,6 +659,7 @@ void EditWorkspaceController::copySelectedClipAttributes() {
         attributes.audio_gain = clip.audio_gain;
         attributes.audio_muted = clip.audio_muted;
         attributes.audio_effects = clip.audio_effects;
+        attributes.voice_isolation = clip.voice_isolation;
         attributes.text = clip.text;
         if (clip.kind == timeline::ClipKind::Audio) {
             attributes.audio_volume_envelope = clip.audio_gain_keyframes;
@@ -1754,6 +1755,8 @@ void EditWorkspaceController::updateInspector() {
             (selected_clip->kind == timeline::ClipKind::Audio ||
              selected_clip->kind == timeline::ClipKind::Video);
         ui_.clip_audio_effects->setEnabled(supports_audio_effects);
+        ui_.clip_audio_effects->setToolTip(supports_audio_effects && selected_clip->voice_isolation.enabled
+            ? QCoreApplication::translate("AudioWorkspace", "Voice isolation is enabled. Edit it in the Audio workspace.") : QString());
         const auto effect_count = supports_audio_effects
             ? selected_clip->audio_effects.size() : 0U;
         ui_.clip_audio_effects->setText(effect_count == 0

@@ -216,6 +216,9 @@ void validateDocument(const ProjectDocument& document,
         if (!validAudioGain(clip.audio_gain)) {
             throwJson(ProjectErrorCode::InvalidValue, project_path, "Project JSON contains an invalid clip audio gain.");
         }
+        if (!timeline::validVoiceIsolation(clip.voice_isolation) ||
+            (clip.voice_isolation != timeline::VoiceIsolationSettings{} && clip.kind != timeline::ClipKind::Audio && clip.kind != timeline::ClipKind::Video))
+            throwJson(ProjectErrorCode::InvalidValue, project_path, "Invalid clip voice isolation.");
         if (!timeline::validAudioEffectChain(clip.audio_effects) ||
             (!clip.audio_effects.empty() && clip.kind != timeline::ClipKind::Audio &&
              clip.kind != timeline::ClipKind::Video)) {
@@ -349,6 +352,7 @@ void validateDocument(const ProjectDocument& document,
                 document.timeline_tracks.end(), [&](const auto& candidate) {
                     return candidate.track_id == *track.audio_ducking.source_track_id;
                 }))) throwJson(ProjectErrorCode::InvalidValue, project_path, "Invalid audio ducking source or settings.");
+        if (!timeline::validVoiceIsolation(track.voice_isolation)) throwJson(ProjectErrorCode::InvalidValue, project_path, "Invalid track voice isolation.");
         if (!timeline::validAudioEffectChain(track.audio_effects)) {
             throwJson(ProjectErrorCode::InvalidValue, project_path,
                       "Project JSON contains invalid or duplicate audio effects.");

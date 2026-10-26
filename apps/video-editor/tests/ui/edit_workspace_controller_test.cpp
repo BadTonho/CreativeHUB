@@ -244,6 +244,11 @@ void run() {
                 application::SetClipAudioEffectsCommand{
                     source_clip_id, source_audio_effects}).changed(),
             "The effect-copy fixture could not set source clip audio effects.");
+    const auto isolation_source = media_drop_session.timeline().locateClip(source_clip_id);
+    const timeline::VoiceIsolationSettings isolation_settings{true, .6, "rnnoise-std-v1"};
+    require(media_drop_controller.execute(application::SetVoiceIsolationCommand{
+        media_drop_session.timeline().tracks()[isolation_source->track_index].track_id, source_clip_id, isolation_settings}).changed(),
+        "The effect-copy fixture could not set source voice isolation.");
 
     const auto added_effect_target_track = media_drop_controller.addTrack(
         "Effects destination");
@@ -337,6 +342,9 @@ void run() {
                     .clips[media_drop_session.timeline().locateClip(target_clip_id)->clip_index]
                     .audio_effects == source_audio_effects,
             "Copy Attributes followed Media Browser selection instead of the selected Timeline clip.");
+    require(media_drop_session.timeline().tracks()[media_drop_session.timeline().locateClip(target_clip_id)->track_index]
+        .clips[media_drop_session.timeline().locateClip(target_clip_id)->clip_index].voice_isolation == isolation_settings,
+        "Edit's Audio Effects attribute category did not preserve voice isolation.");
     require(media_drop_controller.undo().changed(),
             "The selection-independent copy fixture could not restore the destination stack.");
     media_drop_controller.handleTimelineClipSelectionChanged(media_drop_track, source_clip_id);

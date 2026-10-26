@@ -61,6 +61,12 @@ int main(int argc, char* argv[]) {
         std::fprintf(stderr, "The Audio effects editor did not use its pt-BR catalog entries.\n");
         return 1;
     }
+    if (QCoreApplication::translate("AudioWorkspace", "Voice isolation") != QStringLiteral("Isolamento de fala") ||
+        QCoreApplication::translate("AudioWorkspace", "Processing") != QStringLiteral("Processando") ||
+        QCoreApplication::translate("AudioWorkspace", "Generate again") != QStringLiteral("Gerar novamente")) {
+        std::fprintf(stderr, "Voice isolation controls did not use pt-BR translations.\n");
+        return 1;
+    }
     if (QCoreApplication::translate("AudioWorkspace", "Generate curve") != QStringLiteral("Gerar curva") ||
         QCoreApplication::translate("AudioWorkspace", "Dialogue cleanup") != QStringLiteral("Limpeza de diálogo") ||
         QCoreApplication::translate("AudioWorkspace", "Noise reduction") != QStringLiteral("Redução de ruído") ||

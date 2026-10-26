@@ -204,6 +204,7 @@ public:
     [[nodiscard]] bool available() const noexcept;
     [[nodiscard]] bool isPlaying() const noexcept;
 
+    void setVoiceIsolationContext(std::shared_ptr<const media::VoiceIsolationContext> context);
     void refreshComposition();
     void setFusionNodePreviewTarget(
         std::optional<FusionNodePreviewTarget> target);
@@ -259,6 +260,7 @@ public:
     [[nodiscard]] PlaybackCommandResult seekTimeline(std::int64_t global_frame);
 
 private:
+    std::shared_ptr<const media::VoiceIsolationContext> voice_isolation_context_;
     struct PendingActivation {
         timeline::ClipId clip_id = 0;
         std::filesystem::path canonical_source_path;

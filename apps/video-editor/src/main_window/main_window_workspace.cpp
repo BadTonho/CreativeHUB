@@ -596,6 +596,17 @@ void MainWindow::createWorkspace() {
                     updateProjectDirtyState();
                 }
             });
+    connect(audio_workspace_, &ui::AudioWorkspace::voiceIsolationChanged, this, [this](bool clip, quint64 id, auto settings) {
+        const auto location = clip ? timeline_model_.locateClip(id) : std::nullopt;
+        if (clip && !location) return;
+        const auto track = location ? timeline_model_.tracks()[location->track_index].track_id : id;
+        const auto result = timeline_command_service_.execute(application::SetVoiceIsolationCommand{track, clip ? std::optional<timeline::ClipId>(id) : std::nullopt, std::move(settings)});
+        if (result.changed()) { applyTimelineEditResult(result, false); updateTimelineState(); refreshPlaybackComposition(); }
+    });
+    connect(audio_workspace_, &ui::AudioWorkspace::voiceIsolationRegenerate, this, [this](bool clip, quint64 id) {
+        scheduleVoiceIsolation(); if (voice_isolation_coordinator_) voice_isolation_coordinator_->regenerate({clip, id});
+    });
+    connect(audio_workspace_, &ui::AudioWorkspace::voiceIsolationCancel, this, [this] { if (voice_isolation_coordinator_) voice_isolation_coordinator_->cancel(); });
     connect(audio_workspace_, &ui::AudioWorkspace::trackMixChanged,
             this, &MainWindow::applyAudioTrackMix);
     connect(audio_workspace_, &ui::AudioWorkspace::clipAudioEffectsChanged, this, &MainWindow::applyAudioClipEffects);

@@ -166,6 +166,7 @@ public slots:
         bool clip_audio_muted);
     virtual void setMonitorVolume(double gain);
     virtual void setAudioMeteringEnabled(bool enabled);
+    void setVoiceIsolationContext(std::shared_ptr<const media::VoiceIsolationContext> context);
     virtual void setAudioMixConfiguration(
         media::TimelineAudioMixConfiguration configuration);
     virtual void setPreviewQuality(PreviewQuality quality);
@@ -528,6 +529,8 @@ private:
     std::vector<CompositionSession> composition_sessions_;
     std::vector<media::TimelineAudioMixClip> composition_audio_mix_clips_;
     std::vector<media::TimelineAudioMixTransition> composition_audio_mix_transitions_;
+    std::vector<float> voice_isolation_last_frame_;
+    int voice_isolation_transition_remaining_ = 0;
     media::TimelineAudioMixConfiguration composition_audio_mix_configuration_;
     media::TimelineAudioMixState composition_audio_mix_state_;
     std::shared_ptr<TransitionPrerollState> transition_preroll_state_;

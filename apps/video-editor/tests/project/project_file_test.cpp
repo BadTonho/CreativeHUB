@@ -453,6 +453,8 @@ int main(int argc, char** argv) {
         {
             auto processing = original;
             auto& target = processing.timeline_tracks.front();
+            target.voice_isolation = {true, .75, "rnnoise-std-v1"};
+            target.clips.front().voice_isolation = {true, .5, "rnnoise-std-v1"};
             target.audio_effects = {{timeline::AudioDialogueCleanupParameters{95, .7}, true},
                 {timeline::AudioNoiseReductionParameters{18, -45}, true},
                 {timeline::AudioRepairParameters{60, true, 3}, true}};
@@ -463,7 +465,7 @@ int main(int argc, char** argv) {
             const auto processing_path = directory / "audio-processing-v44.csp";
             project::save(processing_path, processing);
             require(project::load(processing_path) == processing, "CSP v44 lost audio processing, sidechain or curve data.");
-            for (int invalid = 0; invalid < 5; ++invalid) {
+            for (int invalid = 0; invalid < 7; ++invalid) {
                 auto broken = processing;
                 auto& track = broken.timeline_tracks.front();
                 if (invalid == 0) track.audio_ducking.source_track_id = track.track_id;
@@ -471,6 +473,8 @@ int main(int argc, char** argv) {
                 if (invalid == 2) track.audio_ducking.reduction_db = 37;
                 if (invalid == 3) std::get<timeline::AudioDialogueCleanupParameters>(track.audio_effects.front().parameters).deesser_intensity = 2;
                 if (invalid == 4) track.audio_effects.push_back(track.audio_effects.front());
+                if (invalid == 5) track.voice_isolation.amount = 1.1;
+                if (invalid == 6) track.clips.front().voice_isolation.model_id = "unknown";
                 bool rejected = false;
                 try { project::save(directory / "invalid-processing.csp", broken); } catch (const project::ProjectError&) { rejected = true; }
                 require(rejected, "CSP v44 accepted invalid audio processing settings.");
@@ -609,13 +613,13 @@ int main(int argc, char** argv) {
         {
             auto future = QJsonDocument::fromJson(
                 QByteArray::fromStdString(saved_json)).object();
-            future.insert("version", 45);
-            const auto future_path = directory / "future-v45.csp";
+            future.insert("version", 46);
+            const auto future_path = directory / "future-v46.csp";
             writeText(future_path, QJsonDocument(future).toJson().toStdString());
             bool rejected = false;
             try { static_cast<void>(project::load(future_path)); }
             catch (const project::ProjectError&) { rejected = true; }
-            require(rejected, "A project version newer than CSP v44 was accepted.");
+            require(rejected, "A project version newer than CSP v45 was accepted.");
         }
         {
             auto invalid_effects = QJsonDocument::fromJson(
@@ -990,7 +994,7 @@ int main(int argc, char** argv) {
         require(saved_json.find("\"track_id\": 1") != std::string::npos &&
                     saved_json.find("\"clip_id\": 1") != std::string::npos,
                 "Stable track and clip identifiers were not written to the project.");
-        require(saved_json.find("\"version\": 44") != std::string::npos &&
+        require(saved_json.find("\"version\": 45") != std::string::npos &&
                     saved_json.find("\"render_start_time_us\": 1234567") != std::string::npos &&
                     saved_json.find("\"frame_rate\"") != std::string::npos &&
                     saved_json.find("\"numerator\": 30000") != std::string::npos &&
@@ -1835,10 +1839,10 @@ int main(int argc, char** argv) {
 
         writeText(
             project_path,
-            R"({"format":"creative-suite.main-editor","version":45,"media":[],"timeline":{"clips":[]}})");
+            R"({"format":"creative-suite.main-editor","version":46,"media":[],"timeline":{"clips":[]}})");
         try {
             static_cast<void>(project::load(project_path));
-            throw std::runtime_error("CSP v45 was accepted by the v44 reader.");
+            throw std::runtime_error("CSP v46 was accepted by the v45 reader.");
         } catch (const project::ProjectError& error) {
             require(error.code() == project::ProjectErrorCode::UnsupportedVersion,
                     "Unsupported version returned the wrong error category.");

@@ -215,3 +215,13 @@ notices and distribution obligations apply. Preview/export and the direct audio
 mix/playback regressions link this target and deploy the existing FFmpeg runtime.
 Build the Video Editor, Hub and affected tests; other application executables
 are outside this format/consumer change.
+
+## Bundled RNNoise speech model
+
+`creative-suite-video-voice-isolation` links Qt Core and the existing FFmpeg /
+diagnostics target; no new third-party runtime package is introduced. Its Qt
+resource embeds the fixed RNNoise v0.1 standard model in arnndn text format.
+The model SHA-256, upstream conversion revision and BSD-3-Clause notices are
+recorded beside the asset. Extract lazily and atomically; verify before use.
+Model and license notices accompany build/install outputs. Existing FFmpeg LGPL
+obligations remain. See [voice isolation](../features/VOICE_ISOLATION.md).

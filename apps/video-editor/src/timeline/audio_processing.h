@@ -6,8 +6,20 @@
 #include <optional>
 #include <limits>
 #include <vector>
+#include <string>
 
 namespace timeline {
+
+struct VoiceIsolationSettings {
+    bool enabled = false;
+    double amount = 1.0;
+    std::string model_id = "rnnoise-std-v1";
+    friend bool operator==(const VoiceIsolationSettings&, const VoiceIsolationSettings&) = default;
+};
+inline bool validVoiceIsolation(const VoiceIsolationSettings& value) noexcept {
+    return std::isfinite(value.amount) && value.amount >= 0 && value.amount <= 1 &&
+        value.model_id == "rnnoise-std-v1";
+}
 
 struct AudioDialogueCleanupParameters {
     double highpass_frequency_hz = 80.0;

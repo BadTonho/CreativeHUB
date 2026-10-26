@@ -66,6 +66,15 @@ std::int64_t requiredInteger(
 std::filesystem::path resolvedPath(const std::filesystem::path& project_path,
                                    const QString& stored_path);
 
+timeline::VoiceIsolationSettings readVoiceIsolation(const QJsonValue& value, const std::filesystem::path& path) {
+    const auto object = value.toObject();
+    if (!value.isObject() || !object.value("enabled").isBool() || !object.value("amount").isDouble() || !object.value("model_id").isString())
+        throwJson(ProjectErrorCode::InvalidValue, path, "Invalid voice isolation settings.");
+    timeline::VoiceIsolationSettings result{object.value("enabled").toBool(), object.value("amount").toDouble(), object.value("model_id").toString().toStdString()};
+    if (!timeline::validVoiceIsolation(result)) throwJson(ProjectErrorCode::InvalidValue, path, "Invalid voice isolation model or amount.");
+    return result;
+}
+
 timeline::AudioDuckingSettings readAudioDucking(const QJsonValue& value,
     const std::filesystem::path& path) {
     if (!value.isObject()) throwJson(ProjectErrorCode::MissingField, path, "Missing audio ducking settings.");
@@ -1521,6 +1530,7 @@ ProjectDocument detail::load(const std::filesystem::path& project_path) {
                     track_object.value("audio_effects"), project_path,
                     "CSP v42 is missing the track audio effects array.");
             }
+            if (version >= voice_isolation_format_version) track.voice_isolation = readVoiceIsolation(track_object.value("voice_isolation"), project_path);
             if (version >= audio_processing_format_version)
                 track.audio_ducking = readAudioDucking(track_object.value("audio_ducking"), project_path);
             const auto track_clips = track_object.value("clips");
@@ -1676,6 +1686,12 @@ ProjectDocument detail::load(const std::filesystem::path& project_path) {
                 const bool audio_capable_clip =
                     clip.kind == timeline::ClipKind::Audio ||
                     clip.kind == timeline::ClipKind::Video;
+                if (version >= voice_isolation_format_version) {
+                    if (clip.kind == timeline::ClipKind::Audio || clip.kind == timeline::ClipKind::Video)
+                        clip.voice_isolation = readVoiceIsolation(clip_object.value("voice_isolation"), project_path);
+                    else if (clip_object.contains("voice_isolation"))
+                        throwJson(ProjectErrorCode::InvalidValue, project_path, "Only Audio/Video clips accept voice isolation.");
+                }
                 if (version >= clip_audio_effects_format_version &&
                     audio_capable_clip) {
                     clip.audio_effects = readAudioEffectChain(

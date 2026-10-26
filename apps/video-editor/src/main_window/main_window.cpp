@@ -120,6 +120,7 @@ MainWindow::MainWindow(QWidget* parent)
 }
 
 MainWindow::~MainWindow() {
+    delete voice_isolation_coordinator_; voice_isolation_coordinator_ = nullptr;
     if (autosave_timer_ != nullptr) autosave_timer_->stop();
     if (linked_image_poll_timer_ != nullptr) linked_image_poll_timer_->stop();
     if (linked_motion_poll_timer_ != nullptr) linked_motion_poll_timer_->stop();

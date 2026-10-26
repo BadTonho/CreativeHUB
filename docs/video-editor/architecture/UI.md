@@ -1101,3 +1101,12 @@ bottom of that Audio Timeline row. Click/drag edits its absolute-time points;
 a point's context menu removes it. These gestures do not move or edit clips.
 Generating again replaces the curve; Undo restores the previous curve/settings.
 All new controls use the bundled pt-BR AudioWorkspace translations.
+
+## Voice isolation (CSP v45)
+
+Audio provides reversible clip/track speech enhancement, generated locally in a
+single background queue using the bundled RNNoise model and existing FFmpeg.
+Preview, export and ducking analysis consume prepared audio at the same stage.
+Settings survive history, linked clips, attributes and persistence; derived PCM
+is a regenerable local cache, excluded from project/backup content. Hub accepts
+v45 and rejects v46. See the [voice isolation contract](../features/VOICE_ISOLATION.md).

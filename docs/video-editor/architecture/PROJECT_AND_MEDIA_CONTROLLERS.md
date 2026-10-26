@@ -15,7 +15,7 @@ in `MainWindow`.
 
 `application::ProjectController` maps the session to a persisted document, updates dirty state, saves, runs synchronous autosave, exposes recovery snapshots, resets the session, and commits a fully prepared project. `application::ProjectDocumentMapper` translates between runtime session state and `project::ProjectDocument`.
 
-The project codec keeps `project::load` and `project::save` as the compatibility facade. JSON reading and legacy migration live in `project_file_reader.cpp`, document validation in `project_document_validator.cpp`, and atomic JSON writing in `project_file_writer.cpp`. The current format is version 44, and the reader supports versions 1 through 43. The versioned schema, migration behavior, and current persisted fields are maintained in [Project Document and Persistence](PROJECT.md) to keep one canonical format reference.
+The project codec keeps `project::load` and `project::save` as the compatibility facade. JSON reading and legacy migration live in `project_file_reader.cpp`, document validation in `project_document_validator.cpp`, and atomic JSON writing in `project_file_writer.cpp`. The current format is version 45, and the reader supports versions 1 through 44. The versioned schema, migration behavior, and current persisted fields are maintained in [Project Document and Persistence](PROJECT.md) to keep one canonical format reference.
 
 `application::MediaController` owns completed library mutations: commit an import, restore an offline item, mark media offline, rename items, and manage bins. `MediaLibrary` is the sole source for media items and bins. Canonical paths identify media and are indexed for lookup; duplicate imports return an expected no-change result.
 
@@ -49,3 +49,12 @@ The service tests run without constructing `MainWindow`. They cover project roun
 ## Remaining boundary
 
 Inspector edits for audio, text style, transforms, and keyframes; track changes; and playback-worker coordination remain outside these controllers. The MainWindow continues to coordinate user prompts and visual updates around controller results.
+
+## Voice isolation (CSP v45)
+
+Audio provides reversible clip/track speech enhancement, generated locally in a
+single background queue using the bundled RNNoise model and existing FFmpeg.
+Preview, export and ducking analysis consume prepared audio at the same stage.
+Settings survive history, linked clips, attributes and persistence; derived PCM
+is a regenerable local cache, excluded from project/backup content. Hub accepts
+v45 and rejects v46. See the [voice isolation contract](../features/VOICE_ISOLATION.md).

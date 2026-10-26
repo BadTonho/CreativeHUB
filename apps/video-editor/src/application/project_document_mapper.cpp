@@ -46,6 +46,7 @@ project::ProjectDocument ProjectDocumentMapper::toDocument(
         project_track.output_bus_id = track.output_bus_id;
         project_track.audio_sends = track.audio_sends;
         project_track.audio_effects = track.audio_effects;
+        project_track.voice_isolation = track.voice_isolation;
         project_track.audio_ducking = track.audio_ducking;
         project_track.kind = track.kind;
         project_track.clips.reserve(track.clips.size());
@@ -62,6 +63,7 @@ project::ProjectDocument ProjectDocumentMapper::toDocument(
             project_clip.audio_muted = clip.audio_muted;
             project_clip.audio_gain_keyframes = clip.audio_gain_keyframes;
             project_clip.audio_effects = clip.audio_effects;
+            project_clip.voice_isolation = clip.voice_isolation;
             project_clip.effects = clip.effects;
             if (timeline::supportsClipEffects(clip.kind)) {
                 project_clip.color_graph = clip.color_graph.value_or(

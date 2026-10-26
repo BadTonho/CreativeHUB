@@ -4,6 +4,7 @@
 #include "media/media_library.h"
 #include "media/video_metadata.h"
 #include "application/editor_session.h"
+#include "application/voice_isolation_coordinator.h"
 #include "application/media_controller.h"
 #include "application/media_import_service.h"
 #include "application/project_controller.h"
@@ -133,6 +134,8 @@ private:
         std::optional<timeline::AudioBusId> output_bus_id,
         std::vector<timeline::AudioSend> sends);
     void refreshAudioSelection();
+    void scheduleVoiceIsolation();
+    application::VoiceIsolationCoordinator* voice_isolation_coordinator_ = nullptr;
     void applyAudioClipEffects(timeline::ClipId id, std::vector<timeline::AudioEffectInstance> effects);
     void applyAudioTrackDucking(timeline::TrackId id, timeline::AudioDuckingSettings settings);
     void generateAudioDuckingCurve(timeline::TrackId id, timeline::AudioDuckingSettings settings);

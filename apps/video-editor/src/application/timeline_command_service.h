@@ -229,6 +229,11 @@ struct SetTrackAudioEffectsCommand {
     timeline::TrackId track_id = 0;
     std::vector<timeline::AudioEffectInstance> effects;
 };
+struct SetVoiceIsolationCommand {
+    timeline::TrackId track_id = 0;
+    std::optional<timeline::ClipId> clip_id;
+    timeline::VoiceIsolationSettings settings;
+};
 struct SetTrackAudioDuckingCommand {
     timeline::TrackId track_id = 0;
     timeline::AudioDuckingSettings settings;
@@ -317,6 +322,7 @@ public:
     [[nodiscard]] TimelineEditResult execute(
         const SetAudioBusMixCommand& command);
     [[nodiscard]] TimelineEditResult execute(const SetTrackAudioDuckingCommand& command);
+    [[nodiscard]] TimelineEditResult execute(const SetVoiceIsolationCommand& command);
     [[nodiscard]] TimelineEditResult execute(const AddAudioBusCommand& command);
     [[nodiscard]] TimelineEditResult execute(const RenameAudioBusCommand& command);
     [[nodiscard]] TimelineEditResult execute(const RemoveAudioBusCommand& command);

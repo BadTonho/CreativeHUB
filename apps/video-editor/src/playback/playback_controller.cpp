@@ -410,6 +410,7 @@ void PlaybackController::refreshComposition() {
     const int canvas_height = session_.canvasHeight();
     const auto global_timeline_frame = timelineFrame();
     media::TimelineAudioMixConfiguration audio_mix_configuration;
+    audio_mix_configuration.voice_isolation = voice_isolation_context_;
     audio_mix_configuration.buses = model.audioBuses();
     audio_mix_configuration.master = model.masterAudioMix();
     audio_mix_configuration.solo_track_ids = solo_track_ids_;
@@ -430,6 +431,11 @@ void PlaybackController::refreshComposition() {
         worker.setActiveCompositionClip(
             active_track, active_clip, static_cast<qint64>(global_timeline_frame));
     });
+}
+
+void PlaybackController::setVoiceIsolationContext(std::shared_ptr<const media::VoiceIsolationContext> context) {
+    voice_isolation_context_ = context;
+    queueWorker([context = std::move(context)](PlaybackWorker& worker) mutable { worker.setVoiceIsolationContext(std::move(context)); });
 }
 
 void PlaybackController::setFusionNodePreviewTarget(

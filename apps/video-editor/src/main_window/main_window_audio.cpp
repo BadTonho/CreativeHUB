@@ -11,7 +11,26 @@
 #include <QThreadPool>
 #include <atomic>
 
+void MainWindow::scheduleVoiceIsolation() {
+    if (!voice_isolation_coordinator_ && std::none_of(timeline_model_.tracks().begin(), timeline_model_.tracks().end(), [](const auto& track) {
+        return track.voice_isolation.enabled || std::any_of(track.clips.begin(), track.clips.end(), [](const auto& clip) { return clip.voice_isolation.enabled; });
+    })) return;
+    const auto snapshot = currentProjectDocument();
+    if (!voice_isolation_coordinator_ && !media::hasVoiceIsolation(snapshot)) return;
+    if (!voice_isolation_coordinator_) {
+        voice_isolation_coordinator_ = new application::VoiceIsolationCoordinator(this);
+        connect(voice_isolation_coordinator_, &application::VoiceIsolationCoordinator::contextChanged, this, [this](auto context) {
+            if (playback_controller_) { playback_controller_->setVoiceIsolationContext(std::move(context)); }
+        });
+        connect(voice_isolation_coordinator_, &application::VoiceIsolationCoordinator::stateChanged, this, [this](bool clip, quint64 id, QString state, int progress) {
+            if (audio_workspace_) audio_workspace_->setIsolationState(clip, id, std::move(state), progress);
+        });
+    }
+    voice_isolation_coordinator_->request(snapshot, project_generation_);
+}
+
 void MainWindow::refreshAudioSelection() {
+    scheduleVoiceIsolation();
     if (!audio_workspace_) return;
     const auto location = active_timeline_clip_id_ ? timeline_model_.locateClip(*active_timeline_clip_id_) : std::nullopt;
     audio_workspace_->setSelectedClip(location ? &timeline_model_.tracks()[location->track_index].clips[location->clip_index] : nullptr);
