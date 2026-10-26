@@ -54,6 +54,7 @@ struct EditWorkspaceUi final {
     QSlider* track_volume = nullptr;
     QCheckBox* clip_mute = nullptr;
     QCheckBox* track_mute = nullptr;
+    QPushButton* clip_audio_effects = nullptr;
     std::array<QDoubleSpinBox*, 5> transform_spins{};
     std::array<QSlider*, 5> transform_sliders{};
     std::array<QPushButton*, 5> transform_keys{};

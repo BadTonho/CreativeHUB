@@ -801,7 +801,12 @@ selection, active track, and playhead without storing decoded frames.
 The Inspector provides `Inspector`, `Audio`, and `Effects` tabs. The `Audio`
 tab exposes independent Clip and Track gain sliders and mute checkboxes for
 the active clip and its track, grouped vertically. Gains are shown as 0% to
-200%; dragging a slider creates one coalesced Timeline history entry. The
+200%; dragging a slider creates one coalesced Timeline history entry. The tab
+also opens the selected clip's ordered EQ/compressor chain in the shared Audio
+Effects editor. This clip chain is distinct from the per-track chain edited in
+the Audio workspace. Audio Effects is also a Copy/Paste Attributes category;
+compatible linked video/audio clips receive the same chain as one undoable
+edit. The
 `Effects` tab lists the selected clip's Color effect nodes for selection,
 enabled-state toggles, and parameter editing. It does not change graph
 structure; add, remove, connect, and layout operations belong to the Color
@@ -880,7 +885,7 @@ playback clock unchanged. Timeline playback is coordinated by the active
 composition and does not require a Media Browser item to remain selected;
 text-only compositions can also advance through their valid frame range.
 Confirmed text/style edits are Timeline Undo/Redo entries and are persisted by
-the current `.csp` version 42 format. Linked video-audio clips can be
+the current `.csp` version 43 format. Linked video-audio clips can be
 unlinked from the Timeline clip context menu; after unlinking, audio remains
 externalized on its Audio track. Right-clicking a video or image clip offers
 **Open in Fusion** and opens the selected clip's node graph. A video with linked

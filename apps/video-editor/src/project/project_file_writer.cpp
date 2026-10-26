@@ -61,6 +61,37 @@ const char* trackKindName(timeline::TrackKind kind) {
     return kind == timeline::TrackKind::Audio ? "audio" : "video";
 }
 
+QJsonArray audioEffectChainJson(
+    const std::vector<timeline::AudioEffectInstance>& effects) {
+    QJsonArray audio_effects;
+    for (const auto& effect : effects) {
+        QJsonObject effect_item;
+        effect_item.insert("enabled", effect.enabled);
+        if (const auto* eq = std::get_if<timeline::AudioEqualizerParameters>(
+                &effect.parameters)) {
+            effect_item.insert("type", "equalizer");
+            effect_item.insert("low_shelf_frequency_hz", eq->low_shelf_frequency_hz);
+            effect_item.insert("low_shelf_gain_db", eq->low_shelf_gain_db);
+            effect_item.insert("mid_frequency_hz", eq->mid_frequency_hz);
+            effect_item.insert("mid_gain_db", eq->mid_gain_db);
+            effect_item.insert("mid_q", eq->mid_q);
+            effect_item.insert("high_shelf_frequency_hz", eq->high_shelf_frequency_hz);
+            effect_item.insert("high_shelf_gain_db", eq->high_shelf_gain_db);
+        } else if (const auto* compressor =
+                       std::get_if<timeline::AudioCompressorParameters>(
+                           &effect.parameters)) {
+            effect_item.insert("type", "compressor");
+            effect_item.insert("threshold_db", compressor->threshold_db);
+            effect_item.insert("ratio", compressor->ratio);
+            effect_item.insert("attack_ms", compressor->attack_ms);
+            effect_item.insert("release_ms", compressor->release_ms);
+            effect_item.insert("makeup_gain_db", compressor->makeup_gain_db);
+        }
+        audio_effects.append(effect_item);
+    }
+    return audio_effects;
+}
+
 const char* colorNodeTypeName(color::NodeType type) {
     switch (type) {
     case color::NodeType::Input: return "input";
@@ -432,33 +463,7 @@ void save(const std::filesystem::path& project_path, const ProjectDocument& docu
             audio_sends.append(send_item);
         }
         track.insert("audio_sends", audio_sends);
-        QJsonArray audio_effects;
-        for (const auto& effect : track_source.audio_effects) {
-            QJsonObject effect_item;
-            effect_item.insert("enabled", effect.enabled);
-            if (const auto* eq = std::get_if<timeline::AudioEqualizerParameters>(
-                    &effect.parameters)) {
-                effect_item.insert("type", "equalizer");
-                effect_item.insert("low_shelf_frequency_hz", eq->low_shelf_frequency_hz);
-                effect_item.insert("low_shelf_gain_db", eq->low_shelf_gain_db);
-                effect_item.insert("mid_frequency_hz", eq->mid_frequency_hz);
-                effect_item.insert("mid_gain_db", eq->mid_gain_db);
-                effect_item.insert("mid_q", eq->mid_q);
-                effect_item.insert("high_shelf_frequency_hz", eq->high_shelf_frequency_hz);
-                effect_item.insert("high_shelf_gain_db", eq->high_shelf_gain_db);
-            } else if (const auto* compressor =
-                           std::get_if<timeline::AudioCompressorParameters>(
-                               &effect.parameters)) {
-                effect_item.insert("type", "compressor");
-                effect_item.insert("threshold_db", compressor->threshold_db);
-                effect_item.insert("ratio", compressor->ratio);
-                effect_item.insert("attack_ms", compressor->attack_ms);
-                effect_item.insert("release_ms", compressor->release_ms);
-                effect_item.insert("makeup_gain_db", compressor->makeup_gain_db);
-            }
-            audio_effects.append(effect_item);
-        }
-        track.insert("audio_effects", audio_effects);
+        track.insert("audio_effects", audioEffectChainJson(track_source.audio_effects));
         track.insert("kind", trackKindName(track_source.kind));
         QJsonArray clips;
         for (const auto& clip : track_source.clips) {
@@ -520,6 +525,10 @@ void save(const std::filesystem::path& project_path, const ProjectDocument& docu
                     audio_gain_keyframes.append(point);
                 }
                 item.insert("audio_gain_keyframes", audio_gain_keyframes);
+            }
+            if (clip.kind == timeline::ClipKind::Audio ||
+                clip.kind == timeline::ClipKind::Video) {
+                item.insert("audio_effects", audioEffectChainJson(clip.audio_effects));
             }
             if (timeline::supportsClipEffects(clip.kind)) {
                 const auto graph = clip.color_graph.value_or(

@@ -1,4 +1,5 @@
 #include "workspaces/edit/ui/edit_workspace.h"
+#include "workspaces/audio/ui/audio_effect_chain_dialog.h"
 #include "workspaces/edit/commands/edit_workspace_actions.h"
 #include "settings/shortcut_manager.h"
 #include "settings/user_preferences.h"
@@ -490,6 +491,11 @@ QWidget* EditWorkspace::createInspector(QWidget* parent) {
     ui_.clip_mute->setEnabled(false);
     clip_audio_layout->addRow(QCoreApplication::translate("EditWorkspace", "Volume"), ui_.clip_volume);
     clip_audio_layout->addRow(QCoreApplication::translate("EditWorkspace", "Mute"), ui_.clip_mute);
+    ui_.clip_audio_effects = new QPushButton(
+        QCoreApplication::translate("EditWorkspace", "EQ and Compressor…"),
+        clip_audio_group);
+    ui_.clip_audio_effects->setObjectName("clipAudioEffectsEditor");
+    clip_audio_layout->addRow(ui_.clip_audio_effects);
     audio_layout->addWidget(clip_audio_group);
 
     auto* track_audio_group = new QGroupBox(QCoreApplication::translate("EditWorkspace", "Track"), audio_page);
@@ -596,6 +602,10 @@ QWidget* EditWorkspace::createInspector(QWidget* parent) {
         edit_controller->applyClipAudioControls();
         edit_controller->finishAudioEdit();
     });
+    connect(ui_.clip_audio_effects, &QPushButton::clicked,
+            edit_controller, [edit_controller, parent = command_dialog_parent_] {
+                edit_controller->editSelectedClipAudioEffects(parent);
+            });
     connect(ui_.track_mute, &QCheckBox::toggled, edit_controller, [edit_controller](bool) {
         edit_controller->beginAudioEdit();
         edit_controller->applyTrackAudioControls();

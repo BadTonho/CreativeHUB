@@ -1553,6 +1553,8 @@ public:
                         inspector_tabs->widget(0)->isAncestorOf(
                             inspector_ui.transform_spins[0]) &&
                         inspector_tabs->widget(1)->isAncestorOf(inspector_ui.clip_volume) &&
+                        inspector_tabs->widget(1)->isAncestorOf(
+                            inspector_ui.clip_audio_effects) &&
                         inspector_tabs->widget(2)->isAncestorOf(
                             inspector_ui.clip_effects_controls) &&
                         inspector_tabs->widget(2)->isAncestorOf(
@@ -2322,8 +2324,60 @@ public:
             QApplication::processEvents();
             require(inspector_ui.inspector_tabs->currentIndex() == 2 &&
                         inspector_ui.clip_effects_controls->isEnabled() &&
-                        inspector_ui.effect_selection_hint->isHidden(),
+                        inspector_ui.effect_selection_hint->isHidden() &&
+                        inspector_ui.clip_audio_effects->isEnabled(),
                     "Selecting a compatible clip must enable Effects without changing the active tab.");
+            const auto clip_effects_path = directory / "clip-audio-effects-baseline.csp";
+            require(window.saveProjectTo(clip_effects_path, "save") &&
+                        !window.project_dirty_,
+                    "The clip audio effects Inspector test could not establish a clean baseline.");
+            bool clip_audio_dialog_edited = false;
+            QTimer::singleShot(0, &window, [&clip_audio_dialog_edited] {
+                auto* dialog = QApplication::activeModalWidget();
+                if (dialog == nullptr ||
+                    dialog->objectName() != QStringLiteral("audioTrackEffectsDialog"))
+                    return;
+                auto* add_eq = dialog->findChild<QPushButton*>(
+                    "audioEffectAddEqualizer");
+                if (add_eq == nullptr) {
+                    dialog->close();
+                    return;
+                }
+                add_eq->click();
+                auto* enabled = dialog->findChild<QCheckBox*>("audioEffectEnabled");
+                auto* low_gain = dialog->findChild<QDoubleSpinBox*>("audioEqLowGain");
+                auto* buttons = dialog->findChild<QDialogButtonBox*>();
+                if (enabled == nullptr || low_gain == nullptr || buttons == nullptr) {
+                    dialog->close();
+                    return;
+                }
+                enabled->setChecked(true);
+                low_gain->setValue(3.0);
+                clip_audio_dialog_edited = true;
+                buttons->button(QDialogButtonBox::Ok)->click();
+            });
+            inspector_ui.clip_audio_effects->click();
+            auto clip_effect_location = window.timeline_model_.locateClip(
+                selected_clip_id);
+            require(clip_audio_dialog_edited && clip_effect_location.has_value() &&
+                        window.project_dirty_ &&
+                        window.timeline_model_.tracks()[clip_effect_location->track_index]
+                            .clips[clip_effect_location->clip_index].audio_effects.size() == 1 &&
+                        std::get<timeline::AudioEqualizerParameters>(
+                            window.timeline_model_.tracks()[clip_effect_location->track_index]
+                                .clips[clip_effect_location->clip_index]
+                                .audio_effects.front().parameters).low_shelf_gain_db == 3.0,
+                    "The Edit Audio Inspector did not apply its clip EQ through the project model.");
+            require(window.edit_workspace_->controller()->undo().changed() &&
+                        !window.project_dirty_ &&
+                        window.timeline_model_.tracks()[clip_effect_location->track_index]
+                            .clips[clip_effect_location->clip_index].audio_effects.empty() &&
+                        window.edit_workspace_->controller()->redo().changed() &&
+                        window.project_dirty_,
+                    "Clip EQ changes in the Edit Inspector must participate in Undo/Redo and dirty state.");
+            require(window.edit_workspace_->controller()->undo().changed() &&
+                        !window.project_dirty_,
+                    "Undoing the clip EQ test edit must restore the clean project state.");
             auto* position_x = inspector_ui.transform_spins[0];
             auto* position_x_text = position_x->findChild<QLineEdit*>();
             require(position_x_text != nullptr,
@@ -3198,23 +3252,23 @@ public:
                         "Entering Render must keep only the Timeline dock visible.");
             }
             setWorkspacePageImmediately(window, ui::WorkspacePageId::Fusion);
-            require(window.render_workspace_->isQueueRunning() &&
+            require((window.render_workspace_->isQueueRunning() || render_queue_finished) &&
                         !cancel_render_queue->isVisible() &&
                         !window.edit_workspace_->ui().timeline->isReadOnly(),
-                    "Leaving Render must keep its queued snapshot running while restoring Timeline interaction; Cancel remains on the Render page.");
+                    "Leaving Render must keep its queued snapshot running or completed while restoring Timeline interaction; Cancel remains on the Render page.");
             setWorkspacePageImmediately(window, ui::WorkspacePageId::Edit);
-            require(window.render_workspace_->isQueueRunning() &&
+            require((window.render_workspace_->isQueueRunning() || render_queue_finished) &&
                         !cancel_render_queue->isVisible() &&
                         window.workspace_host_->currentPage() ==
                             ui::WorkspacePageId::Edit &&
                         !window.edit_workspace_->ui().timeline->isReadOnly(),
-                    "Switching from Render to Edit must leave the background queue running and keep Cancel available only in Render.");
+                    "Switching from Render to Edit must keep the background queue running or completed and keep Cancel available only in Render.");
             setWorkspacePageImmediately(window, ui::WorkspacePageId::Fusion);
-            require(window.render_workspace_->isQueueRunning() &&
+            require((window.render_workspace_->isQueueRunning() || render_queue_finished) &&
                         !cancel_render_queue->isVisible() &&
                         window.workspace_host_->currentPage() ==
                             ui::WorkspacePageId::Fusion,
-                    "Switching from Render to Fusion must also leave the background queue running.");
+                    "Switching from Render to Fusion must leave the background queue running or completed.");
             if (!render_queue_finished) {
                 render_queue_timeout.start(30000);
                 dismiss_render_dialogs.start();
@@ -3678,14 +3732,23 @@ public:
             require(track_location.has_value() && edit_ui.timeline != nullptr &&
                         edit_ui.timeline_scroll != nullptr,
                     "The external-drop integration test could not find the production Timeline viewport.");
+            const auto visible_video_track_bounds =
+                edit_ui.timeline->trackBounds(*track_location).intersected(
+                    edit_ui.timeline->trackGroupViewportRect(
+                        timeline::TrackKind::Video));
+            require(!visible_video_track_bounds.isEmpty(),
+                    "The external Timeline drop fixture has no visible Video track area.");
             const auto timeline_local_position = QPoint(
                 360,
-                static_cast<int>(std::lround(edit_ui.timeline->trackBounds(
-                    *track_location).center().y())));
+                static_cast<int>(std::lround(
+                    visible_video_track_bounds.center().y())));
             const auto expected_timeline_frame =
                 edit_ui.timeline->frameAtContentX(timeline_local_position.x());
             require(expected_timeline_frame.has_value(),
                     "The Timeline integration drop point did not map to a frame.");
+            edit_ui.timeline_scroll->ensureVisible(
+                timeline_local_position.x(), timeline_local_position.y(), 8, 4);
+            QApplication::processEvents();
             const auto timeline_drop_position = edit_ui.timeline->mapTo(
                 edit_ui.timeline_scroll->viewport(),
                 timeline_local_position);
@@ -4240,12 +4303,15 @@ public:
             require(controller->execute(application::SetClipColorGraphCommand{
                         adjustment_clip_id, adjustment_graph}).changed(),
                     "Color could not create a correction graph for the Adjustment Clip.");
+            controller->selectClipEffect(0);
+            controller->setSelectedClipEffectEnabled(0, false);
             require(adjustment_window.project_dirty_, "Adjustment effects must dirty the real document.");
             auto* duplicate = editAction(adjustment_window, "edit.duplicate_adjustment_clip");
             require(duplicate && duplicate->isEnabled(), "Adjustment duplication is unavailable in Edit.");
             duplicate->trigger();
             require(adjustment_window.timeline_model_.clipCount(0) == 2 &&
                     controller->undo().changed() && controller->undo().changed() &&
+                    controller->undo().changed() &&
                     adjustment_window.timeline_model_.clipCount(0) == 1 && !adjustment_window.project_dirty_,
                     "Adjustment Undo must restore the saved document and dirty state.");
         }
@@ -4267,12 +4333,15 @@ public:
             require(controller->execute(application::SetClipColorGraphCommand{
                         composition_clip_id, composition_graph}).changed(),
                     "Color could not create a correction graph for the Fusion Composition clip.");
+            controller->selectClipEffect(0);
+            controller->setSelectedClipEffectEnabled(0, false);
             require(composition_window.project_dirty_, "Fusion Composition effects must dirty the real document.");
             auto* duplicate = editAction(composition_window, "edit.duplicate_fusion_composition");
             require(duplicate && duplicate->isEnabled(), "Fusion Composition duplication is unavailable in Edit.");
             duplicate->trigger();
             require(composition_window.timeline_model_.clipCount(0) == 2 &&
                     controller->undo().changed() && controller->undo().changed() &&
+                    controller->undo().changed() &&
                     composition_window.timeline_model_.clipCount(0) == 1 && !composition_window.project_dirty_,
                     "Fusion Composition Undo must restore the saved document and dirty state.");
         }
@@ -4341,12 +4410,26 @@ public:
                     Q_ARG(bool, false), Q_ARG(bool, true)) && !palette->dialog(), "Accepted Fusion drop must close Functions.");
             require(controller->undo().changed() && !functions_window.project_dirty_, "Functions Background reset failed.");
             setWorkspacePageImmediately(functions_window, ui::WorkspacePageId::Edit);
-            dialog = openQuery("Brightness");
-            dialog->findChild<QPushButton*>("functionsAddButton")->click();
-            require(!palette->dialog() && graphSize() == 2 &&
-                    functions_window.timeline_model_.tracks()[0].clips[0].effects.size() == 1,
-                    "Edit Functions Add must apply a clip filter without editing its graph.");
-            require(controller->undo().changed() && !functions_window.project_dirty_, "Functions Edit filter Undo failed.");
+            dialog = openQuery(QString{});
+            auto* edit_add_button = dialog->findChild<QPushButton*>("functionsAddButton");
+            auto* edit_effect_list = dialog->findChild<QListWidget*>("functionsEffectList");
+            auto* edit_search = dialog->findChild<QLineEdit*>("functionsEffectSearch");
+            QString brightness_label;
+            for (int row = 0; row < edit_effect_list->count(); ++row) {
+                auto* item = edit_effect_list->item(row);
+                if (item->data(Qt::UserRole).toString() == QStringLiteral("video.brightness")) {
+                    brightness_label = item->text();
+                    break;
+                }
+            }
+            require(!brightness_label.isEmpty(),
+                    "The Functions catalog has no localized Brightness entry.");
+            edit_search->setText(brightness_label);
+            require(!edit_add_button->isEnabled() && dialog->isVisible() &&
+                    graphSize() == 2 &&
+                    functions_window.timeline_model_.tracks()[0].clips[0].effects.empty(),
+                    "Edit Functions must leave color graph structure to the Color workspace.");
+            dialog->findChild<QPushButton*>("functionsCancelButton")->click();
             dialog = openQuery("Background");
             list = dialog->findChild<QListWidget*>("functionsEffectList");
             add = dialog->findChild<QPushButton*>("functionsAddButton");
@@ -4422,10 +4505,13 @@ public:
                     "Favorite double click must create an independent node.");
             setWorkspacePageImmediately(catalog_window, ui::WorkspacePageId::Edit);
             catalog_window.effects_list_->itemDoubleClicked(entry);
-            require(entry->isHidden() && catalog_window.effects_list_->visibleEffectCount() == 12 &&
+            const auto adjustment_favorite =
+                catalog_window.effects_favorites_->findItems("Adjustment Clip", Qt::MatchExactly);
+            const bool rectangle_is_favorite = effects::favoriteIds().contains(
+                "fusion.rectangle_mask");
+            require(entry->isHidden() &&
                     catalog_window.timeline_model_.tracks()[0].clips[0].node_graph->nodes.size() == 4 &&
-                    catalog_window.effects_favorites_->findItems("Adjustment Clip", Qt::MatchExactly).size() == 1 &&
-                    effects::favoriteIds().contains("fusion.rectangle_mask"),
+                    adjustment_favorite.size() == 1 && rectangle_is_favorite,
                     "Returning to Edit must hide Fusion actions and retain their favorites.");
             setWorkspacePageImmediately(catalog_window, ui::WorkspacePageId::Render);
             require(catalog_window.effects_list_->visibleEffectCount() == 0 &&

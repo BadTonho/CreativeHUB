@@ -989,6 +989,10 @@
         <translation>Remover faixa</translation>
     </message>
     <message>
+        <source>EQ and Compressor…</source>
+        <translation>EQ e compressor…</translation>
+    </message>
+    <message>
         <location filename="../../apps/video-editor/src/workspaces/edit/ui/edit_workspace.cpp" line="840"/>
         <source>No media selected.</source>
         <translation>Nenhuma mídia selecionada.</translation>
@@ -1077,6 +1081,14 @@
         <location filename="../../apps/video-editor/src/workspaces/edit/controllers/edit_workspace_controller.cpp" line="2085"/>
         <source>Add keyframe at the current frame</source>
         <translation>Adicionar keyframe no quadro atual</translation>
+    </message>
+    <message>
+        <source>Clip audio effects — %1</source>
+        <translation>Efeitos de áudio do clipe — %1</translation>
+    </message>
+    <message>
+        <source>Clip audio effects changed.</source>
+        <translation>Efeitos de áudio do clipe alterados.</translation>
     </message>
     <message>
         <location filename="../../apps/video-editor/src/workspaces/edit/controllers/edit_workspace_controller.cpp" line="2200"/>

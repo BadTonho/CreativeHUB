@@ -175,11 +175,13 @@ int main(int argc, char** argv) {
         std::filesystem::create_directories(directory / "media");
         const auto project_path = directory / "project.csp";
         const auto first_source = directory / "media" / "first video.mkv";
+        const auto fixture_audio_source = directory / "media" / "audio.wav";
         const auto image_source = directory / "media" / "still.png";
         const auto outside_source = std::filesystem::temp_directory_path() /
             ("creative-suite-project-outside-" + std::to_string(
                 std::chrono::steady_clock::now().time_since_epoch().count()) + ".mkv");
         std::ofstream(first_source, std::ios::binary).close();
+        std::ofstream(fixture_audio_source, std::ios::binary).close();
         std::ofstream(image_source, std::ios::binary).close();
         std::ofstream(outside_source, std::ios::binary).close();
 
@@ -310,6 +312,12 @@ int main(int argc, char** argv) {
                     "amount", 24.0),
                 "Could not set a non-default effect value for project coverage.");
         original.timeline_tracks.front().clips.front().effects.back().enabled = false;
+        timeline::AudioEffectInstance clip_equalizer;
+        clip_equalizer.enabled = true;
+        auto clip_equalizer_parameters = timeline::AudioEqualizerParameters{};
+        clip_equalizer_parameters.low_shelf_gain_db = 3.5;
+        clip_equalizer.parameters = clip_equalizer_parameters;
+        original.timeline_tracks.front().clips.front().audio_effects = {clip_equalizer};
         project::ProjectClip second_track_title;
         second_track_title.clip_id = 5;
         second_track_title.timeline_start_frame = 0;
@@ -320,6 +328,10 @@ int main(int argc, char** argv) {
         original.timeline_tracks.push_back(
             {"Video 2", 1.0, false, {second_track_title}, {}});
         original.timeline_tracks.back().track_id = 2;
+        timeline::AudioEffectInstance clip_compressor;
+        clip_compressor.enabled = true;
+        clip_compressor.parameters = timeline::AudioCompressorParameters{
+            -25.0, 3.5, 7.0, 140.0, 1.5};
         original.audio_buses = {
             {41, "Music", 0.85, false, -0.1},
             {42, "Room", 1.25, true, 0.2},
@@ -354,6 +366,26 @@ int main(int argc, char** argv) {
 
         const auto loaded = project::load(project_path);
         require(loaded == original, "A project did not round-trip through JSON.");
+        project::ProjectDocument audio_effect_document;
+        audio_effect_document.media = {{fixture_audio_source, "Audio Fixture",
+            "Audio", false, media::MediaKind::Audio}};
+        project::ProjectClip audio_effect_clip;
+        audio_effect_clip.clip_id = 1;
+        audio_effect_clip.source_path = fixture_audio_source;
+        audio_effect_clip.duration_frames = 30;
+        audio_effect_clip.source_duration_time_us = 1000000;
+        audio_effect_clip.kind = timeline::ClipKind::Audio;
+        audio_effect_clip.audio_effects = {clip_compressor};
+        project::ProjectTrack audio_effect_track;
+        audio_effect_track.track_id = 1;
+        audio_effect_track.name = "Audio 1";
+        audio_effect_track.kind = timeline::TrackKind::Audio;
+        audio_effect_track.clips = {audio_effect_clip};
+        audio_effect_document.timeline_tracks = {audio_effect_track};
+        const auto audio_effect_project_path = directory / "clip-audio-effects.csp";
+        project::save(audio_effect_project_path, audio_effect_document);
+        require(project::load(audio_effect_project_path) == audio_effect_document,
+                "CSP v43 did not preserve a compressor chain on a standalone Audio clip.");
         auto gallery_sidecar = project_path;
         gallery_sidecar += ".gallery";
         require(std::filesystem::exists(gallery_sidecar / "still-test-1.png"),
@@ -400,6 +432,9 @@ int main(int argc, char** argv) {
         require(loaded.timeline_tracks[0].clips[0].effects ==
                     original.timeline_tracks[0].clips[0].effects,
                 "The ordered effect stack and parameters were not preserved.");
+        require(loaded.timeline_tracks[0].clips[0].audio_effects ==
+                    original.timeline_tracks[0].clips[0].audio_effects,
+                "CSP v43 did not preserve the ordered EQ chain on a Video clip.");
         require(loaded.media.back().image_editor_link ==
                     original.media.back().image_editor_link &&
                     loaded.timeline_tracks.front().clips.back().image_editor_variant ==
@@ -470,6 +505,47 @@ int main(int argc, char** argv) {
                                 return track.audio_effects.empty();
                             }),
                     "CSP v41 did not retain mixer settings and default to an empty effects chain.");
+            require(std::all_of(migrated.timeline_tracks.begin(),
+                        migrated.timeline_tracks.end(), [](const auto& track) {
+                            return std::all_of(track.clips.begin(), track.clips.end(),
+                                [](const auto& clip) {
+                                    return clip.audio_effects.empty();
+                                });
+                        }),
+                    "CSP v1-v41 migration did not default clip audio effects to empty.");
+        }
+        {
+            auto legacy_v42 = QJsonDocument::fromJson(
+                QByteArray::fromStdString(saved_json)).object();
+            legacy_v42.insert("version", 42);
+            auto timeline_object = legacy_v42.value("timeline").toObject();
+            auto tracks = timeline_object.value("tracks").toArray();
+            for (qsizetype index = 0; index < tracks.size(); ++index) {
+                auto track = tracks[index].toObject();
+                auto clips = track.value("clips").toArray();
+                for (qsizetype clip_index = 0; clip_index < clips.size(); ++clip_index) {
+                    auto clip = clips[clip_index].toObject();
+                    clip.remove("audio_effects");
+                    clips[clip_index] = clip;
+                }
+                track.insert("clips", clips);
+                tracks[index] = track;
+            }
+            timeline_object.insert("tracks", tracks);
+            legacy_v42.insert("timeline", timeline_object);
+            const auto legacy_path = directory / "clip-audio-effects-v42.csp";
+            writeText(legacy_path,
+                QJsonDocument(legacy_v42).toJson().toStdString());
+            const auto migrated = project::load(legacy_path);
+            require(std::all_of(migrated.timeline_tracks.begin(),
+                        migrated.timeline_tracks.end(), [](const auto& track) {
+                            return std::all_of(track.clips.begin(), track.clips.end(),
+                                [](const auto& clip) {
+                                    return clip.audio_effects.empty();
+                                });
+                        }) && migrated.timeline_tracks.front().audio_effects ==
+                            original.timeline_tracks.front().audio_effects,
+                    "CSP v42 did not preserve track effects and default clip effects to empty.");
         }
         {
             auto invalid_route = QJsonDocument::fromJson(
@@ -492,13 +568,13 @@ int main(int argc, char** argv) {
         {
             auto future = QJsonDocument::fromJson(
                 QByteArray::fromStdString(saved_json)).object();
-            future.insert("version", 43);
-            const auto future_path = directory / "future-v43.csp";
+            future.insert("version", 44);
+            const auto future_path = directory / "future-v44.csp";
             writeText(future_path, QJsonDocument(future).toJson().toStdString());
             bool rejected = false;
             try { static_cast<void>(project::load(future_path)); }
             catch (const project::ProjectError&) { rejected = true; }
-            require(rejected, "A project version newer than CSP v42 was accepted.");
+            require(rejected, "A project version newer than CSP v43 was accepted.");
         }
         {
             auto invalid_effects = QJsonDocument::fromJson(
@@ -521,6 +597,32 @@ int main(int argc, char** argv) {
             try { static_cast<void>(project::load(invalid_path)); }
             catch (const project::ProjectError&) { rejected = true; }
             require(rejected, "CSP v42 accepted out-of-range audio effect parameters.");
+        }
+        {
+            auto invalid_clip_effects = QJsonDocument::fromJson(
+                QByteArray::fromStdString(saved_json)).object();
+            auto timeline_object = invalid_clip_effects.value("timeline").toObject();
+            auto tracks = timeline_object.value("tracks").toArray();
+            auto first_track = tracks.first().toObject();
+            auto clips = first_track.value("clips").toArray();
+            auto first_clip = clips.first().toObject();
+            auto effects = first_clip.value("audio_effects").toArray();
+            auto invalid_effect = effects.first().toObject();
+            invalid_effect.insert("low_shelf_gain_db", 19.0);
+            effects[0] = invalid_effect;
+            first_clip.insert("audio_effects", effects);
+            clips[0] = first_clip;
+            first_track.insert("clips", clips);
+            tracks[0] = first_track;
+            timeline_object.insert("tracks", tracks);
+            invalid_clip_effects.insert("timeline", timeline_object);
+            const auto invalid_path = directory / "clip-audio-effects-invalid.csp";
+            writeText(invalid_path,
+                QJsonDocument(invalid_clip_effects).toJson().toStdString());
+            bool rejected = false;
+            try { static_cast<void>(project::load(invalid_path)); }
+            catch (const project::ProjectError&) { rejected = true; }
+            require(rejected, "CSP v43 accepted invalid clip audio effect parameters.");
         }
         {
             auto graded = loaded;
@@ -847,7 +949,7 @@ int main(int argc, char** argv) {
         require(saved_json.find("\"track_id\": 1") != std::string::npos &&
                     saved_json.find("\"clip_id\": 1") != std::string::npos,
                 "Stable track and clip identifiers were not written to the project.");
-        require(saved_json.find("\"version\": 42") != std::string::npos &&
+        require(saved_json.find("\"version\": 43") != std::string::npos &&
                     saved_json.find("\"render_start_time_us\": 1234567") != std::string::npos &&
                     saved_json.find("\"frame_rate\"") != std::string::npos &&
                     saved_json.find("\"numerator\": 30000") != std::string::npos &&
@@ -1692,10 +1794,10 @@ int main(int argc, char** argv) {
 
         writeText(
             project_path,
-            R"({"format":"creative-suite.main-editor","version":43,"media":[],"timeline":{"clips":[]}})");
+            R"({"format":"creative-suite.main-editor","version":44,"media":[],"timeline":{"clips":[]}})");
         try {
             static_cast<void>(project::load(project_path));
-            throw std::runtime_error("CSP v43 was accepted by the v42 reader.");
+            throw std::runtime_error("CSP v44 was accepted by the v43 reader.");
         } catch (const project::ProjectError& error) {
             require(error.code() == project::ProjectErrorCode::UnsupportedVersion,
                     "Unsupported version returned the wrong error category.");

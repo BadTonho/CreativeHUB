@@ -60,6 +60,7 @@ project::ProjectDocument ProjectDocumentMapper::toDocument(
             project_clip.audio_gain = clip.audio_gain;
             project_clip.audio_muted = clip.audio_muted;
             project_clip.audio_gain_keyframes = clip.audio_gain_keyframes;
+            project_clip.audio_effects = clip.audio_effects;
             project_clip.effects = clip.effects;
             if (timeline::supportsClipEffects(clip.kind)) {
                 project_clip.color_graph = clip.color_graph.value_or(

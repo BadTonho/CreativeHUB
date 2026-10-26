@@ -63,7 +63,7 @@ under `docs/video-editor/architecture/` so each document can remain focused and 
 The Color workspace owns a per-clip correction graph with Input, effect,
 Parallel Mixer and Output nodes. Its connections define processing, and the
 graph, named per-clip versions, Power Windows and their geometry tracks are
-saved in CSP v42. Serial graphs without Power Windows use the existing GPU effect pipeline
+saved in CSP v43. Serial graphs without Power Windows use the existing GPU effect pipeline
 when available; branched graphs use Color's CPU RGBA evaluator after Fusion.
 Edit Inspector edits the same effect nodes' parameters and enabled state, while
 Color owns topology and layout. Primary Grade offers Wheels and Bars views over

@@ -198,6 +198,7 @@ set(MAIN_EDITOR_CORE_SOURCES
     src/workspaces/edit/controllers/edit_workspace_controller.cpp
     src/workspaces/edit/controllers/edit_workspace_controller.h
     src/workspaces/audio/ui/audio_workspace.cpp
+    src/workspaces/audio/ui/audio_effect_chain_dialog.h
     src/workspaces/color/ui/color_workspace.cpp
     src/workspaces/color/ui/color_workspace.h
     src/workspaces/audio/ui/audio_workspace.h

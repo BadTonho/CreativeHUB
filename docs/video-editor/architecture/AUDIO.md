@@ -139,6 +139,29 @@ CSP v42 requires the bus and Master settings, track pan/routes/sends, and an
 projects v1-v40 also receive no buses or sends, centered pan, neutral Master,
 and tracks routed to Master. The Hub accepts v1-v42 and rejects v43.
 
+## Clip EQ and compression (CSP v43)
+
+Each Video or Audio clip may store an ordered chain with up to one three-band
+EQ and one compressor. Both start disabled; the EQ is flat. Edit's Inspector
+Audio tab exposes this basic chain for the selected clip. The Audio workspace
+continues to edit the mixer and per-track chain; additional audio processors
+are reserved for that workspace.
+
+The shared mixer processes each decoded source through its clip chain before
+clip gain, volume envelope, and crossfade. It then sums clips by track, applies
+the track chain, and continues through gain, pan, routes, sends, buses, and
+Master. Preview and export use the same sample path. Per-clip DSP state is
+retained across contiguous blocks and reset after seeks or source
+discontinuities; parameter changes blend over 10 ms. The active source is
+processed once when video audio is externalized to a linked Audio companion.
+Linked video/audio edits mirror the chain. Split, duplicate, and Copy/Paste
+Attributes preserve the ordered chain, with attribute paste participating in
+Timeline Undo/Redo.
+
+CSP v43 stores `audio_effects` on every Video and Audio clip. Projects v1-v42
+open with empty clip chains; parameter values, effect kinds, uniqueness, and
+clip kind are validated. The Hub accepts CSP v1-v43 and rejects v44.
+
 Video export remains a video file. Its duration reaches the end of the longest
 Timeline clip. If audio extends beyond visual content, the renderer emits black
 frames until the audio ends. Disabling export audio omits the output audio
@@ -163,9 +186,8 @@ Crossfade at an adjacent cut. It overlaps the incoming clip by D Timeline
 frames and uses equal-power cosine/sine gains per sample in the shared Preview
 and export mixer. The transition gain multiplies track gain, clip gain, mute,
 and the clip's existing volume envelope. Clips linked to video must be
-unlinked before adding the transition. Recording, clip-level effects, advanced
-repair/noise processing, track automation, and audio-only file export remain
-future work.
+unlinked before adding the transition. Recording, advanced repair/noise
+processing, track automation, and audio-only file export remain future work.
 
 A visual Cross Dissolve changes video timing but keeps embedded video audio as
 a hard cut at the original cut: outgoing audio continues through the visual

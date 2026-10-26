@@ -935,6 +935,8 @@ ClipAttributeCompatibility clipAttributeCompatibility(
         .audio_volume_envelope = source.audio_volume_envelope.has_value() &&
             target_has_audio_volume_envelope,
         .text = source.source_kind == ClipKind::Text && target_kind == ClipKind::Text,
+        .audio_effects = has_audio_controls(source.source_kind) &&
+            has_audio_controls(target_kind),
     };
 }
 
@@ -1624,6 +1626,7 @@ AddClipResult TimelineModel::addAudioCompanion(
     audio_clip.frame_count.reset();
     audio_clip.audio_gain = refreshed_video.audio_gain;
     audio_clip.audio_muted = refreshed_video.audio_muted;
+    audio_clip.audio_effects = refreshed_video.audio_effects;
     audio_clip.clip_id = next_clip_id_++;
     audio_clip.track_id = audio_track.track_id;
     audio_clip.kind = ClipKind::Audio;
@@ -1662,6 +1665,7 @@ bool TimelineModel::linkAudio(ClipId video_clip_id, ClipId audio_clip_id) {
     video_clip.audio_extracted = true;
     video_clip.audio_companion_pending = false;
     audio_clip.linked_clip_id = video_clip_id;
+    audio_clip.audio_effects = video_clip.audio_effects;
     return true;
 }
 
@@ -3151,6 +3155,24 @@ AudioParameterResult TimelineModel::setClipAudio(
     }
     clip.audio_gain = gain;
     clip.audio_muted = muted;
+    return AudioParameterResult::Changed;
+}
+
+AudioParameterResult TimelineModel::setClipAudioEffects(
+    std::size_t track_index,
+    std::size_t clip_index,
+    std::vector<AudioEffectInstance> effects) {
+    auto* track = trackAt(track_index);
+    if (track == nullptr || clip_index >= track->clips.size()) {
+        return AudioParameterResult::InvalidIndex;
+    }
+    if (!validAudioEffectChain(effects)) return AudioParameterResult::InvalidValue;
+    auto& clip = track->clips[clip_index];
+    if (clip.kind != ClipKind::Audio && clip.kind != ClipKind::Video) {
+        return AudioParameterResult::InvalidValue;
+    }
+    if (clip.audio_effects == effects) return AudioParameterResult::NoChange;
+    clip.audio_effects = std::move(effects);
     return AudioParameterResult::Changed;
 }
 

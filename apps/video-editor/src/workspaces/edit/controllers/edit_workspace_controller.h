@@ -131,6 +131,7 @@ public:
     void finishAudioEdit();
     void applyClipAudioControls();
     void applyTrackAudioControls();
+    void editSelectedClipAudioEffects(QWidget* dialog_parent);
     void beginTransformEdit();
     void finishTransformEdit();
     void applyTextStyle();

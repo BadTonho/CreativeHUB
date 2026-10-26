@@ -931,10 +931,12 @@ void PlaybackWorker::setComposition(
                 prepared.audio_gain_keyframes});
             auto& audio_clip = composition_audio_mix_clips_.back();
             audio_clip.track_id = prepared.track_id;
+            audio_clip.clip_id = prepared.clip_id;
             audio_clip.track_pan = prepared.track_audio_pan;
             audio_clip.output_bus_id = prepared.output_bus_id;
             audio_clip.audio_sends = prepared.audio_sends;
             audio_clip.audio_effects = prepared.track_audio_effects;
+            audio_clip.clip_audio_effects = prepared.clip_audio_effects;
             audio_clip.source_channel_count = prepared.source_audio_channel_count;
         }
 

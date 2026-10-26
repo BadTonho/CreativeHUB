@@ -265,6 +265,7 @@ struct TimelineClip {
     double audio_gain = 1.0;
     bool audio_muted = false;
     std::vector<AudioGainKeyframe> audio_gain_keyframes;
+    std::vector<AudioEffectInstance> audio_effects;
     std::vector<creative_suite::effects::EffectInstance> effects;
     // Canonical Color correction graph. `effects` is a compatibility projection
     // used by existing Edit controls and linear GPU effect paths.
@@ -307,6 +308,7 @@ struct TimelineClipAttributes {
     std::optional<color::Graph> color_graph;
     double audio_gain = 1.0;
     bool audio_muted = false;
+    std::vector<AudioEffectInstance> audio_effects;
     std::optional<std::vector<AudioGainKeyframe>> audio_volume_envelope;
     TextStyle text;
 };
@@ -317,6 +319,7 @@ struct ClipAttributeOptions {
     bool audio_gain_and_mute = false;
     bool audio_volume_envelope = false;
     bool text = false;
+    bool audio_effects = false;
 
     friend bool operator==(const ClipAttributeOptions&, const ClipAttributeOptions&) = default;
 };
@@ -327,6 +330,7 @@ struct ClipAttributeCompatibility {
     bool audio_gain_and_mute = false;
     bool audio_volume_envelope = false;
     bool text = false;
+    bool audio_effects = false;
 };
 
 [[nodiscard]] ClipAttributeCompatibility clipAttributeCompatibility(
@@ -546,6 +550,10 @@ public:
         std::size_t clip_index,
         double gain,
         bool muted);
+    AudioParameterResult setClipAudioEffects(
+        std::size_t track_index,
+        std::size_t clip_index,
+        std::vector<AudioEffectInstance> effects);
     AudioParameterResult setTrackAudio(
         std::size_t track_index,
         double gain,

@@ -1304,7 +1304,8 @@ void MainWindow::refreshWorkspaceMenuVisibility() {
             page == ui::WorkspacePageId::Color);
         if (effects_dock_view_action_ != nullptr) {
             effects_dock_view_action_->setVisible(
-                page != ui::WorkspacePageId::Color);
+                page == ui::WorkspacePageId::Edit ||
+                page == ui::WorkspacePageId::Fusion);
         }
     }
     if (menuBar() == nullptr) return;

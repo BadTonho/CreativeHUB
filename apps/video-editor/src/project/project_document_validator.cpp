@@ -216,6 +216,12 @@ void validateDocument(const ProjectDocument& document,
         if (!validAudioGain(clip.audio_gain)) {
             throwJson(ProjectErrorCode::InvalidValue, project_path, "Project JSON contains an invalid clip audio gain.");
         }
+        if (!timeline::validAudioEffectChain(clip.audio_effects) ||
+            (!clip.audio_effects.empty() && clip.kind != timeline::ClipKind::Audio &&
+             clip.kind != timeline::ClipKind::Video)) {
+            throwJson(ProjectErrorCode::InvalidValue, project_path,
+                      "Project JSON contains an invalid audio effect chain for this clip.");
+        }
         if ((clip.kind != timeline::ClipKind::Audio &&
              !clip.audio_gain_keyframes.empty()) ||
             (clip.kind == timeline::ClipKind::Audio &&

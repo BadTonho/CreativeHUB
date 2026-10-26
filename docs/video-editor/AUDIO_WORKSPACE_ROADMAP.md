@@ -1,6 +1,6 @@
 # Audio Workspace Roadmap
 
-Status: **the editable Audio workspace, one-level mixer, and track EQ/compressor are implemented; device and native UI acceptance remain pending**.
+Status: **the editable Audio workspace, one-level mixer, track EQ/compressor, and per-clip EQ/compressor are implemented; device and native UI acceptance remain pending**.
 
 The Audio workspace is a fourth view of the Video Editor's current project. It
 uses the Edit timeline document, stable clip and track identities, shared edit
@@ -31,6 +31,18 @@ Master meters.
   and crossfades and before main routing and pre/post-fader sends.
 - CSP v42 stores effect chains. Projects v1-v41 load with empty chains; Hub
   backup and restore preserve v42 and reject v43.
+- Edit exposes a clip's basic EQ and compressor chain in the Inspector Audio
+  tab. The Audio workspace continues to own mixer and track processing; future
+  audio processors belong there. Each clip accepts at most one EQ and one
+  compressor, in either order, and both are bypassed by default.
+- Clip effects process decoded source audio before clip gain, volume envelope,
+  and crossfade. The resulting clip signals are summed, then the track effect
+  chain runs before routing and sends. Preview and export share this order and
+  preserve DSP state across contiguous blocks.
+- CSP v43 stores the ordered per-clip chain. Projects v1-v42 load clips without
+  effects; Hub backup and restore preserve v43 and reject v44. Linked video and
+  audio clips mirror their chain, and split/duplicate plus Copy/Paste Attributes
+  preserve it.
 - Bus removal returns routed tracks to the Master and removes sends to that
   bus as one undoable edit. Fader and pan drags on tracks, buses, sends, and
   Master form one history edit per gesture.
@@ -42,7 +54,9 @@ Master meters.
 
 - Automated regressions cover mixer model/commands, Undo/Redo, routing and
   sends, solo and mute rules, EQ/compressor response and state, meters, CSP v42
-  migration, Preview/export mix parity, UI controls, and Hub backup/restore.
+  and v43 migrations, clip processing order and state, linked clips,
+  Copy/Paste Attributes, Preview/export mix parity, Inspector and Audio UI, and
+  Hub backup/restore.
 - The reproducible manual mixer workflow is documented in the
   [Video Editor regression guide](validation/REGRESSION_TESTING.md#audio-workspace).
   Device playback and native visual acceptance remain pending for Windows,
@@ -52,8 +66,8 @@ Master meters.
 
 ## Remaining candidates
 
-1. **Processing:** clip-level EQ/dynamics, dialogue cleanup, noise reduction,
-   repair, and ducking. Keep Preview and export equal.
+1. **Processing:** dialogue cleanup, noise reduction, repair, and ducking.
+   Keep Preview and export equal.
 2. **Measurement and automation:** loudness, true-peak analysis, normalization,
    track automation, and richer clip automation.
 3. **Production workflows:** recording, voiceover/ADR, and a locally managed

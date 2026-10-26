@@ -322,6 +322,7 @@ void migrateAudioCompanions(
             video_snapshot.duration_frames, *audio_timeline_duration);
         audio_clip.audio_gain = video_snapshot.audio_gain;
         audio_clip.audio_muted = video_snapshot.audio_muted;
+        audio_clip.audio_effects = video_snapshot.audio_effects;
         audio_clip.source_start_time_us = *source_start_us;
         audio_clip.source_duration_time_us = source_duration_us;
         audio_clip.linked_clip_id = video_snapshot.clip_id;
@@ -806,6 +807,7 @@ ProjectOpenResult ProjectOpenService::prepare(
                     audio_clip.audio_muted = project_clip.audio_muted;
                     audio_clip.audio_gain_keyframes =
                         project_clip.audio_gain_keyframes;
+                    audio_clip.audio_effects = project_clip.audio_effects;
                     audio_clip.clip_id = project_clip.clip_id;
                     audio_clip.track_id = track_id;
                     audio_clip.transform = project_clip.transform;
@@ -853,6 +855,7 @@ ProjectOpenResult ProjectOpenService::prepare(
                 clip.audio_gain = project_clip.audio_gain;
                 clip.audio_muted = project_clip.audio_muted;
                 clip.audio_gain_keyframes = project_clip.audio_gain_keyframes;
+                clip.audio_effects = project_clip.audio_effects;
                 clip.effects = project_clip.effects;
                 clip.color_graph = project_clip.color_graph.value_or(
                     color::fromEffectStack(project_clip.effects));

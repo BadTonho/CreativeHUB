@@ -41,7 +41,10 @@ struct TimelineAudioMixClip {
     double track_pan = 0.0;
     std::optional<timeline::AudioBusId> output_bus_id;
     std::vector<timeline::AudioSend> audio_sends;
+    // The legacy name is retained for track-level processing after clips sum.
     std::vector<timeline::AudioEffectInstance> audio_effects;
+    timeline::ClipId clip_id = 0;
+    std::vector<timeline::AudioEffectInstance> clip_audio_effects;
     int source_channel_count = 2;
 };
 
@@ -90,8 +93,8 @@ struct TimelineAudioMixResult {
     float master_peak = 0.0F;
 };
 
-// Persistent per-track DSP state shared by consecutive Preview or export
-// blocks. Call reset() whenever playback jumps to a different Timeline point.
+// Persistent per-clip and per-track DSP state shared by consecutive Preview or
+// export blocks. Call reset() whenever playback jumps to a different point.
 class TimelineAudioMixState final {
 public:
     TimelineAudioMixState();
@@ -168,6 +171,15 @@ private:
 void accumulateTimelineAudioChunk(
     const TimelineAudioMixSpan& span,
     const AudioPcmChunk& chunk,
+    std::span<float> mixed,
+    int output_channel_count);
+
+// Same envelope/crossfade path for source samples already normalized and
+// processed by clip-level DSP.
+void accumulateTimelineAudioFloatSamples(
+    const TimelineAudioMixSpan& span,
+    std::span<const float> samples,
+    std::int64_t first_sample_index,
     std::span<float> mixed,
     int output_channel_count);
 

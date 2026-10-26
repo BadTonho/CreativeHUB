@@ -1,4 +1,5 @@
 #include "workspaces/edit/controllers/edit_workspace_controller.h"
+#include "workspaces/audio/ui/audio_effect_chain_dialog.h"
 #include "ui/inspector/inspector_double_spin_box.h"
 
 #include <creative_suite/effects/effects.h>
@@ -657,6 +658,7 @@ void EditWorkspaceController::copySelectedClipAttributes() {
         attributes.color_graph = timeline::colorGraphForClip(clip);
         attributes.audio_gain = clip.audio_gain;
         attributes.audio_muted = clip.audio_muted;
+        attributes.audio_effects = clip.audio_effects;
         attributes.text = clip.text;
         if (clip.kind == timeline::ClipKind::Audio) {
             attributes.audio_volume_envelope = clip.audio_gain_keyframes;
@@ -686,7 +688,7 @@ void EditWorkspaceController::showPasteCopiedClipAttributesDialog(
     if (!canPasteCopiedClipAttributes()) return;
 
     const auto target_clip_ids = selectedAttributeClipIds();
-    std::array<int, 5> compatible_counts{};
+    std::array<int, 6> compatible_counts{};
     for (const auto clip_id : target_clip_ids) {
         const auto location = timeline_model_.locateClip(clip_id);
         if (!location.has_value()) continue;
@@ -707,6 +709,7 @@ void EditWorkspaceController::showPasteCopiedClipAttributesDialog(
         compatible_counts[2] += compatibility.audio_gain_and_mute;
         compatible_counts[3] += compatibility.audio_volume_envelope;
         compatible_counts[4] += compatibility.text;
+        compatible_counts[5] += compatibility.audio_effects;
     }
 
     QDialog dialog(dialog_parent);
@@ -759,6 +762,11 @@ void EditWorkspaceController::showPasteCopiedClipAttributesDialog(
         QStringLiteral("Text"), QStringLiteral("pasteAttributesText"),
         compatible_counts[4], static_cast<int>(target_clip_ids.size()),
         QStringLiteral("Text attributes can be pasted between text clips."));
+    auto* audio_effects = add_option(
+        QStringLiteral("Audio Effects"),
+        QStringLiteral("pasteAttributesAudioEffects"),
+        compatible_counts[5], static_cast<int>(target_clip_ids.size()),
+        QStringLiteral("EQ and compressor can be pasted between video and audio clips."));
 
     auto* buttons = new QDialogButtonBox(
         QDialogButtonBox::Apply | QDialogButtonBox::Cancel, &dialog);
@@ -777,9 +785,10 @@ void EditWorkspaceController::showPasteCopiedClipAttributesDialog(
                      &dialog, &QDialog::reject);
     const auto update_apply_enabled = [=]() {
         apply_button->setEnabled(effects->isChecked() || transform->isChecked() ||
-            audio->isChecked() || envelope->isChecked() || text->isChecked());
+            audio->isChecked() || envelope->isChecked() || text->isChecked() ||
+            audio_effects->isChecked());
     };
-    for (auto* option : {effects, transform, audio, envelope, text}) {
+    for (auto* option : {effects, transform, audio, envelope, text, audio_effects}) {
         QObject::connect(option, &QCheckBox::toggled,
                          &dialog, update_apply_enabled);
     }
@@ -788,7 +797,7 @@ void EditWorkspaceController::showPasteCopiedClipAttributesDialog(
     if (dialog.exec() != QDialog::Accepted) return;
     const timeline::ClipAttributeOptions options{
         effects->isChecked(), transform->isChecked(), audio->isChecked(),
-        envelope->isChecked(), text->isChecked()};
+        envelope->isChecked(), text->isChecked(), audio_effects->isChecked()};
     static_cast<void>(applyCopiedClipAttributes(options));
 }
 
@@ -821,7 +830,8 @@ application::TimelineEditResult EditWorkspaceController::applyCopiedClipAttribut
                 (options.audio_gain_and_mute && compatibility.audio_gain_and_mute) ||
                 (options.audio_volume_envelope &&
                  compatibility.audio_volume_envelope) ||
-                (options.text && compatibility.text);
+                (options.text && compatibility.text) ||
+                (options.audio_effects && compatibility.audio_effects);
         });
     if (!has_compatible_target) {
         return application::TimelineEditResult{
@@ -1738,6 +1748,19 @@ void EditWorkspaceController::updateInspector() {
     const timeline::TimelineClip* selected_clip = enabled
         ? &timeline_model_.tracks()[location->track_index].clips[location->clip_index]
         : nullptr;
+    if (ui_.clip_audio_effects != nullptr) {
+        const bool supports_audio_effects = selected_clip != nullptr &&
+            !transition_enabled &&
+            (selected_clip->kind == timeline::ClipKind::Audio ||
+             selected_clip->kind == timeline::ClipKind::Video);
+        ui_.clip_audio_effects->setEnabled(supports_audio_effects);
+        const auto effect_count = supports_audio_effects
+            ? selected_clip->audio_effects.size() : 0U;
+        ui_.clip_audio_effects->setText(effect_count == 0
+            ? QCoreApplication::translate("EditWorkspaceController", "EQ and Compressor…")
+            : QCoreApplication::translate("EditWorkspaceController", "EQ and Compressor (%1)")
+                .arg(effect_count));
+    }
     refreshBackgroundInspector(transition_enabled ? nullptr : selected_clip);
     const bool effects_enabled = selected_clip != nullptr && !transition_enabled &&
         timeline::supportsClipEffects(selected_clip->kind);
@@ -2137,6 +2160,33 @@ void EditWorkspaceController::applyTrackAudioControls() {
     if (!result.changed()) return;
     publishCommittedEdit(
         result, false, false, QStringLiteral("Track audio settings changed."));
+    emit playbackAudioParametersRequested();
+}
+
+void EditWorkspaceController::editSelectedClipAudioEffects(QWidget* dialog_parent) {
+    const auto location = selectedTimelineClipLocation();
+    if (!location.has_value() || active_transition_.has_value()) return;
+    const auto& clip = timeline_model_.tracks()[location->track_index]
+        .clips[location->clip_index];
+    if (clip.kind != timeline::ClipKind::Audio &&
+        clip.kind != timeline::ClipKind::Video) return;
+
+    AudioEffectChainDialog dialog(
+        QCoreApplication::translate("EditWorkspaceController",
+            "Clip audio effects — %1").arg(QString::fromUtf8(
+                clip.display_name.c_str())),
+        clip.audio_effects, dialog_parent);
+    if (dialog.exec() != QDialog::Accepted ||
+        !timeline::validAudioEffectChain(dialog.effects())) {
+        return;
+    }
+    const auto result = execute(application::SetClipAudioEffectsCommand{
+        clip.clip_id, dialog.effects()});
+    if (!result.changed()) return;
+    publishCommittedEdit(
+        result, false, true,
+        QCoreApplication::translate("EditWorkspaceController",
+            "Clip audio effects changed."));
     emit playbackAudioParametersRequested();
 }
 

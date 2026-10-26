@@ -479,22 +479,30 @@ void testVideoDocuments(const QString& root) {
         -21.0, 3.0, 12.0, 150.0, 1.0};
     color_document.timeline_tracks.front().audio_effects = {
         backup_eq, backup_compressor};
+    timeline::AudioEffectInstance clip_eq;
+    clip_eq.enabled = true;
+    auto clip_eq_parameters = timeline::AudioEqualizerParameters{};
+    clip_eq_parameters.mid_gain_db = 4.0;
+    clip_eq.parameters = clip_eq_parameters;
+    color_document.timeline_tracks.front().clips.front().audio_effects = {clip_eq};
     color_document.color_gallery_stills.push_back({"hub-still", "Still 1",
         color_document.timeline_tracks.front().clips.front().clip_id, 10,
         "hub-still.png",
         std::make_shared<const std::vector<std::uint8_t>>(
             std::vector<std::uint8_t>{137, 80, 78, 71, 13, 10, 26, 10}), false});
-    const auto color_path = QDir(QFileInfo(assets).absolutePath()).filePath("audio-effects-v42.csp");
+    const auto color_path = QDir(QFileInfo(assets).absolutePath()).filePath("clip-audio-effects-v43.csp");
     project::save(fsPath(color_path), color_document);
-    const auto color_snapshot = backup(QDir(root).filePath("video-audio-effects-v42"), color_path);
+    const auto color_snapshot = backup(QDir(root).filePath("video-audio-effects-v43"), color_path);
     CS_TEST_CHECK(project::load(fsPath(color_snapshot.vault)) == color_document);
     CS_TEST_CHECK(project::load(fsPath(color_snapshot.restored)) == color_document);
+    CS_TEST_CHECK(project::load(fsPath(color_snapshot.vault)).timeline_tracks.front()
+        .clips.front().audio_effects == std::vector<timeline::AudioEffectInstance>{clip_eq});
     CS_TEST_CHECK(QFileInfo::exists(color_snapshot.vault + QStringLiteral(".gallery/hub-still.png")));
     CS_TEST_CHECK(QFileInfo::exists(color_snapshot.restored + QStringLiteral(".gallery/hub-still.png")));
     auto future_video = QJsonDocument::fromJson(readBytes(color_path)).object();
     future_video.insert("version", project::current_format_version + 1);
     const auto future_video_path = QDir(QFileInfo(assets).absolutePath())
-        .filePath("video-future-v43.csp");
+        .filePath("video-future-v44.csp");
     writeBytes(future_video_path, QJsonDocument(future_video).toJson());
     creative_suite::hub::BackupManager future_video_manager(
         QDir(root).filePath("video-future-vault"));

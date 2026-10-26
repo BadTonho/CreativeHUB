@@ -233,6 +233,17 @@ void run() {
     require(media_drop_controller.execute(application::SetClipEffectsCommand{
                 source_clip_id, copied_stack}).changed(),
             "The effect-copy fixture could not set its source stack.");
+    timeline::AudioEffectInstance source_audio_eq;
+    source_audio_eq.enabled = true;
+    auto source_audio_eq_parameters = timeline::AudioEqualizerParameters{};
+    source_audio_eq_parameters.mid_gain_db = 3.0;
+    source_audio_eq.parameters = source_audio_eq_parameters;
+    const std::vector<timeline::AudioEffectInstance> source_audio_effects{
+        source_audio_eq};
+    require(media_drop_controller.execute(
+                application::SetClipAudioEffectsCommand{
+                    source_clip_id, source_audio_effects}).changed(),
+            "The effect-copy fixture could not set source clip audio effects.");
 
     const auto added_effect_target_track = media_drop_controller.addTrack(
         "Effects destination");
@@ -276,6 +287,14 @@ void run() {
     require(media_drop_controller.execute(application::SetClipEffectsCommand{
                 target_clip_id, target_effects}).changed(),
             "The effect-copy fixture could not set the destination stack.");
+    timeline::AudioEffectInstance target_audio_compressor;
+    target_audio_compressor.parameters = timeline::AudioCompressorParameters{};
+    const std::vector<timeline::AudioEffectInstance> target_audio_effects{
+        target_audio_compressor};
+    require(media_drop_controller.execute(
+                application::SetClipAudioEffectsCommand{
+                    target_clip_id, target_audio_effects}).changed(),
+            "The effect-copy fixture could not set destination clip audio effects.");
 
     require(media_drop_controller.execute(application::SetTransformPropertyCommand{
                 source_clip_id, timeline::TransformProperty::PositionX, 0, 0.25}).changed() &&
@@ -308,11 +327,15 @@ void run() {
     media_drop_controller.handleTimelineClipSelectionChanged(
         effect_target_track_id, target_clip_id);
     require(media_drop_controller.applyCopiedClipAttributes(
-                timeline::ClipAttributeOptions{true, false, false, false, false}).changed() &&
+                timeline::ClipAttributeOptions{true, false, false, false, false, true}).changed() &&
                 media_drop_session.timeline().tracks()[
                     media_drop_session.timeline().locateClip(target_clip_id)->track_index]
                     .clips[media_drop_session.timeline().locateClip(target_clip_id)->clip_index]
-                    .effects == copied_stack,
+                    .effects == copied_stack &&
+                media_drop_session.timeline().tracks()[
+                    media_drop_session.timeline().locateClip(target_clip_id)->track_index]
+                    .clips[media_drop_session.timeline().locateClip(target_clip_id)->clip_index]
+                    .audio_effects == source_audio_effects,
             "Copy Attributes followed Media Browser selection instead of the selected Timeline clip.");
     require(media_drop_controller.undo().changed(),
             "The selection-independent copy fixture could not restore the destination stack.");
@@ -323,7 +346,7 @@ void run() {
         effect_target_track_id, target_clip_id);
     const auto history_before_paste = media_drop_commands.undoCount();
     const auto pasted_visual = media_drop_controller.applyCopiedClipAttributes(
-        timeline::ClipAttributeOptions{true, true, true, false, false});
+        timeline::ClipAttributeOptions{true, true, true, false, false, true});
     auto target_location = media_drop_session.timeline().locateClip(target_clip_id);
     require(pasted_visual.changed() && target_location.has_value() &&
                 media_drop_session.timeline().tracks()[target_location->track_index]
@@ -338,6 +361,9 @@ void run() {
                         .clips[target_location->clip_index].audio_gain == 0.5 &&
                 media_drop_session.timeline().tracks()[target_location->track_index]
                         .clips[target_location->clip_index].audio_muted &&
+                media_drop_session.timeline().tracks()[target_location->track_index]
+                        .clips[target_location->clip_index].audio_effects ==
+                    source_audio_effects &&
                 media_drop_commands.undoCount() == history_before_paste + 1,
             "Paste Attributes did not apply the selected visual and audio groups as one edit.");
     require(media_drop_controller.undo().changed() &&
@@ -347,9 +373,15 @@ void run() {
                         .clips[target_location->clip_index].transform.position_x == 0.9 &&
                 media_drop_session.timeline().tracks()[target_location->track_index]
                         .clips[target_location->clip_index].audio_gain == 1.5 &&
+                media_drop_session.timeline().tracks()[target_location->track_index]
+                        .clips[target_location->clip_index].audio_effects ==
+                    target_audio_effects &&
                 media_drop_controller.redo().changed() &&
                 media_drop_session.timeline().tracks()[target_location->track_index]
-                        .clips[target_location->clip_index].effects == copied_stack,
+                        .clips[target_location->clip_index].effects == copied_stack &&
+                media_drop_session.timeline().tracks()[target_location->track_index]
+                        .clips[target_location->clip_index].audio_effects ==
+                    source_audio_effects,
             "Pasting clip attributes did not restore and reapply all selected groups through Undo/Redo.");
 
     media_drop_controller.handleTimelineClipSelectionChanged(media_drop_track, source_clip_id);

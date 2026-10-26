@@ -292,17 +292,35 @@ format, application version or rendering-engine change is involved.
 | --- | --- |
 | Bus creation/rename/removal, route/send references, gain and pan limits, bus deletion rerouting, snapshot restore, and Master settings | `tests/timeline/timeline_model_test.cpp` (`creative-suite-main-editor-timeline`) |
 | Track/bus/Master commands, Undo/Redo for bus deletion and routing, grouped fader/pan drags, and invalid references | `tests/timeline/timeline_command_service_test.cpp` (`creative-suite-main-editor-timeline-command-service`) |
-| Synthetic PCM EQ response, compression and block state, bypass, chain processing, sends, routes, pan, solo/mute precedence, meters, and Preview/export parity | `tests/playback/timeline_audio_mix_test.cpp` (`creative-suite-main-editor-timeline-audio-mix`) |
+| Synthetic PCM track and clip EQ response, compression and block state, bypass, clip-before-track chain order, envelope/fade interaction, sends, routes, pan, solo/mute precedence, meters, and Preview/export parity | `tests/playback/timeline_audio_mix_test.cpp` (`creative-suite-main-editor-timeline-audio-mix`) |
 | Offline export applies stereo balance, saved bus routes, pre-fader/post-fader send behavior, effects and Master gain | `tests/ui/render_export_test.cpp` (`creative-suite-main-editor-render-export`) |
-| CSP v42 save/open, v1-v41 defaults, invalid references/parameters and v43 rejection | `tests/project/project_file_test.cpp` (`creative-suite-main-editor-project`) |
-| Hub snapshot/restore retains v42 mix/effect data and future v43 is rejected | `apps/hub/tests/test_backup_formats.cpp` (`hub-backup-format-test`) and `test_backup_manager.cpp` (`hub-backup-manager-test`) |
-| Audio navigation, editable Timeline, track/bus controls, EQ/compressor editor, temporary solo, meters, save/reopen and Edit layout restoration | `tests/application/main_window_integration_test.cpp` (`creative-suite-main-editor-audio-workspace` and `creative-suite-main-editor-main-window`) |
+| CSP v43 clip/track save/open, v1-v42 defaults, invalid references/parameters and v44 rejection | `tests/project/project_file_test.cpp` (`creative-suite-main-editor-project`) |
+| Hub snapshot/restore retains v43 clip and track effect data and future v44 is rejected | `apps/hub/tests/test_backup_formats.cpp` (`hub-backup-format-test`) and `test_backup_manager.cpp` (`hub-backup-manager-test`) |
+| Audio navigation, editable Timeline, track/bus controls, track effects editor, temporary solo, meters, save/reopen and Edit layout restoration; Edit Inspector clip effects editor | `tests/application/main_window_integration_test.cpp` (`creative-suite-main-editor-audio-workspace` and `creative-suite-main-editor-main-window`) |
+| Linked clip effect mirroring, split/duplicate, Copy/Paste Attributes, dirty state and Undo/Redo | `tests/timeline/timeline_command_service_test.cpp` (`creative-suite-main-editor-timeline-command-service`) and `tests/ui/edit_workspace_controller_test.cpp` (`creative-suite-main-editor-edit-workspace-controller`) |
 | Live Windows device playback, meter movement and Preview/audio synchronization | Manual check below; pending device validation |
 | Bundled pt-BR labels and shortcut descriptions | `creative-suite-video-editor-translation-catalog` build target and `creative-suite-main-editor-translation-catalog` test; native visual review remains pending |
 
+Windows Debug verification (2026-10-25): all seven selected CTest entries passed,
+covering the MainWindow Inspector, project persistence, audio mix, timeline
+commands, Edit controller and Hub backup format. The Hub backup manager and
+format tests also passed together, and a final MainWindow plus translation
+catalog run passed 2/2. The canonical Debug Video Editor and Hub targets built
+successfully. The directly runnable Video Editor output is
+`build/apps/video-editor/Debug/creative-suite-video-editor.exe` (15,837,696
+bytes; modified 2026-10-25 21:02:33 UTC-03:00); Hub is
+`build/apps/hub/Debug/creative-suite-hub.exe` (2,661,888 bytes; modified
+2026-10-25 20:59:52 UTC-03:00). Native device playback and visual acceptance
+remain pending.
+
 Manual check: open a project with two Audio tracks and video. Switch Edit to
-Audio and confirm the audio-only Timeline and prior Edit dock layout. Open a
-track's Effects editor, add and enable an EQ, change its high shelf, add a
+Audio and confirm the audio-only Timeline and prior Edit dock layout. In Edit,
+select a video clip with linked audio, open the Inspector Audio tab, add and
+enable an EQ, change its high shelf, add a compressor, and audition the clip.
+Save and reopen, then export; verify both linked clips retain the same ordered
+chain and Preview/export use the same result. Split or duplicate the clip and
+copy/paste its Audio Effects attribute to another compatible clip; verify each
+operation is undoable. Open a track's Effects editor, add and enable an EQ, change its high shelf, add a
 compressor, reorder the chain, and compare Preview during playback. Save,
 reopen, and export; verify the order/parameters persist and Preview matches
 export for the saved effects chain. Create
@@ -398,7 +416,7 @@ pending separately from automated offscreen checks.
 | Edit/Fusion RGBA synchronization, multiple-node selection, node removal, ordinary video/image graphs, canceled dialogs and real video/audio/collision drops | `creative-suite-main-editor-background-generator` |
 | Dirty state, color Undo to saved baseline and cancellation in the real application | `creative-suite-main-editor-main-window` |
 | Pre-encoding Preview/export parity for the white preset and colored/transparent backgrounds over lower tracks | `creative-suite-main-editor-fusion-composition` |
-| Named compositions, graph masks/generators/inputs and signed offsets across backup/restoration; future CSP v43 rejection | `hub-backup-format-test`, `hub-backup-manager-test` |
+| Named compositions, graph masks/generators/inputs and signed offsets across backup/restoration; future CSP v44 rejection | `hub-backup-format-test`, `hub-backup-manager-test` |
 
 The generator drag test sends actual Qt drag/drop events directly, without
 showing the standalone TimelineWidget. In this Windows/offscreen fixture,
@@ -483,7 +501,7 @@ Background/Text/Merge parity through the native graph backend and requires that
 GPU work actually occurred. The main-window test checks insertion/effects dirty
 state, save and undo to the saved baseline. `hub-backup-format-test` preserves
 generator data, graph input paths and signed offsets through relocated restore;
-`hub-backup-manager-test` rejects future CSP v43. Existing graph, timeline, playback,
+`hub-backup-manager-test` rejects future CSP v44. Existing graph, timeline, playback,
 project, autosave, Inspector, adjustment and export gates remain relevant.
 
 CSP v27 also round-trips optional cubic Bezier easing for clip/node curves;

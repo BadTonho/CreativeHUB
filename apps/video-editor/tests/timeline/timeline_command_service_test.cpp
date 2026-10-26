@@ -1124,6 +1124,51 @@ void runLinkedVideoAudioCommands() {
                     .clips[audio_location->clip_index].timeline_start_frame == 30,
             "Moving a linked video did not move its audio companion.");
 
+    timeline::AudioEffectInstance clip_equalizer;
+    clip_equalizer.enabled = true;
+    auto clip_eq_parameters = timeline::AudioEqualizerParameters{};
+    clip_eq_parameters.mid_gain_db = 5.0;
+    clip_equalizer.parameters = clip_eq_parameters;
+    timeline::AudioEffectInstance clip_compressor;
+    clip_compressor.parameters = timeline::AudioCompressorParameters{};
+    const std::vector<timeline::AudioEffectInstance> clip_chain{
+        clip_equalizer, clip_compressor};
+    const auto clip_effect_edit = service.execute(
+        application::SetClipAudioEffectsCommand{video_id, clip_chain});
+    video_location = session.timeline().locateClip(video_id);
+    audio_location = session.timeline().locateClip(audio_id);
+    require(clip_effect_edit.changed() && clip_effect_edit.invalidate_playback,
+            "The clip audio effect command did not report a playback edit.");
+    require(session.timeline().tracks()[video_location->track_index]
+                    .clips[video_location->clip_index].audio_effects == clip_chain &&
+                session.timeline().tracks()[audio_location->track_index]
+                    .clips[audio_location->clip_index].audio_effects == clip_chain,
+            "Clip audio effects were not saved to the project and mirrored to the linked companion.");
+    require(service.undo().changed() &&
+                session.timeline().tracks()[session.timeline().locateClip(video_id)->track_index]
+                    .clips[session.timeline().locateClip(video_id)->clip_index]
+                    .audio_effects.empty() &&
+                session.timeline().tracks()[session.timeline().locateClip(audio_id)->track_index]
+                    .clips[session.timeline().locateClip(audio_id)->clip_index]
+                    .audio_effects.empty() &&
+                service.redo().changed() &&
+                session.timeline().tracks()[session.timeline().locateClip(audio_id)->track_index]
+                    .clips[session.timeline().locateClip(audio_id)->clip_index]
+                    .audio_effects == clip_chain,
+            "Undo/Redo did not restore one mirrored clip audio effects edit.");
+    auto duplicate_clip_chain = clip_chain;
+    duplicate_clip_chain.push_back(clip_equalizer);
+    auto invalid_clip_chain = clip_chain;
+    std::get<timeline::AudioEqualizerParameters>(
+        invalid_clip_chain.front().parameters).high_shelf_gain_db = 19.0;
+    require(service.execute(application::SetClipAudioEffectsCommand{
+                video_id, duplicate_clip_chain}).reason ==
+                    application::EditReason::InvalidValue &&
+                service.execute(application::SetClipAudioEffectsCommand{
+                    video_id, invalid_clip_chain}).reason ==
+                    application::EditReason::InvalidValue,
+            "Clip effects accepted duplicate types or out-of-range parameters.");
+
     const auto split = service.execute(application::SplitClipCommand{video_id, 30});
     require(split.changed() && split.affected_clip_ids.size() == 4,
             "Splitting a linked video did not split both synchronized clips.");
@@ -1145,6 +1190,11 @@ void runLinkedVideoAudioCommands() {
                 session.timeline().tracks()[right_audio_location->track_index]
                     .clips[right_audio_location->clip_index].linked_clip_id == right_video_id,
             "The two split pairs do not retain reciprocal links.");
+    require(session.timeline().tracks()[right_video_location->track_index]
+                    .clips[right_video_location->clip_index].audio_effects == clip_chain &&
+                session.timeline().tracks()[right_audio_location->track_index]
+                    .clips[right_audio_location->clip_index].audio_effects == clip_chain,
+            "Splitting a linked video/audio pair did not preserve the clip effect chain.");
     require(service.undo().changed() && session.timeline().clipCount() == 2 &&
                 service.redo().changed() && session.timeline().clipCount() == 4,
             "Undo/Redo did not restore both halves of a linked split.");
@@ -1554,6 +1604,12 @@ void runClipAttributeCommands() {
     attributes.audio_gain = source_video.audio_gain;
     attributes.audio_muted = source_video.audio_muted;
     attributes.audio_volume_envelope = source_audio.audio_gain_keyframes;
+    timeline::AudioEffectInstance attribute_eq;
+    attribute_eq.enabled = true;
+    auto attribute_eq_parameters = timeline::AudioEqualizerParameters{};
+    attribute_eq_parameters.high_shelf_gain_db = 4.0;
+    attribute_eq.parameters = attribute_eq_parameters;
+    attributes.audio_effects = {attribute_eq};
 
     const auto short_location = session.timeline().locateClip(short_video_id);
     require(short_location.has_value(), "The short paste target could not be located.");
@@ -1562,7 +1618,7 @@ void runClipAttributeCommands() {
     const auto history_before_short_paste = service.undoCount();
     const auto pasted_short = service.execute(application::ApplyClipAttributesCommand{
         short_video_id, attributes,
-        timeline::ClipAttributeOptions{false, true, true, true, false}});
+        timeline::ClipAttributeOptions{false, true, true, true, false, true}});
     const auto short_video_after = session.timeline().locateClip(short_video_id);
     const auto short_audio_after = session.timeline().locateClip(short_audio_id);
     require(pasted_short.changed() && short_video_after.has_value() &&
@@ -1579,6 +1635,9 @@ void runClipAttributeCommands() {
     require(pasted_video.audio_gain == 0.6 && pasted_video.audio_muted &&
                 pasted_audio.audio_gain == 0.6 && pasted_audio.audio_muted,
             "Short-target paste did not apply gain and mute to the linked pair.");
+    require(pasted_video.audio_effects == attributes.audio_effects &&
+                pasted_audio.audio_effects == attributes.audio_effects,
+            "Audio Effects copy/paste did not apply the same chain to a linked pair.");
     require(pasted_audio.audio_gain_keyframes ==
                 std::vector<timeline::AudioGainKeyframe>{{0, 0.0}, {30, 0.5}},
             "Short-target paste did not sample the audio envelope at the target end.");
@@ -1630,7 +1689,7 @@ void runClipAttributeCommands() {
     const auto text_clip_id = text_target.affected_clip_ids.front();
     const auto audio_paste = service.execute(application::ApplyClipAttributesCommand{
         audio_clip_id, attributes,
-        timeline::ClipAttributeOptions{false, false, true, true, false}});
+        timeline::ClipAttributeOptions{false, false, true, true, false, true}});
     const auto audio_location = session.timeline().locateClip(audio_clip_id);
     require(audio_paste.changed() && audio_location.has_value() &&
                 session.timeline().tracks()[audio_location->track_index]
@@ -1639,7 +1698,10 @@ void runClipAttributeCommands() {
                     .clips[audio_location->clip_index].audio_muted &&
                 session.timeline().tracks()[audio_location->track_index]
                     .clips[audio_location->clip_index].audio_gain_keyframes ==
-                    std::vector<timeline::AudioGainKeyframe>{{0, 0.0}, {60, 1.0}},
+                    std::vector<timeline::AudioGainKeyframe>{{0, 0.0}, {60, 1.0}} &&
+                session.timeline().tracks()[audio_location->track_index]
+                    .clips[audio_location->clip_index].audio_effects ==
+                    attributes.audio_effects,
             "Audio attributes could not be pasted from a linked video into an audio-only clip.");
 
     const auto audio_before_invalid = session.timeline().tracks()[audio_location->track_index]
@@ -1676,7 +1738,7 @@ void runClipAttributeCommands() {
     const auto batch_paste = service.execute(
         application::ApplyClipAttributesBatchCommand{
             mixed_targets, attributes,
-            timeline::ClipAttributeOptions{true, true, true, true, true}});
+            timeline::ClipAttributeOptions{true, true, true, true, true, true}});
     const auto short_video_batch_location = session.timeline().locateClip(short_video_id);
     const auto short_audio_batch_location = session.timeline().locateClip(short_audio_id);
     const auto audio_batch_location = session.timeline().locateClip(audio_clip_id);
@@ -1700,8 +1762,11 @@ void runClipAttributeCommands() {
                 batch_video.transform.position_x == attributes.transform.position_x &&
                 batch_video_audio.audio_gain_keyframes ==
                     std::vector<timeline::AudioGainKeyframe>{{0, 0.0}, {30, 0.5}} &&
+                batch_video.audio_effects == attributes.audio_effects &&
+                batch_video_audio.audio_effects == attributes.audio_effects &&
                 batch_audio.effects.empty() && batch_audio.audio_gain == 0.6 &&
                 batch_audio.audio_muted &&
+                batch_audio.audio_effects == attributes.audio_effects &&
                 batch_audio.audio_gain_keyframes ==
                     std::vector<timeline::AudioGainKeyframe>{{0, 0.0}, {60, 1.0}} &&
                 batch_text.transform.position_x == attributes.transform.position_x &&

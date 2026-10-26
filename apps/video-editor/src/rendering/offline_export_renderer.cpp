@@ -851,10 +851,12 @@ std::vector<media::TimelineAudioMixClip> audioMixClips(
             clip.audio_gain_keyframes});
         auto& audio_clip = result.back();
         audio_clip.track_id = render_clip.track->track_id;
+        audio_clip.clip_id = clip.clip_id;
         audio_clip.track_pan = render_clip.track->audio_pan;
         audio_clip.output_bus_id = render_clip.track->output_bus_id;
         audio_clip.audio_sends = render_clip.track->audio_sends;
         audio_clip.audio_effects = render_clip.track->audio_effects;
+        audio_clip.clip_audio_effects = clip.audio_effects;
         audio_clip.source_channel_count = render_clip.audio != nullptr
             ? render_clip.audio->source_channel_count() : 2;
     }

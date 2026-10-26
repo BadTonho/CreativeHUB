@@ -107,6 +107,7 @@ struct CompositionLayerSpec {
     std::optional<timeline::AudioBusId> output_bus_id;
     std::vector<timeline::AudioSend> audio_sends;
     std::vector<timeline::AudioEffectInstance> track_audio_effects;
+    std::vector<timeline::AudioEffectInstance> clip_audio_effects;
     int source_audio_channel_count = 2;
 };
 

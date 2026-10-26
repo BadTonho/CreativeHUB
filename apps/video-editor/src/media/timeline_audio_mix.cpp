@@ -78,8 +78,28 @@ struct TrackDspState {
     double compressor_reduction_db = 0.0;
     int sample_rate = 0;
     int channel_count = 0;
+    std::int64_t next_source_sample_index = -1;
     std::vector<timeline::AudioEffectInstance> configured_effects;
 };
+
+bool hasActiveAudioEffectProcessing(
+    const std::vector<timeline::AudioEffectInstance>& effects) noexcept {
+    return std::any_of(effects.begin(), effects.end(),
+        [](const timeline::AudioEffectInstance& effect) {
+            if (!effect.enabled) return false;
+            if (const auto* eq = std::get_if<
+                    timeline::AudioEqualizerParameters>(&effect.parameters)) {
+                return eq->low_shelf_gain_db != 0.0 ||
+                    eq->mid_gain_db != 0.0 || eq->high_shelf_gain_db != 0.0;
+            }
+            if (const auto* compressor = std::get_if<
+                    timeline::AudioCompressorParameters>(&effect.parameters)) {
+                return compressor->ratio != 1.0 ||
+                    compressor->makeup_gain_db != 0.0;
+            }
+            return false;
+        });
+}
 
 BiquadCoefficients normalizeBiquad(
     double b0, double b1, double b2,
@@ -248,7 +268,7 @@ void runTrackEffectChain(
     }
 }
 
-void processTrackEffects(
+void processEffectChain(
     std::vector<float>& samples,
     int channel_count,
     int sample_rate,
@@ -344,6 +364,7 @@ std::optional<std::int64_t> sampleAtSourceTimeUs(
 
 struct TimelineAudioMixState::Impl {
     std::unordered_map<timeline::TrackId, TrackDspState> tracks;
+    std::unordered_map<timeline::ClipId, TrackDspState> clips;
 };
 
 TimelineAudioMixState::TimelineAudioMixState()
@@ -355,7 +376,10 @@ TimelineAudioMixState& TimelineAudioMixState::operator=(
     TimelineAudioMixState&&) noexcept = default;
 
 void TimelineAudioMixState::reset() noexcept {
-    if (impl_ != nullptr) impl_->tracks.clear();
+    if (impl_ != nullptr) {
+        impl_->tracks.clear();
+        impl_->clips.clear();
+    }
 }
 
 std::vector<TimelineAudioMixSpan> planTimelineAudioMix(
@@ -381,7 +405,7 @@ std::vector<TimelineAudioMixSpan> planTimelineAudioMix(
             clip.kind == timeline::ClipKind::Audio;
         if (!supported_audio_kind || !clip.has_audio ||
             (clip.kind == timeline::ClipKind::Video && clip.audio_extracted) ||
-            clip.track_muted || clip.clip_muted || clip.duration_frames <= 0 ||
+            clip.duration_frames <= 0 ||
             clip.timeline_start_frame < 0 || clip.source_start_frame < 0 ||
             clip.timeline_start_frame >
                 std::numeric_limits<std::int64_t>::max() - clip.duration_frames ||
@@ -389,6 +413,15 @@ std::vector<TimelineAudioMixSpan> planTimelineAudioMix(
              (!std::isfinite(clip.source_frame_rate) || clip.source_frame_rate <= 0.0)) ||
             (clip.kind == timeline::ClipKind::Audio &&
              (clip.source_start_time_us < 0 || clip.source_duration_time_us <= 0))) {
+            continue;
+        }
+
+        const bool clip_effect_processing =
+            hasActiveAudioEffectProcessing(clip.clip_audio_effects);
+        const bool track_effect_processing =
+            hasActiveAudioEffectProcessing(clip.audio_effects);
+        if ((clip.track_muted || clip.clip_muted) &&
+            !clip_effect_processing && !track_effect_processing) {
             continue;
         }
 
@@ -400,8 +433,11 @@ std::vector<TimelineAudioMixSpan> planTimelineAudioMix(
                     send.gain > 0.0;
             });
         if (!std::isfinite(gain) ||
-            (gain <= 0.0 && !has_audible_pre_fader_send) ||
-            clip.clip_gain <= 0.0) continue;
+            (gain <= 0.0 && !has_audible_pre_fader_send &&
+             !clip_effect_processing) ||
+            (clip.clip_gain <= 0.0 && !clip_effect_processing)) {
+            continue;
+        }
 
         auto audio_start_frame = clip.timeline_start_frame;
         for (const auto& transition : transitions) {
@@ -575,12 +611,72 @@ void TimelineAudioMixAccumulator::accumulate(
     if (sample_rate_ == 0) sample_rate_ = chunk.sample_rate;
     if (sample_rate_ != chunk.sample_rate) return;
 
+    const auto chunk_sample_count = static_cast<std::int64_t>(chunk.sampleCount());
+    if (chunk_sample_count <= 0 || chunk.first_sample_index < 0 ||
+        chunk.first_sample_index > std::numeric_limits<std::int64_t>::max() -
+            chunk_sample_count || span.source_start_sample < 0 ||
+        span.sample_count <= 0 || span.source_start_sample >
+            std::numeric_limits<std::int64_t>::max() - span.sample_count) {
+        return;
+    }
+    const auto source_begin = std::max(
+        span.source_start_sample, chunk.first_sample_index);
+    const auto source_end = std::min(
+        span.source_start_sample + span.sample_count,
+        chunk.first_sample_index + chunk_sample_count);
+    if (source_begin >= source_end) return;
+
+    std::vector<float> processed_clip_samples;
+    bool has_processed_clip_samples = false;
+    auto clip_dsp = persistent_state_->impl_->clips.find(clip.clip_id);
+    const bool has_clip_dsp = clip_dsp != persistent_state_->impl_->clips.end();
+    if (!clip.clip_audio_effects.empty() || has_clip_dsp) {
+        auto& state = persistent_state_->impl_->clips[clip.clip_id];
+        if (state.next_source_sample_index >= 0 &&
+            state.next_source_sample_index != source_begin) {
+            state = {};
+        }
+        const bool format_changed = state.sample_rate != chunk.sample_rate ||
+            state.channel_count != channel_count_;
+        const bool chain_changed = state.configured_effects !=
+            clip.clip_audio_effects;
+        const bool process_effects = hasActiveAudioEffectProcessing(
+            clip.clip_audio_effects);
+        if (process_effects || chain_changed || format_changed) {
+            const auto sample_count = static_cast<std::size_t>(source_end - source_begin);
+            const auto sample_offset = static_cast<std::size_t>(
+                source_begin - chunk.first_sample_index) *
+                static_cast<std::size_t>(channel_count_);
+            processed_clip_samples.resize(sample_count *
+                static_cast<std::size_t>(channel_count_));
+            for (std::size_t index = 0; index < processed_clip_samples.size(); ++index) {
+                processed_clip_samples[index] = static_cast<float>(
+                    chunk.samples[sample_offset + index]) / 32768.0F;
+            }
+            processEffectChain(processed_clip_samples, channel_count_,
+                chunk.sample_rate, clip.clip_audio_effects, state);
+            has_processed_clip_samples = true;
+        } else {
+            state.sample_rate = chunk.sample_rate;
+            state.channel_count = channel_count_;
+            state.configured_effects = clip.clip_audio_effects;
+        }
+        state.next_source_sample_index = source_end;
+    }
+
     std::vector<float> pre_fader(
         sample_count_ * static_cast<std::size_t>(channel_count_), 0.0F);
     auto pre_span = span;
     pre_span.gain = span.clip_gain;
-    if (!clip.clip_muted)
-        accumulateTimelineAudioChunk(pre_span, chunk, pre_fader, channel_count_);
+    if (!clip.clip_muted) {
+        if (has_processed_clip_samples) {
+            accumulateTimelineAudioFloatSamples(
+                pre_span, processed_clip_samples, source_begin,
+                pre_fader, channel_count_);
+        } else {
+            accumulateTimelineAudioChunk(pre_span, chunk, pre_fader, channel_count_);
+        }
+    }
 
     std::vector<float> post_fader = pre_fader;
     auto track_buffer = track_samples_.try_emplace(
@@ -637,27 +733,12 @@ TimelineAudioMixResult TimelineAudioMixAccumulator::finish() {
                 return send.gain > 0.0 && (!any_solo_ || track_solo ||
                     busSoloed(send.destination_bus_id));
             });
-        const bool has_effect_processing = std::any_of(
-            track.effects.begin(), track.effects.end(),
-            [](const timeline::AudioEffectInstance& effect) {
-                if (!effect.enabled) return false;
-                if (const auto* eq = std::get_if<
-                        timeline::AudioEqualizerParameters>(&effect.parameters)) {
-                    return eq->low_shelf_gain_db != 0.0 ||
-                        eq->mid_gain_db != 0.0 ||
-                        eq->high_shelf_gain_db != 0.0;
-                }
-                if (const auto* compressor = std::get_if<
-                        timeline::AudioCompressorParameters>(&effect.parameters)) {
-                    return compressor->ratio != 1.0 ||
-                        compressor->makeup_gain_db != 0.0;
-                }
-                return false;
-            });
+        const bool has_effect_processing =
+            hasActiveAudioEffectProcessing(track.effects);
         auto& dsp_state = persistent_state_->impl_->tracks[track_id];
         const bool effect_chain_changed = dsp_state.configured_effects != track.effects;
         if (has_effect_processing || effect_chain_changed) {
-            processTrackEffects(track.pre_fader, channel_count_, sample_rate_,
+            processEffectChain(track.pre_fader, channel_count_, sample_rate_,
                 track.effects, dsp_state);
             track.post_fader = track.pre_fader;
             for (std::size_t offset = 0; offset +
@@ -744,15 +825,20 @@ TimelineAudioMixResult TimelineAudioMixAccumulator::finish() {
     return result;
 }
 
-void accumulateTimelineAudioChunk(
+namespace {
+
+template <typename Sample, typename Normalize>
+void accumulateTimelineAudioSamples(
     const TimelineAudioMixSpan& span,
-    const AudioPcmChunk& chunk,
+    std::span<const Sample> source_samples,
+    std::int64_t first_source_sample,
     std::span<float> mixed,
-    int output_channel_count) {
+    int output_channel_count,
+    Normalize normalize) {
     if (span.sample_count <= 0 || span.source_start_sample < 0 ||
-        span.destination_start_sample < 0 || chunk.channel_count <= 0 ||
-        chunk.channel_count != output_channel_count || output_channel_count <= 0 ||
-        chunk.first_sample_index < 0) {
+        span.destination_start_sample < 0 || output_channel_count <= 0 ||
+        first_source_sample < 0 ||
+        source_samples.size() % static_cast<std::size_t>(output_channel_count) != 0) {
         return;
     }
     const auto destination_sample_count =
@@ -761,19 +847,19 @@ void accumulateTimelineAudioChunk(
         destination_sample_count) {
         return;
     }
-
-    const auto chunk_sample_count = static_cast<std::int64_t>(chunk.sampleCount());
-    if (chunk_sample_count <= 0 ||
-        chunk.first_sample_index > std::numeric_limits<std::int64_t>::max() -
-            chunk_sample_count ||
+    const auto source_sample_count = static_cast<std::int64_t>(
+        source_samples.size() / static_cast<std::size_t>(output_channel_count));
+    if (source_sample_count <= 0 ||
+        first_source_sample > std::numeric_limits<std::int64_t>::max() -
+            source_sample_count ||
         span.source_start_sample > std::numeric_limits<std::int64_t>::max() -
             span.sample_count) {
         return;
     }
-    const auto source_begin = std::max(span.source_start_sample, chunk.first_sample_index);
+    const auto source_begin = std::max(span.source_start_sample, first_source_sample);
     const auto source_end = std::min(
         span.source_start_sample + span.sample_count,
-        chunk.first_sample_index + chunk_sample_count);
+        first_source_sample + source_sample_count);
     if (source_begin >= source_end) return;
 
     const auto destination_begin = span.destination_start_sample +
@@ -786,43 +872,71 @@ void accumulateTimelineAudioChunk(
 
     for (std::int64_t index = 0; index < count; ++index) {
         const auto source_offset = static_cast<std::size_t>(
-            source_begin - chunk.first_sample_index + index) *
+            source_begin - first_source_sample + index) *
             static_cast<std::size_t>(output_channel_count);
         const auto destination_offset = static_cast<std::size_t>(
             destination_begin + index) * static_cast<std::size_t>(output_channel_count);
-        for (int channel = 0; channel < output_channel_count; ++channel) {
-            const auto local_frame = span.local_frame_at_destination_start +
-                static_cast<double>(destination_begin + index -
-                    span.destination_start_sample) * span.frames_per_sample;
-            const auto envelope_gain = timeline::evaluateAudioGainEnvelope(
-                span.audio_gain_keyframes, local_frame);
-            const auto timeline_sample = span.timeline_start_sample +
-                destination_begin + index;
-            double transition_gain = 1.0;
-            for (const auto& fade : span.transition_fades) {
-                if (timeline_sample < fade.transition_start_sample ||
-                    timeline_sample >= fade.transition_end_sample) {
-                    continue;
-                }
-                const auto sample_duration = fade.transition_end_sample -
-                    fade.transition_start_sample;
-                if (sample_duration <= 0) continue;
-                const auto fraction = std::clamp(
-                    static_cast<double>(timeline_sample -
-                        fade.transition_start_sample) /
-                        static_cast<double>(sample_duration),
-                    0.0, 1.0);
-                const auto angle = fraction * std::numbers::pi / 2.0;
-                transition_gain *= fade.incoming
-                    ? std::sin(angle)
-                    : std::cos(angle);
+        const auto local_frame = span.local_frame_at_destination_start +
+            static_cast<double>(destination_begin + index -
+                span.destination_start_sample) * span.frames_per_sample;
+        const auto envelope_gain = timeline::evaluateAudioGainEnvelope(
+            span.audio_gain_keyframes, local_frame);
+        const auto timeline_sample = span.timeline_start_sample +
+            destination_begin + index;
+        double transition_gain = 1.0;
+        for (const auto& fade : span.transition_fades) {
+            if (timeline_sample < fade.transition_start_sample ||
+                timeline_sample >= fade.transition_end_sample) {
+                continue;
             }
-            mixed[destination_offset + static_cast<std::size_t>(channel)] +=
-                static_cast<float>(chunk.samples[source_offset +
-                    static_cast<std::size_t>(channel)]) / 32768.0F *
-                static_cast<float>(span.gain * envelope_gain * transition_gain);
+            const auto sample_duration = fade.transition_end_sample -
+                fade.transition_start_sample;
+            if (sample_duration <= 0) continue;
+            const auto fraction = std::clamp(
+                static_cast<double>(timeline_sample - fade.transition_start_sample) /
+                    static_cast<double>(sample_duration),
+                0.0, 1.0);
+            const auto angle = fraction * std::numbers::pi / 2.0;
+            transition_gain *= fade.incoming ? std::sin(angle) : std::cos(angle);
+        }
+        const auto gain = static_cast<float>(
+            span.gain * envelope_gain * transition_gain);
+        for (int channel = 0; channel < output_channel_count; ++channel) {
+            const auto source_index = source_offset +
+                static_cast<std::size_t>(channel);
+            const auto destination_index = destination_offset +
+                static_cast<std::size_t>(channel);
+            mixed[destination_index] += normalize(source_samples[source_index]) * gain;
         }
     }
 }
 
+}  // namespace
+
+void accumulateTimelineAudioChunk(
+    const TimelineAudioMixSpan& span,
+    const AudioPcmChunk& chunk,
+    std::span<float> mixed,
+    int output_channel_count) {
+    if (chunk.channel_count != output_channel_count || chunk.first_sample_index < 0) {
+        return;
+    }
+    accumulateTimelineAudioSamples(
+        span, std::span<const std::int16_t>(chunk.samples),
+        chunk.first_sample_index, mixed, output_channel_count,
+        [](std::int16_t sample) {
+            return static_cast<float>(sample) / 32768.0F;
+        });
+}
+
+void accumulateTimelineAudioFloatSamples(
+    const TimelineAudioMixSpan& span,
+    std::span<const float> samples,
+    std::int64_t first_sample_index,
+    std::span<float> mixed,
+    int output_channel_count) {
+    accumulateTimelineAudioSamples(
+        span, samples, first_sample_index, mixed, output_channel_count,
+        [](float sample) { return sample; });
+}
 } // namespace media

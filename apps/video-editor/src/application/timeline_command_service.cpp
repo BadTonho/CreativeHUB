@@ -174,7 +174,7 @@ bool validTransformProperty(timeline::TransformProperty property) noexcept {
 
 bool anyAttributeSelected(const timeline::ClipAttributeOptions& options) noexcept {
     return options.effects || options.transform || options.audio_gain_and_mute ||
-        options.audio_volume_envelope || options.text;
+        options.audio_volume_envelope || options.text || options.audio_effects;
 }
 
 timeline::TransformKeyframes keyframesForDuration(
@@ -1536,6 +1536,54 @@ TimelineEditResult TimelineCommandService::execute(const SetClipAudioCommand& co
     return output;
 }
 
+TimelineEditResult TimelineCommandService::execute(
+    const SetClipAudioEffectsCommand& command) {
+    const auto location = session_.timeline_.locateClip(command.clip_id);
+    if (!location) return result(EditStatus::Rejected, EditReason::InvalidTarget);
+    const auto peer_id = session_.timeline_.tracks()[location->track_index]
+        .clips[location->clip_index].linked_clip_id;
+    const auto before = session_.captureEditState();
+    const auto mutation = session_.timeline_.setClipAudioEffects(
+        location->track_index, location->clip_index, command.effects);
+    if (mutation != timeline::AudioParameterResult::Changed &&
+        mutation != timeline::AudioParameterResult::NoChange) {
+        return result(EditStatus::Rejected, reasonForAudio(mutation));
+    }
+    bool changed = mutation == timeline::AudioParameterResult::Changed;
+    if (peer_id.has_value()) {
+        const auto peer_location = session_.timeline_.locateClip(*peer_id);
+        if (!peer_location.has_value()) {
+            session_.restoreEditState(before);
+            return result(EditStatus::Rejected, EditReason::InvalidTarget);
+        }
+        const auto peer_mutation = session_.timeline_.setClipAudioEffects(
+            peer_location->track_index, peer_location->clip_index,
+            command.effects);
+        if (peer_mutation != timeline::AudioParameterResult::Changed &&
+            peer_mutation != timeline::AudioParameterResult::NoChange) {
+            session_.restoreEditState(before);
+            return result(EditStatus::Rejected, reasonForAudio(peer_mutation));
+        }
+        changed |= peer_mutation == timeline::AudioParameterResult::Changed;
+    }
+    if (!changed) return result(EditStatus::NoChange);
+    recordSuccessfulEdit(before);
+    auto output = result(EditStatus::Applied);
+    output.affected_track_ids.push_back(
+        session_.timeline_.tracks()[location->track_index].track_id);
+    output.affected_clip_ids.push_back(command.clip_id);
+    if (peer_id.has_value()) {
+        output.affected_clip_ids.push_back(*peer_id);
+        const auto peer_location = session_.timeline_.locateClip(*peer_id);
+        if (peer_location.has_value()) {
+            output.affected_track_ids.push_back(
+                session_.timeline_.tracks()[peer_location->track_index].track_id);
+        }
+    }
+    output.invalidate_playback = true;
+    return output;
+}
+
 TimelineEditResult TimelineCommandService::execute(const SetTrackAudioCommand& command) {
     const auto track = session_.timeline_.locateTrack(command.track_id);
     if (!track) return result(EditStatus::Rejected, EditReason::InvalidTarget);
@@ -1821,7 +1869,8 @@ TimelineEditResult TimelineCommandService::execute(
         (command.options.audio_gain_and_mute && !compatibility.audio_gain_and_mute) ||
         (command.options.audio_volume_envelope &&
          !compatibility.audio_volume_envelope) ||
-        (command.options.text && !compatibility.text)) {
+        (command.options.text && !compatibility.text) ||
+        (command.options.audio_effects && !compatibility.audio_effects)) {
         return result(EditStatus::Rejected, EditReason::InvalidTarget);
     }
 
@@ -1868,6 +1917,28 @@ TimelineEditResult TimelineCommandService::execute(
             const auto peer_mutation = candidate.setClipAudio(
                 linked->track_index, linked->clip_index,
                 command.attributes.audio_gain, command.attributes.audio_muted);
+            if (peer_mutation != timeline::AudioParameterResult::Changed &&
+                peer_mutation != timeline::AudioParameterResult::NoChange) {
+                return result(EditStatus::Rejected, reasonForAudio(peer_mutation));
+            }
+        }
+    }
+    if (command.options.audio_effects) {
+        const auto mutation = candidate.setClipAudioEffects(
+            target_location->track_index, target_location->clip_index,
+            command.attributes.audio_effects);
+        if (mutation != timeline::AudioParameterResult::Changed &&
+            mutation != timeline::AudioParameterResult::NoChange) {
+            return result(EditStatus::Rejected, reasonForAudio(mutation));
+        }
+        if (target_clip.linked_clip_id.has_value()) {
+            const auto linked = candidate.locateClip(*target_clip.linked_clip_id);
+            if (!linked.has_value()) {
+                return result(EditStatus::Rejected, EditReason::InvalidTarget);
+            }
+            const auto peer_mutation = candidate.setClipAudioEffects(
+                linked->track_index, linked->clip_index,
+                command.attributes.audio_effects);
             if (peer_mutation != timeline::AudioParameterResult::Changed &&
                 peer_mutation != timeline::AudioParameterResult::NoChange) {
                 return result(EditStatus::Rejected, reasonForAudio(peer_mutation));
@@ -2037,6 +2108,34 @@ TimelineEditResult TimelineCommandService::execute(
                     return result(EditStatus::Rejected, reasonForAudio(peer_mutation));
                 }
                 target_changed |= peer_mutation == timeline::AudioParameterResult::Changed;
+                linked_clip_changed |= peer_mutation ==
+                    timeline::AudioParameterResult::Changed;
+            }
+        }
+        if (command.options.audio_effects && compatibility.audio_effects) {
+            const auto mutation = candidate.setClipAudioEffects(
+                target_location->track_index, target_location->clip_index,
+                command.attributes.audio_effects);
+            if (mutation != timeline::AudioParameterResult::Changed &&
+                mutation != timeline::AudioParameterResult::NoChange) {
+                return result(EditStatus::Rejected, reasonForAudio(mutation));
+            }
+            target_changed |= mutation == timeline::AudioParameterResult::Changed;
+            if (target_clip.linked_clip_id.has_value()) {
+                const auto linked = candidate.locateClip(*target_clip.linked_clip_id);
+                if (!linked.has_value()) {
+                    return result(EditStatus::Rejected, EditReason::InvalidTarget);
+                }
+                const auto peer_mutation = candidate.setClipAudioEffects(
+                    linked->track_index, linked->clip_index,
+                    command.attributes.audio_effects);
+                if (peer_mutation != timeline::AudioParameterResult::Changed &&
+                    peer_mutation != timeline::AudioParameterResult::NoChange) {
+                    return result(EditStatus::Rejected,
+                        reasonForAudio(peer_mutation));
+                }
+                target_changed |= peer_mutation ==
+                    timeline::AudioParameterResult::Changed;
                 linked_clip_changed |= peer_mutation ==
                     timeline::AudioParameterResult::Changed;
             }

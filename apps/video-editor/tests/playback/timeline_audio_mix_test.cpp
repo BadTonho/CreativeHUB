@@ -495,6 +495,73 @@ std::vector<float> renderEffectTone(
         std::vector<timeline::AudioEffectInstance>{std::move(effect)});
 }
 
+std::vector<float> renderClipEffectTone(
+    double frequency_hz,
+    std::vector<timeline::AudioEffectInstance> effects,
+    double clip_gain = 1.0,
+    double amplitude = 8000.0) {
+    constexpr int sample_rate = 48000;
+    constexpr int frame_count = 9600;
+    media::TimelineAudioMixClip clip{
+        0, 0, 0, timeline::ClipKind::Audio, true,
+        0, 6, 0, 30.0, 1.0, clip_gain, false, false};
+    clip.source_duration_time_us = 200000;
+    clip.track_id = 90;
+    clip.clip_id = 901;
+    clip.source_channel_count = 2;
+    clip.clip_audio_effects = std::move(effects);
+    const auto spans = media::planTimelineAudioMix(
+        std::span<const media::TimelineAudioMixClip>(&clip, 1), {},
+        30.0, sample_rate, 0, frame_count);
+    require(spans.size() == 1,
+            "The test clip tone did not produce one audio mix span.");
+    media::AudioPcmChunk chunk;
+    chunk.sample_rate = sample_rate;
+    chunk.channel_count = 2;
+    chunk.first_sample_index = spans.front().source_start_sample;
+    chunk.samples.resize(static_cast<std::size_t>(frame_count) * 2U);
+    for (int frame = 0; frame < frame_count; ++frame) {
+        const auto value = static_cast<std::int16_t>(std::lround(
+            amplitude * std::sin(2.0 * std::numbers::pi * frequency_hz *
+                frame / sample_rate)));
+        chunk.samples[static_cast<std::size_t>(frame) * 2U] = value;
+        chunk.samples[static_cast<std::size_t>(frame) * 2U + 1U] = value;
+    }
+    media::TimelineAudioMixAccumulator accumulator(frame_count, 2, {});
+    accumulator.accumulate(spans.front(), clip, chunk);
+    return accumulator.finish().samples;
+}
+
+double steadyRms(const std::vector<float>& samples, std::size_t first_frame);
+
+void testClipEffectResponseAndPreEnvelopeOrder() {
+    timeline::AudioEffectInstance flat;
+    flat.enabled = true;
+    const auto dry = renderClipEffectTone(16000.0, {});
+    const auto flat_enabled = renderClipEffectTone(16000.0, {flat});
+    require(dry == flat_enabled,
+            "A flat clip EQ changed the source signal.");
+
+    auto eq = flat;
+    auto eq_parameters = timeline::AudioEqualizerParameters{};
+    eq_parameters.high_shelf_gain_db = 6.0;
+    eq.parameters = eq_parameters;
+    const auto boosted = renderClipEffectTone(16000.0, {eq});
+    require(steadyRms(boosted, 4000) > steadyRms(dry, 4000) * 1.6,
+            "The clip EQ did not process the selected source before track mixing.");
+
+    timeline::AudioEffectInstance compressor;
+    compressor.enabled = true;
+    compressor.parameters = timeline::AudioCompressorParameters{
+        -18.0, 4.0, 0.1, 100.0, 0.0};
+    const auto clip_compressed = renderClipEffectTone(
+        10000.0, {compressor}, 0.1, 16000.0);
+    const auto clip_dry = renderClipEffectTone(10000.0, {}, 0.1, 16000.0);
+    require(steadyRms(clip_compressed, 4000) <
+                steadyRms(clip_dry, 4000) * 0.8,
+            "The clip compressor ran after clip gain instead of before the clip envelope stage.");
+}
+
 double steadyRms(const std::vector<float>& samples, std::size_t first_frame) {
     double sum = 0.0;
     std::size_t count = 0;
@@ -642,6 +709,39 @@ std::vector<float> renderCompressorBlock(
     return accumulator.finish().samples;
 }
 
+std::vector<float> renderClipCompressorBlock(
+    media::TimelineAudioMixState& state,
+    std::int64_t block_start_sample,
+    std::int16_t value,
+    bool include_compressor) {
+    constexpr int sample_rate = 48000;
+    constexpr int frame_count = 4800;
+    media::TimelineAudioMixClip clip{
+        0, 0, 0, timeline::ClipKind::Audio, true,
+        0, 120, 0, 30.0, 1.0, 1.0, false, false};
+    clip.source_duration_time_us = 4'000'000;
+    clip.track_id = 93;
+    clip.clip_id = 9301;
+    clip.source_channel_count = 2;
+    if (include_compressor) {
+        timeline::AudioEffectInstance compressor;
+        compressor.enabled = true;
+        compressor.parameters = timeline::AudioCompressorParameters{
+            -18.0, 4.0, 0.1, 100.0, 0.0};
+        clip.clip_audio_effects = {compressor};
+    }
+    const auto spans = media::planTimelineAudioMix(
+        std::span<const media::TimelineAudioMixClip>(&clip, 1), {},
+        30.0, sample_rate, block_start_sample, frame_count);
+    require(spans.size() == 1,
+            "The per-clip compressor test did not produce an audio span.");
+    media::TimelineAudioMixAccumulator accumulator(
+        frame_count, 2, {}, &state);
+    accumulator.accumulate(spans.front(), clip,
+        constantChunk(spans.front().source_start_sample, value, frame_count));
+    return accumulator.finish().samples;
+}
+
 void testCompressorAndPersistentState() {
     media::TimelineAudioMixState continuing_state;
     static_cast<void>(renderCompressorBlock(
@@ -664,6 +764,17 @@ void testCompressorAndPersistentState() {
     const auto after_reset = renderCompressorBlock(reset_state, 0, 1000, true);
     require(steadyRms(after_reset, 3000) > steadyRms(continued, 3000),
             "Resetting the compressor state did not clear its release envelope.");
+
+    media::TimelineAudioMixState clip_state;
+    const auto clip_loud = renderClipCompressorBlock(
+        clip_state, 0, 20000, true);
+    const auto clip_continued = renderClipCompressorBlock(
+        clip_state, 4800, 1000, true);
+    const auto clip_reset = renderClipCompressorBlock(
+        clip_state, 0, 1000, true);
+    require(steadyRms(clip_loud, 3000) > 0.0 &&
+                steadyRms(clip_continued, 3000) < steadyRms(clip_reset, 3000) * 0.8,
+            "Per-clip compressor state did not persist across blocks or reset at a discontinuity.");
 }
 
 void testProcessedPreviewExportParityAndSendTaps() {
@@ -672,6 +783,7 @@ void testProcessedPreviewExportParityAndSendTaps() {
         0, 4, 0, 30.0, 1.0, 1.0, false, false};
     clip.source_duration_time_us = 133333;
     clip.track_id = 92;
+    clip.clip_id = 9201;
     clip.audio_sends = {{404, 0.5, timeline::AudioSendTap::PreFader},
                         {405, 0.5, timeline::AudioSendTap::PostFader}};
     clip.track_gain = 0.5;
@@ -681,6 +793,12 @@ void testProcessedPreviewExportParityAndSendTaps() {
     compressor.parameters = timeline::AudioCompressorParameters{
         -24.0, 2.0, 1.0, 100.0, 0.0};
     clip.audio_effects = {compressor};
+    timeline::AudioEffectInstance clip_eq;
+    clip_eq.enabled = true;
+    auto clip_eq_parameters = timeline::AudioEqualizerParameters{};
+    clip_eq_parameters.low_shelf_gain_db = 2.0;
+    clip_eq.parameters = clip_eq_parameters;
+    clip.clip_audio_effects = {clip_eq};
     auto configuration = media::TimelineAudioMixConfiguration{};
     configuration.buses = {{404, "Pre", 1.0, false, 0.0},
                            {405, "Post", 1.0, false, 0.0}};
@@ -718,6 +836,7 @@ int main() {
         testPanSoloMuteAndMasterMix();
         testStereoBalanceAndMultichannelPassThrough();
         testEqualizerResponseAndFlatCompatibility();
+        testClipEffectResponseAndPreEnvelopeOrder();
         testEffectParameterChangeIsSmoothedAcrossBlocks();
         testCompressorAndPersistentState();
         testProcessedPreviewExportParityAndSendTaps();
