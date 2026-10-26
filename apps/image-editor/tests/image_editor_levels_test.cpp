@@ -186,7 +186,7 @@ private slots:
         QVERIFY(s.saveDocument(path));
         QFile file(path); QVERIFY(file.open(QIODevice::ReadOnly));
         const auto json=QJsonDocument::fromJson(file.readAll()).object(); file.close();
-        QCOMPARE(json.value("version").toInt(),27);
+        QCOMPARE(json.value("version").toInt(),ImageDocumentStore::kCurrentDocumentVersion);
         const auto encoded_levels = json.value("layers").toArray().last().toObject()
             .value("adjustment").toObject();
         QVERIFY(encoded_levels.value("channels").isObject());
@@ -221,7 +221,7 @@ private slots:
             case 10: fields.insert("output_black",.5); break;
             case 11: fields.insert("hue",10); break;
             case 12: layer.insert("kind","raster"); break;
-            case 13: root.insert("version",28); break;
+            case 13: root.insert("version",ImageDocumentStore::kCurrentDocumentVersion + 1); break;
             case 14: {
                 auto channels=fields.value("channels").toObject();
                 auto red=channels.value("red").toObject(); red.insert("gamma",10.0);
@@ -259,7 +259,7 @@ private slots:
             QVERIFY(migrated.channels == LevelsParameters{}.channels);
             QVERIFY(restored.saveDocument(path));
             QVERIFY(file.open(QIODevice::ReadOnly));
-            QCOMPARE(QJsonDocument::fromJson(file.readAll()).object().value("version").toInt(),27);
+            QCOMPARE(QJsonDocument::fromJson(file.readAll()).object().value("version").toInt(),ImageDocumentStore::kCurrentDocumentVersion);
             file.close();
         }
         auto old=json;
@@ -274,7 +274,7 @@ private slots:
         QVERIFY(restored.openDocument(path));
         QVERIFY(restored.saveDocument(path));
         QVERIFY(file.open(QIODevice::ReadOnly));
-        QCOMPARE(QJsonDocument::fromJson(file.readAll()).object().value("version").toInt(),27);
+        QCOMPARE(QJsonDocument::fromJson(file.readAll()).object().value("version").toInt(),ImageDocumentStore::kCurrentDocumentVersion);
         file.close();
     }
 };

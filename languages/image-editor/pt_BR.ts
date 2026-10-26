@@ -3,6 +3,14 @@
 <TS version="2.1" language="pt_BR" sourcelanguage="en_US">
 <context>
     <name>ImageEditorUI</name>
+    <message><source>Global</source><translation>Global</translation></message>
+    <message><source>Reds</source><translation>Vermelhos</translation></message>
+    <message><source>Yellows</source><translation>Amarelos</translation></message>
+    <message><source>Greens</source><translation>Verdes</translation></message>
+    <message><source>Cyans</source><translation>Cianos</translation></message>
+    <message><source>Blues</source><translation>Azuis</translation></message>
+    <message><source>Magentas</source><translation>Magentas</translation></message>
+    <message><source>Color range</source><translation>Faixa de cor</translation></message>
     <message><source>Channel</source><translation>Canal</translation></message>
     <message><source>Levels channel</source><translation>Canal de Níveis</translation></message>
     <message><source>Curves channel</source><translation>Canal de Curvas</translation></message>

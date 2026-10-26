@@ -105,7 +105,7 @@ private slots:
         const auto path=directory.filePath("curves.cimg");QVERIFY(s.saveDocument(path));
         QFile file(path);QVERIFY(file.open(QIODevice::ReadOnly));
         const auto root=QJsonDocument::fromJson(file.readAll()).object();file.close();
-        QCOMPARE(root.value("version").toInt(),27);
+        QCOMPARE(root.value("version").toInt(),ImageDocumentStore::kCurrentDocumentVersion);
         const auto encoded_adjustment=root.value("layers").toArray().last().toObject().value("adjustment").toObject();
         QVERIFY(encoded_adjustment.value("channels").isObject());
         ImageDocumentSession restored;QVERIFY(restored.openDocument(path));QCOMPARE(restored.data(),s.data());
@@ -126,7 +126,7 @@ private slots:
             auto channels=adjustment.value("channels").toObject();
             switch(bad){
             case 0:modified.insert("version",25);break;
-            case 1:modified.insert("version",28);break;
+            case 1:modified.insert("version",ImageDocumentStore::kCurrentDocumentVersion + 1);break;
             case 2:adjustment.remove("points");break;
             case 3:first.insert("input",1);points[0]=first;break;
             case 4:first.insert("output",-1);points[0]=first;break;
@@ -154,7 +154,7 @@ private slots:
         QCOMPARE(std::get<CurvesParameters>(*restored.data().layers.back().adjustment),parameters);
         QVERIFY(restored.saveDocument(path));
         QVERIFY(file.open(QIODevice::ReadOnly));
-        QCOMPARE(QJsonDocument::fromJson(file.readAll()).object().value("version").toInt(),27);
+        QCOMPARE(QJsonDocument::fromJson(file.readAll()).object().value("version").toInt(),ImageDocumentStore::kCurrentDocumentVersion);
         file.close();
         auto legacy=root;auto layers=legacy.value("layers").toArray();
         auto layer=layers.last().toObject();
@@ -171,7 +171,7 @@ private slots:
         QVERIFY(restored.saveDocument(path));
         QVERIFY(file.open(QIODevice::ReadOnly));
         const auto migrated=QJsonDocument::fromJson(file.readAll()).object();
-        QCOMPARE(migrated.value("version").toInt(),27);
+        QCOMPARE(migrated.value("version").toInt(),ImageDocumentStore::kCurrentDocumentVersion);
         QVERIFY(migrated.value("layers").toArray().last().toObject()
             .value("adjustment").toObject().value("channels").isObject());
     }

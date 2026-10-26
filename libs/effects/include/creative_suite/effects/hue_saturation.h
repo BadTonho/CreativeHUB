@@ -10,19 +10,29 @@ struct ColorizeParameters {
     int lightness = 0;
     bool operator==(const ColorizeParameters&) const = default;
 };
-// Global encoded-sRGB HSL controls. Hue is a signed rotation in degrees;
-// saturation/lightness move toward zero or one by signed percent. Colorize
-// stores an independent absolute HSL target and an enable flag.
+struct HueRangeParameters {
+    int hue = 0, saturation = 0, lightness = 0;
+    bool operator==(const HueRangeParameters&) const = default;
+};
+// Encoded-sRGB HSL controls. Global values apply before the six circularly
+// interpolated ranges selected from the original chromatic hue. Hue is a signed
+// rotation in degrees; saturation/lightness move toward zero or one by signed
+// percent. Colorize stores an independent absolute HSL target and enable flag.
 struct HueSaturationParameters {
     int hue = 0;
     int saturation = 0;
     int lightness = 0;
     bool colorize_enabled = false;
     ColorizeParameters colorize;
+    // Red, yellow, green, cyan, blue and magenta, in hue-wheel order.
+    std::array<HueRangeParameters, 6> ranges{};
     bool operator==(const HueSaturationParameters&) const = default;
 };
 [[nodiscard]] inline bool validHueSaturation(const HueSaturationParameters& p) noexcept {
-    return p.hue >= -180 && p.hue <= 180 && p.saturation >= -100 &&
+    return std::all_of(p.ranges.begin(), p.ranges.end(), [](const auto& r) {
+        return r.hue >= -180 && r.hue <= 180 && r.saturation >= -100 &&
+            r.saturation <= 100 && r.lightness >= -100 && r.lightness <= 100;
+    }) && p.hue >= -180 && p.hue <= 180 && p.saturation >= -100 &&
         p.saturation <= 100 && p.lightness >= -100 && p.lightness <= 100 &&
         p.colorize.hue >= 0 && p.colorize.hue <= 360 &&
         p.colorize.saturation >= 0 && p.colorize.saturation <= 100 &&
@@ -36,13 +46,13 @@ struct HueSaturationParameters {
     const double low = std::min({rgb[0], rgb[1], rgb[2]});
     const double high = std::max({rgb[0], rgb[1], rgb[2]});
     const double delta = high - low;
-    const auto adjust = [](double value, int amount) {
+    const auto adjust = [](double value, double amount) {
         return amount < 0 ? value * (1. + amount / 100.) :
             value + (1. - value) * (amount / 100.);
     };
     const double original_lightness = (high + low) * .5;
     const bool colorize = p.colorize_enabled;
-    const double lightness = adjust(original_lightness, colorize ? p.colorize.lightness : p.lightness);
+    double lightness = adjust(original_lightness, colorize ? p.colorize.lightness : p.lightness);
     double hue = 0, saturation = 0;
     if (colorize) {
         hue = (p.colorize.hue % 360) / 60.;
@@ -51,7 +61,21 @@ struct HueSaturationParameters {
         saturation = adjust(std::clamp(delta / (1. - std::abs(2. * original_lightness - 1.)), 0., 1.), p.saturation);
         hue = high == rgb[0] ? (rgb[1] - rgb[2]) / delta :
             high == rgb[1] ? (rgb[2] - rgb[0]) / delta + 2. : (rgb[0] - rgb[1]) / delta + 4.;
-        hue = std::fmod(hue + p.hue / 60., 6.);
+        const double original_hue = hue;
+        if (hue < 0) hue += 6.;
+        if (hue >= 6.) hue = 0.; // Floating-point rounding at the red boundary.
+        const int first = static_cast<int>(hue);
+        const double fraction = hue - first;
+        const auto& a = p.ranges[first];
+        const auto& b = p.ranges[(first + 1) % 6];
+        const auto blend = [fraction](int x, int y) { return x * (1. - fraction) + y * fraction; };
+        if (a == HueRangeParameters{} && b == HueRangeParameters{}) {
+            hue = std::fmod(original_hue + p.hue / 60., 6.);
+        } else {
+            saturation = adjust(saturation, blend(a.saturation, b.saturation));
+            lightness = adjust(lightness, blend(a.lightness, b.lightness));
+            hue = std::fmod(hue + (p.hue + blend(a.hue, b.hue)) / 60., 6.);
+        }
         if (hue < 0) hue += 6.;
     }
     const double chroma = (1. - std::abs(2. * lightness - 1.)) * saturation;

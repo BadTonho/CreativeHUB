@@ -84,7 +84,7 @@ Optional `blend_mode` strings on layers/groups are `normal`, `multiply`, `screen
 `overlay`, `add`, `difference`; Normal is omitted. v1-18 load as Normal. Reject
 fields before v19, non-string/unknown values and any Background mode field.
 Invalid Open preserves the current document. History/recovery preserve modes.
-Hub accepts v1-28 and preserves properties when rebasing media; v29 is rejected.
+Hub accepts v1-29 and preserves properties when rebasing media; v30 is rejected.
 The Video consumer still reads atomic published PNG, not the native schema.
 Shared Motion/Video Normal, blend, GPU and export contracts are regression gates.
 
@@ -170,5 +170,5 @@ build/runtime acceptance stay pending in the
 Gradient Map layers in v20 can process the lower stack or clipped-chain colors;
 see [adjustment scope and alpha contract](GRADIENT_MAP.md).
 
-Current writer: v27. [Brightness/Contrast](BRIGHTNESS_CONTRAST.md) shares the
+Current writer: v29. [Brightness/Contrast](BRIGHTNESS_CONTRAST.md) shares the
 adjustment stack contract; historical execution evidence above is unchanged.

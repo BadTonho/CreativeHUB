@@ -30,7 +30,8 @@ using AdjustmentParameters = std::variant<GradientMapParameters,
         return *value == ExposureOffsetGammaParameters{};
     if (const auto* value = std::get_if<HueSaturationParameters>(&p))
         return value->hue == 0 && value->saturation == 0 && value->lightness == 0 &&
-            !value->colorize_enabled;
+            !value->colorize_enabled && std::all_of(value->ranges.begin(), value->ranges.end(),
+                [](const auto& range) { return range == HueRangeParameters{}; });
     if (const auto* value = std::get_if<LevelsParameters>(&p))
         return *value == LevelsParameters{};
     if (const auto* value = std::get_if<CurvesParameters>(&p))

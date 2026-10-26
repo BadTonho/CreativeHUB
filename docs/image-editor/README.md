@@ -43,7 +43,7 @@ existing mask/history/export contract; native visual/platform acceptance is pend
 [Exposure Linux profile](performance/exposure-offset-gamma-linux-2026-10-21.json):
 1080p CPU/GPU observations and baseline-confirmed broader regression failures.
 
-[Global Hue/Saturation](features/HUE_SATURATION.md): integer HSL controls, chromatic thumbnails, CPU/OpenGL preview and v23 persistence/Hub compatibility.
+[Hue/Saturation](features/HUE_SATURATION.md): global and six fixed color-range HSL controls, Colorize, CPU/OpenGL preview and v29 persistence/Hub compatibility.
 
 [RGB and per-channel Levels](features/LEVELS.md): master/channel input/output
 controls, midtone gamma, combined histogram, CPU/OpenGL preview and v27

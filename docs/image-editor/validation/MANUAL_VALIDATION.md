@@ -338,6 +338,17 @@ checks remain manual; record the build, OS, and result.
 
 ## Standalone editing and recovery
 
+### Hue/Saturation color-range acceptance
+
+Status: owner native visual acceptance pending. Record OS, Qt version, build,
+GPU/driver and result. On an image containing all six chromatic hues, gray and
+transparent pixels, add Hue/Saturation and edit each fixed range. Check smooth
+transitions including magenta to red, independent values, selected-range Reset,
+Undo/Redo, and global controls. Enable Colorize and confirm the range selector
+is disabled and its values return when Colorize is disabled. Save/reopen,
+recover, and compare CPU/OpenGL preview, PNG export and linked publication.
+Verify gray pixels do not receive range adjustments and alpha is preserved.
+
 ### Multiple document tabs
 
 Repeat these interaction checks on Windows, macOS, and Linux, recording the OS,

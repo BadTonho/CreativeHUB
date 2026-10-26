@@ -53,6 +53,57 @@ double blendReference(BlendMode mode, double b, double s) {
 class HueSaturationTest : public QObject {
     Q_OBJECT
 private slots:
+    void colorRanges() {
+        HueSaturationParameters p;
+        const std::array<std::array<double,3>,6> centers{{{1,0,0},{1,1,0},{0,1,0},{0,1,1},{0,0,1},{1,0,1}}};
+        for (int i = 0; i < 6; ++i) {
+            HueSaturationParameters selected;
+            selected.ranges[i].lightness = -100;
+            QCOMPARE(hueSaturationRgb(selected, centers[i]), (std::array<unsigned char,3>{0,0,0}));
+            QCOMPARE(hueSaturationRgb(selected, centers[(i+1)%6]), hueSaturationRgb(HueSaturationParameters{}, centers[(i+1)%6]));
+        }
+        p.ranges[0].hue = 60;
+        QVERIFY(validAdjustment(p));
+        QVERIFY(!identityAdjustment(p));
+        QCOMPARE(hueSaturationRgb(p, {1,0,0}), (std::array<unsigned char,3>{255,255,0}));
+        QCOMPARE(hueSaturationRgb(p, {1,0,1e-16}), (std::array<unsigned char,3>{255,255,0}));
+        QCOMPARE(hueSaturationRgb(p, {1,1,0}), (std::array<unsigned char,3>{255,255,0}));
+        QCOMPARE(hueSaturationRgb(p, {1,.5,0}), (std::array<unsigned char,3>{255,255,0}));
+        QCOMPARE(hueSaturationRgb(p, {1,0,.5}), (std::array<unsigned char,3>{255,0,0}));
+        QCOMPARE(hueSaturationRgb(p, {.5,.5,.5}), (std::array<unsigned char,3>{128,128,128}));
+        p.hue = 60;
+        QCOMPARE(hueSaturationRgb(p, {1,0,0}), (std::array<unsigned char,3>{0,255,0}));
+        p = {}; p.ranges[0].saturation=-100; p.ranges[0].lightness=-100;
+        QCOMPARE(hueSaturationRgb(p, {1,0,0}), (std::array<unsigned char,3>{0,0,0}));
+        p = {}; p.ranges[5].lightness=100;
+        QCOMPARE(hueSaturationRgb(p, {1,0,.5}), (std::array<unsigned char,3>{255,128,191}));
+        p.colorize_enabled=true;
+        const auto withRanges=hueSaturationRgb(p, {1,0,.5});
+        p.ranges={}; QCOMPARE(hueSaturationRgb(p, {1,0,.5}), withRanges);
+        p = {};
+        p.ranges[0].hue = 181;
+        QVERIFY(!validAdjustment(p));
+    }
+    void rangeHistoryExportAndRecovery() {
+        QTemporaryDir dir;
+        ImageDocumentSession session; QVERIFY(session.createCanvas({4,4}, QColor(255,0,0,128)));
+        const auto id=session.addHueSaturationAdjustment();
+        HueSaturationParameters p; p.ranges[0]={60,0,0};
+        QVERIFY(session.setHueSaturation(id,p));
+        const auto adjusted=session.renderedImage();
+        QCOMPARE(adjusted.pixelColor(0,0).alpha(),128);
+        QVERIFY(adjusted.pixelColor(0,0).green()>240);
+        QVERIFY(session.undo()); QVERIFY(session.renderedImage()!=adjusted);
+        QVERIFY(session.redo()); QCOMPARE(session.renderedImage(),adjusted);
+        const auto path=dir.filePath("ranges.cimg"); QVERIFY(session.saveDocument(path));
+        ImageDocumentSession reopened; QVERIFY(reopened.openDocument(path)); QCOMPARE(reopened.renderedImage(),adjusted);
+        RecoveryDocumentData recovery{session.data(),path,"ranges"}, restored;
+        QVERIFY(ImageDocumentStore::saveRecovery(dir.filePath("recovery.json"),recovery));
+        QVERIFY(ImageDocumentStore::loadRecovery(dir.filePath("recovery.json"),&restored));
+        QCOMPARE(restored.document,session.data());
+        const auto output=dir.filePath("ranges.png"); QVERIFY(session.exportImage(output));
+        QCOMPARE(QImage(output).convertToFormat(QImage::Format_ARGB32_Premultiplied),adjusted.convertToFormat(QImage::Format_ARGB32_Premultiplied));
+    }
     void numericContract() {
         QVERIFY(validAdjustment(HueSaturationParameters{})); QVERIFY(identityAdjustment(HueSaturationParameters{}));
         for(auto p:{HueSaturationParameters{181,0,0},{-181,0,0},{0,101,0},{0,-101,0},{0,0,101},{0,0,-101}}) QVERIFY(!validAdjustment(p));
@@ -152,10 +203,14 @@ private slots:
     void persistenceValidation() {
         QTemporaryDir dir; const auto path=dir.filePath("hue_saturation.cimg"); ImageDocumentSession s; QVERIFY(s.createCanvas({8,8},Qt::red));
         const auto id=s.addHueSaturationAdjustment(); HueSaturationParameters saved{75,-25,10};
-        saved.colorize_enabled=true; saved.colorize={210,65,-12}; QVERIFY(s.setHueSaturation(id,saved)); QVERIFY(s.saveDocument(path));
+        saved.colorize_enabled=true; saved.colorize={210,65,-12}; saved.ranges[0]={120,-45,35}; saved.ranges[5]={-90,20,-10}; QVERIFY(s.setHueSaturation(id,saved)); QVERIFY(s.saveDocument(path));
         QFile file(path); QVERIFY(file.open(QIODevice::ReadOnly)); const auto json=QJsonDocument::fromJson(file.readAll()).object(); file.close(); QCOMPARE(json.value("version").toInt(),ImageDocumentStore::kCurrentDocumentVersion);
         ImageDocumentSession loaded; QVERIFY(loaded.openDocument(path)); QCOMPARE(loaded.data(),s.data());
-        for (int bad=0; bad<28; ++bad) {
+        RecoveryDocumentData recovery{s.data(),path,"range-recovery"}, recovered;
+        QVERIFY(ImageDocumentStore::saveRecovery(dir.filePath("range-recovery.json"), recovery));
+        QVERIFY(ImageDocumentStore::loadRecovery(dir.filePath("range-recovery.json"), &recovered));
+        QCOMPARE(recovered.document,s.data());
+        for (int bad=0; bad<33; ++bad) {
             auto root=json; auto layers=root.value("layers").toArray(); auto layer=layers.last().toObject(); auto a=layer.value("adjustment").toObject();
             switch(bad) {
             case 0: root.insert("version",22); break;
@@ -186,6 +241,11 @@ private slots:
             case 25: { auto c=a.value("colorize").toObject(); c.insert("enabled",1); a.insert("colorize",c); break; }
             case 26: { auto c=a.value("colorize").toObject(); c.remove("hue"); a.insert("colorize",c); break; }
             case 27: a.remove("colorize"); break;
+            case 28: a.remove("ranges"); break;
+            case 29: a.insert("ranges",QJsonArray{}); break;
+            case 30: { auto ranges=a.value("ranges").toArray(); ranges[0]=QJsonObject{{"hue",181},{"saturation",0},{"lightness",0}}; a.insert("ranges",ranges); break; }
+            case 31: { auto ranges=a.value("ranges").toArray(); ranges[0]=QJsonObject{{"hue",0},{"saturation",.5},{"lightness",0}}; a.insert("ranges",ranges); break; }
+            case 32: { auto ranges=a.value("ranges").toArray(); ranges[0]=QJsonObject{{"hue",0},{"saturation",0}}; a.insert("ranges",ranges); break; }
             }
             layer.insert("adjustment",a); layers[layers.size()-1]=layer; root.insert("layers",layers);
             QVERIFY(file.open(QIODevice::WriteOnly|QIODevice::Truncate)); QVERIFY(file.write(QJsonDocument(root).toJson())>0); file.close();
@@ -193,13 +253,19 @@ private slots:
         }
         auto legacy=json; legacy.insert("version",27); auto legacy_layers=legacy.value("layers").toArray();
         auto legacy_layer=legacy_layers.last().toObject(); auto legacy_adjustment=legacy_layer.value("adjustment").toObject();
-        legacy_adjustment.remove("colorize"); legacy_layer.insert("adjustment",legacy_adjustment);
+        legacy_adjustment.remove("colorize"); legacy_adjustment.remove("ranges"); legacy_layer.insert("adjustment",legacy_adjustment);
         legacy_layers[legacy_layers.size()-1]=legacy_layer; legacy.insert("layers",legacy_layers);
         QVERIFY(file.open(QIODevice::WriteOnly|QIODevice::Truncate)); file.write(QJsonDocument(legacy).toJson()); file.close();
         QVERIFY(loaded.openDocument(path)); const auto migrated=std::get<HueSaturationParameters>(*findLayer(loaded.data(),id)->adjustment);
         QVERIFY(!migrated.colorize_enabled); QCOMPARE(migrated.colorize,(ColorizeParameters{0,25,0}));
         QVERIFY(loaded.saveDocument(path)); QVERIFY(file.open(QIODevice::ReadOnly));
-        QCOMPARE(QJsonDocument::fromJson(file.readAll()).object().value("version").toInt(),28); file.close();
+        QCOMPARE(QJsonDocument::fromJson(file.readAll()).object().value("version").toInt(),ImageDocumentStore::kCurrentDocumentVersion); file.close();
+        auto v28=json; v28.insert("version",28); auto v28layers=v28.value("layers").toArray();
+        auto v28layer=v28layers.last().toObject(); auto v28adjustment=v28layer.value("adjustment").toObject();
+        v28adjustment.remove("ranges"); v28layer.insert("adjustment",v28adjustment); v28layers[v28layers.size()-1]=v28layer; v28.insert("layers",v28layers);
+        QVERIFY(file.open(QIODevice::WriteOnly|QIODevice::Truncate)); file.write(QJsonDocument(v28).toJson()); file.close();
+        QVERIFY(loaded.openDocument(path)); const auto migrated28=std::get<HueSaturationParameters>(*findLayer(loaded.data(),id)->adjustment);
+        QVERIFY(migrated28.colorize_enabled); QVERIFY(std::all_of(migrated28.ranges.begin(),migrated28.ranges.end(),[](const auto& r){return r==HueRangeParameters{};}));
         // Actual old adjustment formats remain readable and save through the current writer.
         for (int version : {20,21,22}) {
             auto root=json; root.insert("version",version); auto layers=root.value("layers").toArray(); auto layer=layers.last().toObject();

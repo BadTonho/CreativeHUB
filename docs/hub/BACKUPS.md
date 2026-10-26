@@ -1,6 +1,6 @@
 # Hub Project Backups
 
-Image `.cimg` v28 is accepted, including independent Hue/Saturation Colorize values; future v29 is rejected. Glow extends native backup support to Motion v18; CSP v32 adds the Video Editor Primary Grade effect, v33 adds the Color Gallery, v34 stores the Color correction graph, v35 expands primary controls, v36 adds independent Log adjustments, v37 stores named per-clip grade graph snapshots, v38 adds Color Curves and tonal qualifiers, v39 adds qualifier matte refinement, v40 adds animated Color Power Windows, and v41 adds Audio mixer buses, routes, sends, pan, and Master settings; v42 adds per-track EQ/compressor chains and v43 adds per-clip EQ/compressor chains. Gallery PNG sidecars are copied beside each backup snapshot so Gallery items remain available after restore. Color graphs, windows and geometry, matte bindings and visibility, blend mode, Scale Y, link state, affine compensation, Anchor bases and curves, parent IDs and pose-preserving compensation, Null control layers, optional presentation metadata, shared mask definitions, stage associations, effect parameter keyframes, and v42-v43 audio mix/effect data are retained; external media/Input paths are rebased. Future CSP v44 and Motion v19 remain unsupported. The referenced `.cscomp` file is not required to reopen an imported native project. See [contract](../COMPOSITION_INTERCHANGE.md).
+Image `.cimg` v29 is accepted, including Hue/Saturation Colorize and color-range values; future v30 is rejected. Glow extends native backup support to Motion v18; CSP v32 adds the Video Editor Primary Grade effect, v33 adds the Color Gallery, v34 stores the Color correction graph, v35 expands primary controls, v36 adds independent Log adjustments, v37 stores named per-clip grade graph snapshots, v38 adds Color Curves and tonal qualifiers, v39 adds qualifier matte refinement, v40 adds animated Color Power Windows, and v41 adds Audio mixer buses, routes, sends, pan, and Master settings; v42 adds per-track EQ/compressor chains and v43 adds per-clip EQ/compressor chains. Gallery PNG sidecars are copied beside each backup snapshot so Gallery items remain available after restore. Color graphs, windows and geometry, matte bindings and visibility, blend mode, Scale Y, link state, affine compensation, Anchor bases and curves, parent IDs and pose-preserving compensation, Null control layers, optional presentation metadata, shared mask definitions, stage associations, effect parameter keyframes, and v42-v43 audio mix/effect data are retained; external media/Input paths are rebased. Future CSP v44 and Motion v19 remain unsupported. The referenced `.cscomp` file is not required to reopen an imported native project. See [contract](../COMPOSITION_INTERCHANGE.md).
 
 ## Video Editor v29 Background presets
 
@@ -229,11 +229,11 @@ Native Hub restore UI and platform acceptance remain pending.
 
 ## Image Editor v17 outlines
 
-Backup/restore accepts Image documents through v28 and preserves optional layer
+Backup/restore accepts Image documents through v29 and preserves optional layer
 outline parameters, including disabled styles, while rebasing existing source
 and imported-image paths. `hub-backup-format-test` reopens vault and relocated
 restores with the actual Image reader, including an outlined grouped image.
-The same test rejects future Image v29. Native Hub UI/platform
+The same test rejects future Image v30. Native Hub UI/platform
 acceptance remains pending.
 
 ## Image Editor v18 clipping masks
@@ -241,7 +241,7 @@ acceptance remains pending.
 Clipping was introduced in Image v18. The current reader accepts v1-28 and
 preserves `clip_to_base`, masks and outlines while
 rebasing source/import paths in root layers and group children. The actual
-Image reader verifies vault and restored v18 chains. Future Image v29 is
+Image reader verifies vault and restored v18 chains. Future Image v30 is
 rejected. The recovery envelope and published PNG protocol are unchanged.
 Native Hub UI/platform acceptance remains pending.
 
@@ -250,12 +250,12 @@ Native Hub UI/platform acceptance remains pending.
 Accept Image schemas 1-27 and preserve layer/group `blend_mode` strings with
 clipping, masks and outlines while rebasing existing paths. Actual Image reader
 round trips cover group/base/clipped-child modes in vault and relocated files.
-Reject future Image v29. Native backup UI/platform acceptance remains pending.
+Reject future Image v30. Native backup UI/platform acceptance remains pending.
 
 
 ## Image Editor v20 adjustments
 
-The reader accepts v1-28 and rejects v29. Preserve Gradient Map adjustment
+The reader accepts v1-29 and rejects v30. Preserve Gradient Map adjustment
 payloads and mask `initial_selection` paths during media rebasing, backup and
 restoration. Actual Image producer/reader tests verify points, masks and media;
 recovery envelopes and published PNG protocols remain unchanged. Native backup
@@ -264,12 +264,12 @@ UI and macOS/Linux acceptance remain pending.
 ## Image Editor v21 adjustments
 
 Preserve Brightness/Contrast integer parameters and Gradient Map points, including
-selection-seeded masks and media rebasing. Accept v1-28, reject v29, and verify
+selection-seeded masks and media rebasing. Accept v1-29, reject v30, and verify
 vault/restored documents with the real Image reader. Native UI acceptance is pending.
 
 ## Image Editor v22 adjustments
 
-Accept Image v1-28 and reject v29. Preserve Exposure / Offset / Gamma floating
+Accept Image v1-29 and reject v30. Preserve Exposure / Offset / Gamma floating
 parameters and selection-seeded masks alongside Gradient Map and Brightness/
 Contrast during media rebasing. `hub-backup-format-test` opens vault and relocated
 restores with the actual Image reader. Application versions and snapshot envelope
@@ -277,7 +277,7 @@ remain unchanged. Native backup UI/platform acceptance remains pending.
 
 ## Image Editor v23 HSL adjustments
 
-Accept Image v1-28 and reject v29. Preserve integer Hue/Saturation/Lightness
+Accept Image v1-29 and reject v30. Preserve integer Hue/Saturation/Lightness
 controls, all older adjustment payloads and selection-seeded masks during media
 rebasing, backup and relocated restoration. Actual Image readers verify vault
 and restored data; snapshot envelope and application versions remain unchanged.
@@ -285,7 +285,7 @@ Native backup UI/platform acceptance is separate and pending.
 
 ## Image Editor v24 Levels adjustments
 
-Accept Image v1–28 and reject v29. Preserve all five Levels controls, the other
+Accept Image v1–29 and reject v30. Preserve all five Levels controls, the other
 adjustment kinds and selection-seeded masks during media rebasing, backup and
 relocated restoration. `hub-backup-format-test` opens the resulting documents
 with the actual Image reader. Native backup UI/platform acceptance is pending.
@@ -300,7 +300,7 @@ Native Hub UI/platform acceptance remains pending.
 
 ## Image Editor v26 per-channel Curves
 
-Accept Image v1–28 and reject v29. Preserve the RGB master and all three
+Accept Image v1–29 and reject v30. Preserve the RGB master and all three
 individual channel point sets, older adjustment kinds, masks and rebased media
 through vault and relocated restore. `hub-backup-format-test` reopens both
 outputs with the actual Image reader. Native Hub UI/platform acceptance remains
@@ -308,16 +308,16 @@ pending.
 
 ## Image Editor v27 per-channel Levels
 
-Accept Image v1–28 and reject v29. Preserve the RGB master and independent Red,
+Accept Image v1–29 and reject v30. Preserve the RGB master and independent Red,
 Green and Blue Levels sets, existing Curves v26 data, older adjustment kinds,
 masks and rebased media through vault and relocated restore.
 `hub-backup-format-test` reopens the v27 producer fixture with the actual Image
-reader; the same test rejects future Image v29. Native Hub UI and
+reader; the same test rejects future Image v30. Native Hub UI and
 platform acceptance remain pending.
 
 ## Image Editor v28 Hue/Saturation Colorize
 
-Accept Image v1–28 and reject v29. Preserve the independent normal and
+Accept Image v1–29 and reject v30. Preserve the independent normal and
 Colorize values while rebasing media paths through vault and relocated restore.
 `hub-backup-format-test` opens both outputs with the actual Image reader and
 compares the decoded document, including enabled Colorize controls. The recovery
@@ -339,3 +339,9 @@ Hub accepts CSP v1-v45 and rejects future v46. Backup/restoration preserves
 clip/track voice-isolation settings and original media, without adding local
 regenerable PCM caches or requiring a neural runtime in Hub. The real Video
 Editor reader reopens restored documents in `hub-backup-format-test`.
+
+## Image Editor v29 Hue/Saturation ranges
+
+Accept Image v1-29 and reject v30. Preserve all six color-range parameter
+sets and Colorize through backup and relocation; producer/consumer coverage is
+provided by `hub-backup-format-test` and the Image document reader.

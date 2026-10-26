@@ -1119,11 +1119,15 @@ QJsonObject encodeDocumentJson(const ImageDocumentData& document,
                     {"points", encode_points(curves->points)}, {"channels", channels}});
             } else {
                 const auto& hue = std::get<creative_suite::effects::HueSaturationParameters>(*layer.adjustment);
+                QJsonArray ranges;
+                for (const auto& range : hue.ranges)
+                    ranges.append(QJsonObject{{"hue", range.hue}, {"saturation", range.saturation},
+                        {"lightness", range.lightness}});
                 encoded.insert("adjustment", QJsonObject{{"type", "hue_saturation"},
                     {"hue", hue.hue}, {"saturation", hue.saturation}, {"lightness", hue.lightness},
                     {"colorize", QJsonObject{{"enabled", hue.colorize_enabled},
                         {"hue", hue.colorize.hue}, {"saturation", hue.colorize.saturation},
-                        {"lightness", hue.colorize.lightness}}}});
+                        {"lightness", hue.colorize.lightness}}}, {"ranges", ranges}});
             }
         }
         encoded.insert("visible", layer.visible);
@@ -1436,9 +1440,22 @@ bool decodeDocumentJson(const QJsonObject& root,
                                 colorize.value("lightness").toInt()};
                         }
                     }
+                    bool ranges_valid = true;
+                    if (version >= 29) {
+                        const auto ranges = a.value("ranges").toArray();
+                        ranges_valid = a.value("ranges").isArray() && ranges.size() == 6;
+                        for (int i = 0; ranges_valid && i < 6; ++i) {
+                            const auto range = ranges[i].toObject();
+                            ranges_valid = ranges[i].isObject() && range.size() == 3 &&
+                                integer(range.value("hue"), 180) && integer(range.value("saturation"), 100) &&
+                                integer(range.value("lightness"), 100);
+                            if (ranges_valid) value.ranges[i] = {range.value("hue").toInt(),
+                                range.value("saturation").toInt(), range.value("lightness").toInt()};
+                        }
+                    }
                     if (version < 23 || kind != "adjustment" || !integer(a.value("hue"), 180) ||
                         !integer(a.value("saturation"), 100) || !integer(a.value("lightness"), 100) ||
-                        (version >= 28 ? a.size() != 5 : a.size() != 4) || !colorize_valid ||
+                        (version >= 29 ? a.size() != 6 : version >= 28 ? a.size() != 5 : a.size() != 4) || !colorize_valid || !ranges_valid ||
                         a.contains("stops") || a.contains("brightness") || a.contains("contrast") ||
                         a.contains("exposure") || a.contains("offset") || a.contains("gamma")) {
                         assignError(error, QStringLiteral("A Hue/Saturation adjustment is invalid."));

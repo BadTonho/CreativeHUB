@@ -6,6 +6,7 @@
 #include <QLabel>
 #include <QPushButton>
 #include <QCheckBox>
+#include <QComboBox>
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QCoreApplication>
@@ -34,6 +35,16 @@ public:
             if (changed) changed(value_);
             finish();
         });
+        range_ = new QComboBox(this);
+        range_->setObjectName("hueRangeSelector");
+        for (const char* label : {QT_TRANSLATE_NOOP("ImageEditorUI", "Global"),
+                QT_TRANSLATE_NOOP("ImageEditorUI", "Reds"), QT_TRANSLATE_NOOP("ImageEditorUI", "Yellows"),
+                QT_TRANSLATE_NOOP("ImageEditorUI", "Greens"), QT_TRANSLATE_NOOP("ImageEditorUI", "Cyans"),
+                QT_TRANSLATE_NOOP("ImageEditorUI", "Blues"), QT_TRANSLATE_NOOP("ImageEditorUI", "Magentas")})
+            range_->addItem(QCoreApplication::translate("ImageEditorUI", label));
+        range_->setAccessibleName(QCoreApplication::translate("ImageEditorUI", "Color range"));
+        layout->addWidget(range_);
+        connect(range_, &QComboBox::currentIndexChanged, this, [this] { if (!syncing_) { finish(); sync(); } });
         const char* labels[]{QT_TRANSLATE_NOOP("ImageEditorUI", "Hue"),
             QT_TRANSLATE_NOOP("ImageEditorUI", "Saturation"), QT_TRANSLATE_NOOP("ImageEditorUI", "Lightness")};
         const char* names[]{"hue", "saturation", "lightness"};
@@ -67,6 +78,7 @@ public:
             finish();
             auto next = value_;
             if (next.colorize_enabled) next.colorize = {};
+            else if (range_->currentIndex() > 0) next.ranges[range_->currentIndex() - 1] = {};
             else { next.hue = 0; next.saturation = 0; next.lightness = 0; }
             if (next == value_) return;
             begin(); value_ = next; sync(); if (changed) changed(value_); finish();
@@ -74,7 +86,7 @@ public:
         sync();
     }
     void setValue(const QString& id, const Parameters& value) {
-        if (id_ != id) finish();
+        if (id_ != id) { finish(); range_->setCurrentIndex(0); }
         id_ = id; value_ = value; sync();
     }
     void finish() {
@@ -98,15 +110,21 @@ private:
         auto next = value_;
         if (next.colorize_enabled)
             (field == 0 ? next.colorize.hue : field == 1 ? next.colorize.saturation : next.colorize.lightness) = value;
+        else if (range_->currentIndex() > 0) {
+            auto& r = next.ranges[range_->currentIndex() - 1];
+            (field == 0 ? r.hue : field == 1 ? r.saturation : r.lightness) = value;
+        }
         else (field == 0 ? next.hue : field == 1 ? next.saturation : next.lightness) = value;
         if (next == value_) return;
         begin(); value_ = next; sync(); if (changed) changed(value_);
     }
     void sync() {
         syncing_ = true;
-        const int values[]{value_.colorize_enabled ? value_.colorize.hue : value_.hue,
-            value_.colorize_enabled ? value_.colorize.saturation : value_.saturation,
-            value_.colorize_enabled ? value_.colorize.lightness : value_.lightness};
+        const auto selected = range_->currentIndex() > 0 ? value_.ranges[range_->currentIndex() - 1] :
+            creative_suite::effects::HueRangeParameters{value_.hue, value_.saturation, value_.lightness};
+        const int values[]{value_.colorize_enabled ? value_.colorize.hue : selected.hue,
+            value_.colorize_enabled ? value_.colorize.saturation : selected.saturation,
+            value_.colorize_enabled ? value_.colorize.lightness : selected.lightness};
         const int low[]{value_.colorize_enabled ? 0 : -180, value_.colorize_enabled ? 0 : -100, -100};
         const int high[]{value_.colorize_enabled ? 360 : 180, 100, 100};
         for (int i = 0; i < 3; ++i) {
@@ -116,8 +134,9 @@ private:
             spins_[i]->setValue(values[i]);
         }
         colorize_->setChecked(value_.colorize_enabled);
+        range_->setEnabled(!value_.colorize_enabled);
         reset_->setEnabled(value_.colorize_enabled ? value_.colorize != creative_suite::effects::ColorizeParameters{} :
-            value_.hue != 0 || value_.saturation != 0 || value_.lightness != 0);
+            selected != creative_suite::effects::HueRangeParameters{});
         syncing_ = false;
     }
     QString id_;
@@ -125,6 +144,7 @@ private:
     std::array<QSlider*, 3> sliders_{};
     std::array<QSpinBox*, 3> spins_{};
     QCheckBox* colorize_ = nullptr;
+    QComboBox* range_ = nullptr;
     QPushButton* reset_ = nullptr;
     bool syncing_ = false, active_ = false;
 };

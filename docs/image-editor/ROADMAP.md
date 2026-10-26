@@ -23,7 +23,7 @@ keeps open implementation and acceptance work plus its required coverage index.
 
 Status: **standalone minimum and multi-document tabs implemented; basic
 editable text, raster layer masks, linked image layers, canvas resizing, the
-RGBA Eyedropper, editable layer outlines, clipping masks, six blend modes, Gradient Map, Brightness/Contrast, Exposure / Offset / Gamma, global Hue/Saturation, global and per-channel Levels, global and per-channel Curves adjustments, and regression coverage implemented; manual text validation,
+RGBA Eyedropper, editable layer outlines, clipping masks, six blend modes, Gradient Map, Brightness/Contrast, Exposure / Offset / Gamma, global and per-color-range Hue/Saturation, global and per-channel Levels, global and per-channel Curves adjustments, and regression coverage implemented; manual text validation,
 packaging, and linked-image
 acceptance remain pending; macOS and Linux validation deferred**.
 Current application version: **Beta 0.1.0**.
@@ -41,9 +41,9 @@ hardware requirements remain measurement-based. See [scope](SCOPE.md).
 
 ## Next code step
 
-**Extend Hue/Saturation with per-color-range controls** in a separate bounded
-increment. Colorize is implemented as an independent mode; visual and platform
-acceptance remains pending. Levels and Curves now both provide RGB master and
+**Hue/Saturation per-color-range controls are implemented.** Select the next
+bounded feature from the provisional sequence in section 4. Colorize is an
+independent mode; visual and platform acceptance remains pending. Levels and Curves provide RGB master and
 independent channels; see their [Levels](features/LEVELS.md) and
 [Curves](features/CURVES.md) contracts.
 Global Hue/Saturation is implemented; see its [contract](features/HUE_SATURATION.md).
@@ -296,7 +296,7 @@ Native visual and macOS/Linux acceptance remains pending.
   see the [Curves contract](features/CURVES.md).
 - [x] Add individual Red, Green and Blue Levels alongside the RGB master;
   see the [Levels contract](features/LEVELS.md).
-- [ ] Extend Hue/Saturation with Colorize and per-color-range controls in separate bounded increments.
+- [x] Extend Hue/Saturation with Colorize and six fixed color-range controls.
 - [ ] Add color balance, Black & White channel controls, LUT loading, selective
   color, invert, posterize, and threshold.
 - [ ] Add editable solid-color, gradient, and pattern fill layers and reusable
@@ -678,11 +678,15 @@ These results do not complete the existing release/manual acceptance gates.
 
 ## Hue/Saturation regression coverage
 
+The native GPU raster path distinguishes single-channel grayscale masks from
+RGB masks when calculating coverage. `gpuBudgetsGeometryAndCoverage` checks all
+256 grayscale levels; `gpuHueSaturation` also exercises adjustment masks.
+
 | Behavior | Automated coverage | Acceptance |
 | --- | --- | --- |
-| Normal and Colorize HSL reference, grayscale/chromatic pixels, endpoints, alpha, independent values, history, v27→28/recovery/export/cache and thumbnails | `creative-suite-image-editor-hue-saturation`, shared effects | [Contract and execution evidence](features/HUE_SATURATION.md); visual/platform acceptance remains separate. |
-| Menu, mode-specific ranges/values, gestures, mode-local Reset, Undo/Redo, masks, tabs and linked PNG | `creative-suite-image-editor-hue-saturation-ui`, full UI, translation catalog | [Manual checklist](validation/MANUAL_VALIDATION.md#global-huesaturation-adjustments) pending. |
-| CPU/OpenGL parity, zero-upload edits, budgets/cancellation, handoff and restore | Interactive `gpuHueSaturation`, native shared OpenGL, Video linked-image, Hub v28 backup gates and Motion consumers | Record native versus offscreen execution separately; compare known baseline failures. |
+| Normal, Colorize and fixed range HSL, grayscale/chromatic pixels, transitions, alpha, independent values, history, v28→29/recovery/export/cache and thumbnails | `creative-suite-image-editor-hue-saturation`, shared effects | [Contract and execution evidence](features/HUE_SATURATION.md); visual/platform acceptance remains separate. |
+| Menu, range selector, mode-specific values, gestures, selected-range Reset, Undo/Redo, masks, tabs and linked PNG | `creative-suite-image-editor-hue-saturation-ui`, full UI, translation catalog | [Manual checklist](validation/MANUAL_VALIDATION.md#huesaturation-color-range-acceptance) pending. |
+| CPU/OpenGL parity, zero-upload edits, budgets/cancellation, handoff and restore | Interactive `gpuHueSaturation`, native shared OpenGL, Video linked-image, Hub v29 backup gates and Motion consumers | Record native versus offscreen execution separately; compare known baseline failures. |
 
 ## Levels regression coverage
 

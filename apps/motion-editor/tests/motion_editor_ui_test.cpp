@@ -17,6 +17,7 @@
 #include <creative_suite/media/media_library.h>
 #if defined(MOTION_EDITOR_TEST_IMAGE_EDITOR_LEVELS)
 #include "image_document_session.h"
+#include "image_document_store.h"
 #include <creative_suite/effects/levels.h>
 #endif
 
@@ -2331,8 +2332,15 @@ int main(int argc, char* argv[])
     level_sets.channels[2] = {0, 255, 1, 0, 30};
     require(levels_producer.setLevels(levels_id, level_sets),
             "Image Editor accepts the first per-channel Levels edit");
+    const auto levels_only = levels_producer.renderedImage();
+    const auto hue_id = levels_producer.addHueSaturationAdjustment();
+    creative_suite::effects::HueSaturationParameters hue_ranges;
+    hue_ranges.ranges[0].hue = 5;
+    require(!hue_id.isEmpty() && levels_producer.setHueSaturation(hue_id, hue_ranges) &&
+                levels_producer.renderedImage() != levels_only,
+            "the Image Editor producer applies a non-neutral color-range adjustment");
     require(levels_producer.saveDocument(pathToQString(linked_image.document_path)),
-            "Image Editor saves a v27 Levels document");
+            "Image Editor saves the Levels and color-range document");
     require(levels_producer.exportImage(pathToQString(linked_image.published_output_path)),
             "Image Editor publishes the first Levels PNG");
     QFile levels_document(pathToQString(linked_image.document_path));
@@ -2340,9 +2348,10 @@ int main(int argc, char* argv[])
     const auto levels_version = QJsonDocument::fromJson(levels_document.readAll())
         .object().value("version").toInt();
     levels_document.close();
-    require(levels_version == 27, "the Motion consumer fixture uses Image format v27");
+    require(levels_version == image_editor::ImageDocumentStore::kCurrentDocumentVersion,
+            "the Motion consumer fixture uses the current Image format");
     QImage published_revision(pathToQString(linked_image.published_output_path));
-    require(!published_revision.isNull(), "the v27 producer publishes a readable PNG");
+    require(!published_revision.isNull(), "the Image producer publishes a readable PNG");
     const auto published_levels_pixel = published_revision.pixelColor(24, 16);
     require(published_levels_pixel.red() > 200 && published_levels_pixel.green() < 50 &&
                 published_levels_pixel.blue() < 60,

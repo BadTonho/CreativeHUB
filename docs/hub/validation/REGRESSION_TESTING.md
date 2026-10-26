@@ -522,6 +522,13 @@ Linux Release evidence (2026-10-21): both backup gates passed against Image v22
 using the actual reader, including all three adjustment payloads. This does not
 establish native backup UI or Windows/macOS acceptance for v22.
 
+## Image v29 Hue/Saturation color-range backup coverage
+
+`hub-backup-format-test` exercises Image v1–29 backup, vault read and relocated
+restore with the Image Editor reader, including non-neutral color-range values;
+it rejects v30. `hub-backup-manager-test` checks future-version rejection.
+Native backup UI and platform acceptance remain pending.
+
 ## Image v23 Hue/Saturation backup coverage
 
 `hub-backup-format-test` round trips actual Image v1-23 documents, retaining all

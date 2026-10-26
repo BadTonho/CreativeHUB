@@ -220,6 +220,12 @@ void testImageDocuments(const QString& root) {
                 {"hue", 75}, {"saturation", -25}, {"lightness", 10}};
             if (version >= 28) hue.insert("colorize", QJsonObject{{"enabled", true},
                 {"hue", 210}, {"saturation", 65}, {"lightness", -12}});
+            if (version >= 29) {
+                QJsonArray ranges;
+                for (int i = 0; i < 6; ++i)
+                    ranges.append(QJsonObject{{"hue", i == 0 ? 30 : 0}, {"saturation", 0}, {"lightness", 0}});
+                hue.insert("ranges", ranges);
+            }
             adjustment.insert("adjustment", hue);
             children.append(adjustment);
             group.insert("children", children);

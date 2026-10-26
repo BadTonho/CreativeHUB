@@ -11,6 +11,7 @@
 #include <QTabBar>
 #include <QPushButton>
 #include <QCheckBox>
+#include <QComboBox>
 #include <QTreeWidget>
 #include <QTimer>
 #include <QTest>
@@ -38,8 +39,16 @@ bool testHueSaturationUi(const QString& root){
     auto* saturationSlider=window.findChild<QSlider*>("saturationSlider"); auto* lightnessSlider=window.findChild<QSlider*>("lightnessSlider"); require(saturationSlider && lightnessSlider,"Additional sliders missing");
     QMetaObject::invokeMethod(saturationSlider,"sliderPressed",Qt::DirectConnection); saturationSlider->setValue(-13); QMetaObject::invokeMethod(saturationSlider,"sliderReleased",Qt::DirectConnection); require(saturation->value()==-13,"Saturation slider mapping"); undo->trigger(); require(saturation->value()==-25,"Saturation gesture undo");
     QMetaObject::invokeMethod(lightnessSlider,"sliderPressed",Qt::DirectConnection); lightnessSlider->setValue(25); QMetaObject::invokeMethod(lightnessSlider,"sliderReleased",Qt::DirectConnection); require(lightness->value()==25,"Lightness slider mapping"); undo->trigger(); require(lightness->value()==10,"Lightness gesture undo");
+    auto* range=window.findChild<QComboBox*>("hueRangeSelector"); require(range && range->count()==7,"Range selector");
+    range->setCurrentIndex(1); require(hue->value()==0 && saturation->value()==0,"Range defaults");
+    hue->setValue(75); QMetaObject::invokeMethod(hue,"editingFinished",Qt::DirectConnection);
+    range->setCurrentIndex(6); saturation->setValue(-30); QMetaObject::invokeMethod(saturation,"editingFinished",Qt::DirectConnection);
+    range->setCurrentIndex(1); require(hue->value()==75 && saturation->value()==0,"Range values lost");
+    reset->click(); require(hue->value()==0,"Range reset"); undo->trigger(); require(hue->value()==75,"Range reset undo");
+    redo->trigger(); require(hue->value()==0,"Range reset redo"); range->setCurrentIndex(6); require(saturation->value()==-30,"Reset changed another range");
+    range->setCurrentIndex(0); require(hue->value()==50 && saturation->value()==-25,"Global changed by ranges");
     auto* colorize=window.findChild<QCheckBox*>("colorizeCheckBox");require(colorize&&colorize->text()==QCoreApplication::translate("ImageEditorUI","Colorize"),"Colorize control missing");
-    colorize->setChecked(true);require(hue->minimum()==0&&hue->maximum()==360&&saturation->minimum()==0&&saturation->maximum()==100,"Colorize ranges");
+    colorize->setChecked(true);require(!range->isEnabled() && hue->minimum()==0&&hue->maximum()==360&&saturation->minimum()==0&&saturation->maximum()==100,"Colorize ranges");
     require(hue->value()==0&&saturation->value()==25&&lightness->value()==0,"Colorize defaults");
     hue->setValue(210);QMetaObject::invokeMethod(hue,"editingFinished",Qt::DirectConnection);lightness->setValue(-12);QMetaObject::invokeMethod(lightness,"editingFinished",Qt::DirectConnection);
     colorize->setChecked(false);require(hue->value()==50&&saturation->value()==-25&&lightness->value()==10,"Normal controls were not preserved");
@@ -48,11 +57,22 @@ bool testHueSaturationUi(const QString& root){
     undo->trigger();require(colorize->isChecked()&&hue->value()==210&&saturation->value()==25&&lightness->value()==-12,"Colorize reset undo");
     redo->trigger();require(colorize->isChecked()&&hue->value()==0&&saturation->value()==25&&lightness->value()==0,"Colorize reset redo");
     colorize->setChecked(false);require(hue->value()==50&&saturation->value()==-25&&lightness->value()==10,"Colorize reset changed normal values");
+    range->setCurrentIndex(6); require(saturation->value()==-30,"Range selection lost before Colorize");
+    colorize->setChecked(true); require(!range->isEnabled(),"Colorize did not disable selected range");
+    colorize->setChecked(false); require(range->isEnabled() && range->currentIndex()==6 && saturation->value()==-30,"Colorize did not preserve selected range");
+    range->setCurrentIndex(0);
     require(!window.findChild<QAction*>("quickExportImageAction")->isEnabled() && !window.findChild<QAction*>("rotateLeftAction")->isEnabled(),"Adjustment restrictions");
     QMetaObject::invokeMethod(window.findChild<LayerPanel*>(),"layerMaskSelected",Qt::DirectConnection,Q_ARG(QString,id));processImageEditorEvents();require(window.findChild<QWidget*>("hueSaturationEditor")->isVisible() && window.findChild<QAction*>("paintToolAction")->isEnabled(),"Mask owner/tool");
     tree->topLevelItem(1)->setSelected(true);require(!create->isEnabled(),"Multiple selection enabled");tree->clearSelection();tree->setCurrentItem(tree->topLevelItem(tree->topLevelItemCount()-1));require(create->isEnabled(),"Background creation");tree->setCurrentItem(tree->topLevelItem(0));hue->setValue(65);save->trigger();
     ImageDocumentSession second;const auto secondPath=root+"/hue-tab.cimg";require(second.createCanvas({32,32},Qt::transparent) && second.saveDocument(secondPath),"Second fixture");
     QTimer::singleShot(0,[secondPath]{if(auto* dialog=qobject_cast<QFileDialog*>(QApplication::activeModalWidget())){dialog->selectFile(secondPath);QMetaObject::invokeMethod(dialog,"accept",Qt::QueuedConnection);}});window.findChild<QAction*>("newTabOpenEditableDocumentAction")->trigger();auto* tabs=window.findChild<QTabBar*>("imageDocumentTabBar");require(tabs && tabs->count()==2,"Second tab");create->trigger();require(hue->value()==0 && saturation->value()==0 && lightness->value()==0,"Tab state leaked");tabs->setCurrentIndex(0);tree->setCurrentItem(tree->topLevelItem(0));require(hue->value()==65 && saturation->value()==-25 && lightness->value()==10,"Tab state lost");
-    const auto source=root+"/hue-source.png",linked=root+"/hue-linked.cimg",output=root+"/hue-published.png";QImage original(96,72,QImage::Format_ARGB32);original.fill(QColor(40,120,180));require(original.save(source),"Source PNG");ImageDocumentSession producer;require(producer.openImage(source) && producer.saveDocument(linked),"Linked fixture");ImageEditorWindow linkedWindow;require(linkedWindow.openLinkedImage(source,linked,output),"Linked open");linkedWindow.findChild<QAction*>("addHueSaturationAction")->trigger();auto* linkedColorize=linkedWindow.findChild<QCheckBox*>("colorizeCheckBox");linkedColorize->setChecked(true);auto* linkedHue=linkedWindow.findChild<QSpinBox*>("hueSpin");auto* linkedSaturation=linkedWindow.findChild<QSpinBox*>("saturationSpin");auto* linkedLightness=linkedWindow.findChild<QSpinBox*>("lightnessSpin");linkedHue->setValue(210);linkedSaturation->setValue(80);linkedLightness->setValue(-15);QMetaObject::invokeMethod(linkedHue,"editingFinished",Qt::DirectConnection);QMetaObject::invokeMethod(linkedSaturation,"editingFinished",Qt::DirectConnection);QMetaObject::invokeMethod(linkedLightness,"editingFinished",Qt::DirectConnection);linkedWindow.findChild<QAction*>("saveDocumentAction")->trigger();require(producer.openDocument(linked),"Reopen publication");require(QImage(output).convertToFormat(QImage::Format_ARGB32_Premultiplied)==producer.renderedImage().convertToFormat(QImage::Format_ARGB32_Premultiplied),"Published pixels differ");require(QImage(source)==original,"Source modified");return true;
+    const auto source=root+"/hue-source.png",linked=root+"/hue-linked.cimg",output=root+"/hue-published.png";QImage original(96,72,QImage::Format_ARGB32);original.fill(QColor(40,120,180));require(original.save(source),"Source PNG");ImageDocumentSession producer;require(producer.openImage(source) && producer.saveDocument(linked),"Linked fixture");ImageEditorWindow linkedWindow;require(linkedWindow.openLinkedImage(source,linked,output),"Linked open");linkedWindow.findChild<QAction*>("addHueSaturationAction")->trigger();
+    auto* linkedRange=linkedWindow.findChild<QComboBox*>("hueRangeSelector"); auto* rangeHue=linkedWindow.findChild<QSpinBox*>("hueSpin");
+    require(linkedRange && rangeHue,"Linked range controls"); linkedRange->setCurrentIndex(5); rangeHue->setValue(90);
+    QMetaObject::invokeMethod(rangeHue,"editingFinished",Qt::DirectConnection); linkedWindow.findChild<QAction*>("saveDocumentAction")->trigger();
+    require(producer.openDocument(linked),"Reopen ranged publication");
+    require(QImage(output).convertToFormat(QImage::Format_ARGB32_Premultiplied)==producer.renderedImage().convertToFormat(QImage::Format_ARGB32_Premultiplied),"Ranged publication pixels differ");
+    require(QImage(source)==original,"Range publication modified source");
+    auto* linkedColorize=linkedWindow.findChild<QCheckBox*>("colorizeCheckBox");linkedColorize->setChecked(true);auto* linkedHue=linkedWindow.findChild<QSpinBox*>("hueSpin");auto* linkedSaturation=linkedWindow.findChild<QSpinBox*>("saturationSpin");auto* linkedLightness=linkedWindow.findChild<QSpinBox*>("lightnessSpin");linkedHue->setValue(210);linkedSaturation->setValue(80);linkedLightness->setValue(-15);QMetaObject::invokeMethod(linkedHue,"editingFinished",Qt::DirectConnection);QMetaObject::invokeMethod(linkedSaturation,"editingFinished",Qt::DirectConnection);QMetaObject::invokeMethod(linkedLightness,"editingFinished",Qt::DirectConnection);linkedWindow.findChild<QAction*>("saveDocumentAction")->trigger();require(producer.openDocument(linked),"Reopen publication");require(QImage(output).convertToFormat(QImage::Format_ARGB32_Premultiplied)==producer.renderedImage().convertToFormat(QImage::Format_ARGB32_Premultiplied),"Published pixels differ");require(QImage(source)==original,"Source modified");return true;
  }catch(const std::exception& e){std::cerr<<e.what()<<'\n';return false;}
 }

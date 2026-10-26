@@ -1187,12 +1187,15 @@ uniform vec3 exposure_offset_gamma;
 uniform vec3 hue_saturation;
 uniform bool hue_colorize_enabled;
 uniform vec3 hue_colorize;
+uniform vec3 hue_ranges[6];
+uniform bool hue_ranges_identity;
 uniform vec3 levels_input[4];
 uniform vec2 levels_output[4];
 uniform bool levels_identity;
 uniform vec4 curve_table[192];
 uniform bool curve_identity;
 uniform bool has_mask;
+uniform bool gray_mask;
 uniform bool bottom_left;
 uniform int canvas_height;
 uniform int opacity256;
@@ -1213,7 +1216,17 @@ vec3 adjustHueSaturation(vec3 rgb) {
     } else if (delta > 0.0) {
         saturation = adjustHsl(clamp(delta / (1.0 - abs(2.0 * original_lightness - 1.0)), 0.0, 1.0), hue_saturation.y);
         hue = hi == rgb.r ? (rgb.g-rgb.b)/delta : hi == rgb.g ? (rgb.b-rgb.r)/delta+2.0 : (rgb.r-rgb.g)/delta+4.0;
-        hue = mod(hue + hue_saturation.x, 6.0);
+        if (hue_ranges_identity) {
+            hue = mod(hue + hue_saturation.x, 6.0);
+        } else {
+            hue = mod(hue, 6.0);
+            if (hue >= 6.0) hue = 0.0;
+            int first = int(floor(hue));
+            vec3 range = mix(hue_ranges[first], hue_ranges[(first + 1) % 6], hue - float(first));
+            saturation = adjustHsl(saturation, range.y);
+            lightness = adjustHsl(lightness, range.z);
+            hue = mod(hue + hue_saturation.x + range.x, 6.0);
+        }
     }
     float chroma = (1.0 - abs(2.0 * lightness - 1.0)) * saturation;
     float x = chroma * (1.0 - abs(mod(hue,2.0)-1.0));
@@ -1249,7 +1262,7 @@ void main() {
         vec4 b=texelFetch(backdrop_image,ivec2(gl_FragCoord.xy),0);
         vec3 cb=b.a>0.0?clamp(b.rgb/b.a,0.0,1.0):vec3(0);
         float t=dot(cb,vec3(0.2126,0.7152,0.0722));
-        if(((adjustment_kind==2 && brightness_contrast==vec2(0)) || (adjustment_kind==3 && exposure_offset_gamma==vec3(0,0,1)) || (adjustment_kind==4 && hue_saturation==vec3(0) && !hue_colorize_enabled) || (adjustment_kind==5 && levels_identity) || (adjustment_kind==6 && curve_identity)) && blend_mode==0){color=b;return;}
+        if(((adjustment_kind==2 && brightness_contrast==vec2(0)) || (adjustment_kind==3 && exposure_offset_gamma==vec3(0,0,1)) || (adjustment_kind==4 && hue_saturation==vec3(0) && !hue_colorize_enabled && hue_ranges_identity) || (adjustment_kind==5 && levels_identity) || (adjustment_kind==6 && curve_identity)) && blend_mode==0){color=b;return;}
         vec3 mapped=adjustment_kind==2 ? clamp((cb+brightness_contrast.x-.5)*(1.0+brightness_contrast.y)+.5,0.0,1.0) : adjustment_kind==3 ? exposeSrgb(cb) : adjustment_kind==4 ? adjustHueSaturation(cb) : adjustment_kind==5 ? adjustLevels(cb) : adjustment_kind==6 ? vec3(curveValue(cb.r,0),curveValue(cb.g,1),curveValue(cb.b,2)) : gradient_stops[gradient_count-1].rgb;
         for(int i=1;adjustment_kind==1 && i<gradient_count;++i) {
             if(t<=gradient_stops[i].a){vec4 l=gradient_stops[i-1],r=gradient_stops[i];mapped=mix(l.rgb,r.rgb,clamp((t-l.a)/(r.a-l.a),0.0,1.0));break;}
@@ -1262,7 +1275,7 @@ void main() {
         else if(blend_mode==4)mixed=min(vec3(1),cb+cs);
         else if(blend_mode==5)mixed=abs(cb-cs);
         float coverage=1.0;
-        if(has_mask){ivec4 m=ivec4(floor(texelFetch(mask_image,ivec2(floor(point)),0)*255.0+0.5));int luma=(m.r*2126+m.g*7152+m.b*722+5000)/10000;coverage=float(luma)/255.0;}
+        if(has_mask){ivec4 m=ivec4(floor(texelFetch(mask_image,ivec2(floor(point)),0)*255.0+0.5));int luma=gray_mask?m.r:(m.r*2126+m.g*7152+m.b*722+5000)/10000;coverage=float(luma)/255.0;}
         color=vec4(mix(b.rgb,mixed*b.a,blend_opacity*coverage),b.a);return;
     }
     ivec2 pixel = ivec2(floor((inverse_matrix * vec3(point, 1.0)).xy));
@@ -1273,7 +1286,7 @@ void main() {
     ivec4 bytes = ivec4(floor(texelFetch(source_image, source_pixel, 0) * 255.0 + 0.5));
     if (has_mask) {
         ivec3 mask_bytes = ivec3(floor(texelFetch(mask_image, pixel, 0).rgb * 255.0 + 0.5));
-        int coverage = (mask_bytes.r * 2126 + mask_bytes.g * 7152 + mask_bytes.b * 722 + 5000) / 10000;
+        int coverage = gray_mask ? mask_bytes.r : (mask_bytes.r * 2126 + mask_bytes.g * 7152 + mask_bytes.b * 722 + 5000) / 10000;
         bytes = (bytes * coverage + ivec4(127)) / 255;
     }
     if(blend_mode!=0) {
@@ -1373,7 +1386,7 @@ void main() {
         raster_program->setUniformValue("source_image", 0); raster_program->setUniformValue("mask_image", 1);
         raster_program->setUniformValue("canvas_height", height);
         raster_program->setUniformValue("backdrop_image", 2);
-        const auto draw = [&](GLuint source, bool bottom, GLuint mask, int opacity, const OpenGlRasterTransform& transform, BlendMode mode = BlendMode::Normal,const effects::AdjustmentParameters* adjustment=nullptr,bool quantize_group_opacity=false) -> bool {
+        const auto draw = [&](GLuint source, bool bottom, GLuint mask, int opacity, const OpenGlRasterTransform& transform, BlendMode mode = BlendMode::Normal,const effects::AdjustmentParameters* adjustment=nullptr,bool quantize_group_opacity=false,bool gray_mask=false) -> bool {
             bool invertible = false; const auto inverse = transform.matrix.inverted(&invertible);
             if (!invertible || !transform.matrix.isAffine()) return false;
             QMatrix3x3 matrix;
@@ -1384,6 +1397,7 @@ void main() {
             const QRect clip = transform.clip.isValid() ? transform.clip : QRect(QPoint(), request.size);
             gl->glUniform4i(raster_program->uniformLocation("clip_rect"), clip.x(), clip.y(), clip.x()+clip.width(), clip.y()+clip.height());
             raster_program->setUniformValue("bottom_left", bottom); raster_program->setUniformValue("has_mask", mask != 0);
+            raster_program->setUniformValue("gray_mask", gray_mask);
             raster_program->setUniformValue("opacity256", opacity * 256 / 100);
             raster_program->setUniformValue("blend_mode",static_cast<int>(mode));
             raster_program->setUniformValue("blend_opacity",quantize_group_opacity?1.f:float(opacity)/100.f);
@@ -1423,6 +1437,15 @@ void main() {
             raster_program->setUniformValue("hue_colorize_enabled", hue && hue->colorize_enabled);
             raster_program->setUniformValue("hue_colorize", hue && hue->colorize_enabled ?
                 QVector3D(float(hue->colorize.hue), hue->colorize.saturation / 100.f, hue->colorize.lightness / 100.f) : QVector3D{});
+            std::array<QVector3D, 6> hue_ranges{};
+            bool hue_ranges_identity = true;
+            if (hue) for (int i = 0; i < 6; ++i) {
+                const auto& range = hue->ranges[i];
+                hue_ranges[i] = QVector3D(range.hue / 60.f, range.saturation / 100.f, range.lightness / 100.f);
+                hue_ranges_identity &= range == effects::HueRangeParameters{};
+            }
+            raster_program->setUniformValueArray("hue_ranges", hue_ranges.data(), 6);
+            raster_program->setUniformValue("hue_ranges_identity", hue_ranges_identity);
             raster_program->setUniformValue("exposure_offset_gamma", exposure ?
                 QVector3D(float(exposure->exposure), float(exposure->offset), float(exposure->gamma)) : QVector3D(0,0,1));
             raster_program->setUniformValue("brightness_contrast",bc?QVector2D(bc->brightness/100.f,bc->contrast/100.f):QVector2D{});
@@ -1458,7 +1481,7 @@ void main() {
                     loaded = upload(layer.mask, 1); if (loaded.status != OpenGlCompositionStatus::Complete) return loaded;
                     mask = raster_textures.at(layer.mask.identity).texture;
                 }
-                if (!draw(layer.adjustment?0:raster_textures.at(layer.content.identity).texture, false, mask, layer.opacity, {}, layer.blend_mode,layer.adjustment?&*layer.adjustment:nullptr))
+                if (!draw(layer.adjustment?0:raster_textures.at(layer.content.identity).texture, false, mask, layer.opacity, {}, layer.blend_mode,layer.adjustment?&*layer.adjustment:nullptr,false,layer.mask.pixels.format()==QImage::Format_Grayscale8))
                     return result(OpenGlCompositionStatus::Unsupported, "raster-transform", "Invalid raster transform.");
             }
             if (!node.group) continue;

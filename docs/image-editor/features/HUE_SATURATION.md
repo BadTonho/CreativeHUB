@@ -1,11 +1,13 @@
-# Global Hue/Saturation adjustment layers
+# Hue/Saturation adjustment layers
 
 ## Editing contract
 
 Layers > New Adjustment Layer > Hue/Saturation creates the fourth adjustment
 kind, with normal Hue, Saturation and Lightness plus an independent Colorize
-mode. The Portuguese labels are Matiz/Saturação and Colorizar. Per-color-range
-controls remain outside this feature.
+mode. The Portuguese labels are Matiz/Saturação and Colorizar. A selector provides
+Global and six independent fixed ranges: Reds, Yellows, Greens, Cyans, Blues and
+Magentas. Switching ranges retains their values; Reset affects only the selected
+range. Colorize disables the selector and preserves all normal-mode values.
 A single selected layer, Background or group is required. Insert above the
 selected sibling or its clipping chain, retain group ownership and capture an
 area selection as the independent initial mask; otherwise initialize white.
@@ -60,6 +62,14 @@ mode. Colorize instead applies its absolute hue and saturation to every pixel,
 including gray pixels, while preserving original L before applying its
 independent Colorize Lightness adjustment.
 
+Each range stores integer Hue [-180,180], Saturation and Lightness [-100,100],
+initially zero. Original chromatic hue selects adjacent fixed centers at 0, 60,
+120, 180, 240 and 300 degrees; parameters interpolate linearly between centers,
+including the circular 300–360 transition. Apply global HSL controls first,
+then apply the interpolated range values using the same signed adjustment rule.
+Achromatic pixels receive only global controls. Colorize ignores range values.
+Neutral ranges preserve existing output and alpha remains unchanged.
+
 For normalized S or L and signed percent a:
 
 - Negative: `adjust(t,a) = t * (1+a/100)`.
@@ -84,21 +94,24 @@ existing contracts.
 
 ## Format and compatibility
 
-Introduced in v23, this kind is read by the current v28 writer alongside
-supported v1-27 documents. Version 28 adds a required `colorize` object; older
+Introduced in v23, this kind is read by the current v29 writer alongside
+supported v1-28 documents. Version 28 adds a required `colorize` object; older
 versions migrate to disabled Colorize with its default values. Store:
 
 ```json
-{"kind":"adjustment","adjustment":{"type":"hue_saturation","hue":75,"saturation":-25,"lightness":10,"colorize":{"enabled":true,"hue":210,"saturation":65,"lightness":-12}}}
+{"kind":"adjustment","adjustment":{"type":"hue_saturation","hue":75,"saturation":-25,"lightness":10,"colorize":{"enabled":true,"hue":210,"saturation":65,"lightness":-12},"ranges":[{"hue":30,"saturation":0,"lightness":0},{"hue":0,"saturation":0,"lightness":0},{"hue":0,"saturation":0,"lightness":0},{"hue":0,"saturation":0,"lightness":0},{"hue":0,"saturation":0,"lightness":0},{"hue":0,"saturation":0,"lightness":0}]}}
 ```
 
-The normal controls and all four Colorize fields are required in v28. Colorize
+Version 29 additionally requires a `ranges` array of exactly six objects in
+red, yellow, green, cyan, blue, magenta order, each with integer `hue`,
+`saturation`, and `lightness` fields. Versions 1–28 migrate to neutral ranges.
+The normal controls and all four Colorize fields are required since v28. Colorize
 Hue is 0–360, Saturation is 0–100 and Lightness is -100–100. Reject fractional,
 non-numeric, missing and out-of-range controls, this kind before v23, mismatched
 adjustment fields, incompatible Background/content/outline fields and future
 schemas. Invalid Open retains the active document. Earlier binaries cannot open
-v28; there is no downgrade writer. Recovery envelope v1, application versions
-and linked PNG protocol stay unchanged. The current Hub accepts Image v1-28 and rejects v29,
+v29; there is no downgrade writer. Recovery envelope v1, application versions
+and linked PNG protocol stay unchanged. The current Hub accepts Image v1-29 and rejects v30,
 retaining all six kinds and masks while rebasing existing media paths. Actual
 Image readers verify vault and relocated restores.
 
@@ -106,13 +119,30 @@ Image readers verify vault and relocated restores.
 
 | Contract | Automated gate |
 | --- | --- |
-| Normal/Colorize HSL reference, gray/chromatic input, 0°/360°, saturation endpoints, lightness, bounds, alpha/coverage/opacity/six modes and exact identity | `creative-suite-image-editor-hue-saturation`, shared `creative-suite-effects` |
-| Adjustment stack/order, independent values, history, clipping/groups/masks, cache reuse, thumbnails, v27→28/recovery/invalid loads and PNG/JPEG/group export | `creative-suite-image-editor-hue-saturation`, existing core/raster/mask/export suites |
-| Actual menu, selection seed, mode-specific ranges/values, keyboard/wheel/sliders, mode-local Reset, Undo/Redo, restrictions, tabs and linked PNG | `creative-suite-image-editor-hue-saturation-ui`, full UI and translation catalog |
-| Native OpenGL parity, unchanged alpha, Colorize previews, zero-upload edits, mixed types, cancellation/budgets and 1080p | Interactive `gpuHueSaturation` / `gpuHueSaturationColorGrid`, native shared OpenGL and existing Image interactive gates |
+| Normal/Colorize and six color-range HSL, circular transitions, gray/chromatic input, endpoints, alpha and exact identity | `creative-suite-image-editor-hue-saturation`, shared `creative-suite-effects` |
+| Adjustment stack/order, independent values, history, clipping/groups/masks, cache reuse, thumbnails, v28→29/recovery/invalid loads and PNG/JPEG/group export | `creative-suite-image-editor-hue-saturation`, existing core/raster/mask/export suites |
+| Menu, selection seed, range selector, keyboard/wheel/sliders, range-local Reset, Undo/Redo, tabs and linked PNG | `creative-suite-image-editor-hue-saturation-ui`, full UI and translation catalog |
+| Native OpenGL parity, range and Colorize previews, zero-upload edits, mixed types, cancellation/budgets and 1080p | Interactive `gpuHueSaturation` / `gpuHueSaturationColorGrid`, native shared OpenGL and existing Image interactive gates |
 | Real v23 PNG producer, rotated RGB, mask alpha and isolated clip variant | `creative-suite-main-editor-linked-image`, also reused by the full Video main-window suite |
-| v1–28 backup/rebase/restore and v29 refusal | `hub-backup-format-test`, `hub-backup-manager-test` with the actual Image reader |
+| v1–29 backup/rebase/restore and v30 refusal | `hub-backup-format-test`, `hub-backup-manager-test` with the actual Image reader |
 | Existing shared consumers | Scoped Video adjustment/transform/project/media and Motion preview/GPU/persistence/export/UI suites |
+
+Windows Release execution on 2026-10-26: the Hue/Saturation model and UI,
+translation catalog and offscreen interactive tests passed. Native Windows
+`gpuBudgetsGeometryAndCoverage`, `gpuHueSaturation`,
+`gpuHueSaturationColorGrid` and `gpuEditableBlendObjects` passed. The first
+native run exposed incorrect OpenGL coverage for single-channel grayscale masks;
+the raster shader now reads the grayscale channel directly while retaining RGB
+luminance for color masks. Native owner visual and macOS/Linux acceptance remain
+pending. Hub backup-format and backup-manager tests passed. The general shared
+Effects suite still fails its previously documented Outer Glow assertion; it is
+not recorded as a passing gate for this change. The Video linked-image test and
+the Motion UI consumer test (using a v29 producer with non-neutral range) passed.
+Levels and Curves model, persistence and migration tests also passed after their
+current-version expectations were updated.
+The Windows Release executable was built at
+`build/apps/image-editor/Release/creative-suite-image-editor.exe`
+(2,685,952 bytes, 2026-10-26 17:09:40 UTC-03:00).
 
 Execution evidence is recorded below. Keep native context
 results distinct from offscreen skips. The six pre-existing local failures
