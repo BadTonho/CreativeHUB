@@ -77,15 +77,21 @@ if(TARGET creative-suite::composition-opengl)
     add_creative_suite_test(NAME creative-suite-composition-opengl-color
         SKIP_RETURN_CODE 77
         COMMAND creative-suite-composition-opengl-tests --color-only)
+    add_creative_suite_test(NAME creative-suite-composition-opengl-glow
+        SKIP_RETURN_CODE 77
+        COMMAND creative-suite-composition-opengl-tests --glow-only)
     if(WIN32)
         set_tests_properties(creative-suite-composition-opengl PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=windows")
         set_tests_properties(creative-suite-composition-opengl-color PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=windows")
+        set_tests_properties(creative-suite-composition-opengl-glow PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=windows")
     elseif(APPLE)
         set_tests_properties(creative-suite-composition-opengl PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=cocoa")
         set_tests_properties(creative-suite-composition-opengl-color PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=cocoa")
+        set_tests_properties(creative-suite-composition-opengl-glow PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=cocoa")
     else()
         set_tests_properties(creative-suite-composition-opengl PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
         set_tests_properties(creative-suite-composition-opengl-color PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+        set_tests_properties(creative-suite-composition-opengl-glow PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
     endif()
     if(WIN32)
         add_custom_command(TARGET creative-suite-composition-opengl-tests POST_BUILD

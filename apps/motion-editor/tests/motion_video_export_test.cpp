@@ -497,7 +497,7 @@ MotionExportSnapshot makePngSequenceSnapshot()
     snapshot.frame_rate = {24, 1};
 
     auto image = imageLayer(1, 2);
-    auto pixels = solidFrame(220, 40, 30);
+    auto pixels = std::make_shared<RgbaFrame>(*solidFrame(220, 40, 30));
     for (std::size_t offset = 3; offset < pixels->rgba_pixels.size(); offset += 4)
         pixels->rgba_pixels[offset] = 0;
     for (int y = 16; y < 32; ++y) {

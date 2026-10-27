@@ -30,6 +30,8 @@ behind the source and expands the raster by three blur radii plus one pixel on
 each side. Inner tints pixels near the inside alpha boundary and preserves the
 source raster bounds and alpha coverage. Both combines the two results and
 expands like Outer. Transparent source pixels do not create a halo by themselves.
+Outer uses source-over composition: an opaque source covers the halo, whereas a
+partially transparent source allows it to contribute to both color and alpha.
 
 Glow remains at its position in the ordered effect stack. Its existing effect
 mask limits the processed result while retaining the unprocessed pixels outside
@@ -64,6 +66,14 @@ Regression sources cover shared CPU pixels, alpha, all modes, bounds,
 cancellation and resource limits; Motion ordered rendering, masks, animation,
 Inspector/history, preview/export pixels, persistence and interchange refusal;
 OpenGL parity and Vulkan refusal; and Hub v18 backup/restore and v19 rejection.
-These sources have been added for this implementation. They have not been
-executed in this work stage. Manual visual checks, native OpenGL presentation, platform/driver
-acceptance and representative performance measurements remain pending.
+On 2026-10-26, Windows Release `creative-suite-effects`,
+`creative-suite-composition-opengl-glow`, `creative-suite-motion-editor-drop-shadow`
+and `creative-suite-motion-editor-preview` passed. The focused OpenGL test used
+the NVIDIA GTX 1660 SUPER and checks automatic precision parity and core-only
+precision fallback. The complete `creative-suite-composition-opengl` suite failed
+earlier in its separate R8 matte budget check, before reaching Glow. The Motion
+export test compiled after correcting its mutable fixture, but failed a linked
+image pixel check before reaching its Glow export assertion. Neither full gate
+is recorded as passing. Manual visual checks, native Viewer presentation, other
+platform/driver acceptance and representative performance measurements remain
+pending.

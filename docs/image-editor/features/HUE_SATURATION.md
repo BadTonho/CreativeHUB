@@ -134,9 +134,10 @@ translation catalog and offscreen interactive tests passed. Native Windows
 native run exposed incorrect OpenGL coverage for single-channel grayscale masks;
 the raster shader now reads the grayscale channel directly while retaining RGB
 luminance for color masks. Native owner visual and macOS/Linux acceptance remain
-pending. Hub backup-format and backup-manager tests passed. The general shared
-Effects suite still fails its previously documented Outer Glow assertion; it is
-not recorded as a passing gate for this change. The Video linked-image test and
+pending. Hub backup-format and backup-manager tests passed. At that run, the general shared
+Effects suite failed its previously documented Outer Glow assertion. On 2026-10-26
+the assertion was corrected to check source-over composition and the suite passed;
+this later test-only correction did not alter Hue/Saturation. The Video linked-image test and
 the Motion UI consumer test (using a v29 producer with non-neutral range) passed.
 Levels and Curves model, persistence and migration tests also passed after their
 current-version expectations were updated.

@@ -147,10 +147,45 @@ void verifyGlow()
     const auto outer = applyGlow(source, parameters);
     require(outer && outer->width == 9 && outer->height == 9,
             "outer Glow expands the source frame");
-    const auto* source_pixel = outer->rgba_pixels.data() + 4 * outer->stride + 4 * 4;
-    require(source_pixel[0] == source.rgba_pixels[0] && source_pixel[1] == source.rgba_pixels[1] &&
-                source_pixel[2] == source.rgba_pixels[2] && source_pixel[3] == source.rgba_pixels[3],
-            "outer Glow preserves source RGB and alpha over the halo");
+    // Independently blur a single alpha byte with three horizontal and three
+    // vertical radius-one box passes, then composite the source over the halo.
+    // Integer reference arithmetic checks the straight-alpha rounding too.
+    for (const int source_alpha : {0, 1, 128, 255}) {
+        auto input = source;
+        input.rgba_pixels[3] = static_cast<std::uint8_t>(source_alpha);
+        const auto actual = applyGlow(input, parameters);
+        require(actual && actual->width == 9 && actual->height == 9,
+                "outer Glow returns the declared bounds for each source alpha");
+        std::array<int, 81> alpha{};
+        alpha[4 * 9 + 4] = source_alpha;
+        for (int pass = 0; pass < 6; ++pass) {
+            auto previous = alpha;
+            for (int y = 0; y < 9; ++y) for (int x = 0; x < 9; ++x) {
+                int sum = 0;
+                for (int offset = -1; offset <= 1; ++offset) {
+                    const int sx = std::clamp(x + (pass % 2 == 0 ? offset : 0), 0, 8);
+                    const int sy = std::clamp(y + (pass % 2 != 0 ? offset : 0), 0, 8);
+                    sum += previous[sy * 9 + sx];
+                }
+                alpha[y * 9 + x] = (sum + 1) / 3;
+            }
+        }
+        for (int y = 0; y < 9; ++y) for (int x = 0; x < 9; ++x) {
+            const int foreground = x == 4 && y == 4 ? source_alpha : 0;
+            const int halo = alpha[y * 9 + x];
+            const int combined = foreground * 255 + halo * (255 - foreground);
+            const auto* pixel = actual->rgba_pixels.data() + y * actual->stride + x * 4;
+            require(pixel[3] == (combined + 127) / 255,
+                    "outer Glow source-over alpha matches the independent reference");
+            for (int channel = 0; channel < 3; ++channel) {
+                const int numerator = source.rgba_pixels[channel] * foreground * 255 +
+                    parameters.color[channel] * halo * (255 - foreground);
+                const int expected = combined ? (numerator + combined / 2) / combined : 0;
+                require(pixel[channel] == expected,
+                        "outer Glow source-over color matches the independent reference");
+            }
+        }
+    }
     require(outer->rgba_pixels[3] == 0 && outer->rgba_pixels[4 * outer->stride + 1 * 4 + 3] > 0,
             "outer Glow retains transparent bounds and a colored alpha halo");
 

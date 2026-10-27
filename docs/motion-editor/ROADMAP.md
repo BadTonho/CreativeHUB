@@ -634,9 +634,14 @@ automated implementation coverage.
 
 ## Glow regression boundary
 
+Windows Release on 2026-10-26: shared Effects, focused OpenGL Glow, Motion
+Drop Shadow/Glow and preview tests passed. The full OpenGL suite and Motion
+export suite stopped in other checks before their Glow checks; see the [Glow
+guide](features/GLOW.md#verification-and-pending-acceptance) for details.
+
 | Feature | Automated coverage | Remaining acceptance |
 | --- | --- | --- |
-| Outer/Inner/Both pixels and alpha, bounded origins, cancellation, masks, ordered CPU rendering, animated parameters, Inspector/history, preview/export pixels, GPU metrics/fallback, native v18/recovery, `.cscomp` refusal and Hub v18 backup | `libs/tests/effects_test.cpp` (`creative-suite-effects`), `libs/tests/opengl_composition_test.cpp` (`creative-suite-composition-opengl`), `libs/tests/vulkan_composition_test.cpp` (`creative-suite-composition-vulkan`), `apps/motion-editor/tests/drop_shadow_test.cpp` (Glow model/render/UI and history coverage), `apps/motion-editor/tests/motion_video_export_test.cpp` (decoded export halo and backend parity/fallback), `apps/motion-editor/tests/performance_metrics_test.cpp` (separate Glow diagnostics), `apps/hub/tests/test_backup_formats.cpp` (`hub-backup-format-test`) | [Glow guide](features/GLOW.md#verification-and-pending-acceptance); the regression sources were added but are not executed in this work stage. Native OpenGL presentation, visual/platform acceptance and representative performance measurements remain pending. |
+| Outer/Inner/Both pixels and alpha, bounded origins, cancellation, masks, ordered CPU rendering, animated parameters, Inspector/history, preview/export pixels, GPU metrics/fallback, native v18/recovery, `.cscomp` refusal and Hub v18 backup | `libs/tests/effects_test.cpp` (`creative-suite-effects`), `libs/tests/opengl_composition_test.cpp` (`creative-suite-composition-opengl-glow` and full OpenGL suite), `libs/tests/vulkan_composition_test.cpp` (`creative-suite-composition-vulkan`), `apps/motion-editor/tests/drop_shadow_test.cpp` (Glow model/render/UI and history coverage), `apps/motion-editor/tests/motion_video_export_test.cpp` (decoded export halo and backend parity/fallback), `apps/motion-editor/tests/performance_metrics_test.cpp` (separate Glow diagnostics), `apps/hub/tests/test_backup_formats.cpp` (`hub-backup-format-test`) | [Glow guide](features/GLOW.md#verification-and-pending-acceptance) records focused results and unresolved full-suite failures. Native Viewer presentation, visual/platform acceptance and representative performance measurements remain pending. |
 
 
 ## Image transparent blend composition maintenance

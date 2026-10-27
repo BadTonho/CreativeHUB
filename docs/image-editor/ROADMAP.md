@@ -41,9 +41,11 @@ hardware requirements remain measurement-based. See [scope](SCOPE.md).
 
 ## Next code step
 
-**Hue/Saturation per-color-range controls are implemented.** Select the next
-bounded feature from the provisional sequence in section 4. Colorize is an
-independent mode; visual and platform acceptance remains pending. Levels and Curves provide RGB master and
+**Hue/Saturation per-color-range controls are implemented.** The next proposed
+work is to define a bounded Color Balance adjustment contract. The shared Effects
+Outer Glow assertion was corrected and its focused suite passed. This is a provisional code
+priority, not a release commitment. Colorize is an independent mode; visual and
+platform acceptance remains pending. Levels and Curves provide RGB master and
 independent channels; see their [Levels](features/LEVELS.md) and
 [Curves](features/CURVES.md) contracts.
 Global Hue/Saturation is implemented; see its [contract](features/HUE_SATURATION.md).
@@ -53,12 +55,10 @@ The adjustment-layer contract and Gradient Map are implemented; see
 group blend modes are implemented; see [blend modes](features/BLEND_MODES.md).
 Manual and platform acceptance remains pending.
 
-The maintainer requested this feature expansion plan on **2026-10-20**, based
-on the Photoshop feature comparison in the local owner-planning reference
-`ideia/PHOTOSHOP_FEATURES.md`. The self-contained sequence in section 4 records
-the missing and partial capabilities from that comparison. Its order is
-provisional; the simple outline workflow highlighted in the reference has now
-been implemented. Each unchecked item is **planned, not implemented**.
+The maintainer requested a feature expansion plan on **2026-10-20**. The
+self-contained sequence in section 4 records implemented foundations and
+proposed extensions. Its order is provisional; each unchecked item is
+**planned, not implemented**.
 
 Implementation can proceed while existing manual acceptance remains pending.
 The acceptance order in Milestones 1-3 still applies to release readiness;
@@ -241,12 +241,19 @@ acceptance remains with the maintainer; automated coverage is indexed below.
 
 ### 4. Feature expansion — implementation sequence
 
-Planning baseline: **2026-10-20**. The numbered stages below give a provisional
-code order, not release dates or a promise of full Photoshop parity. Later
-stages need their own bounded implementation contracts before code changes.
+Planning baseline: **2026-10-20**; expanded **2026-10-26**. The numbered stages
+below give a provisional code order, not release dates or a completeness claim.
+Each increment needs its own bounded implementation contract before code changes.
 Preserve the lightweight, local-first workflow and reuse shared processing
 where its semantics match; document models and editing workflows remain owned
 by the Image Editor.
+
+Suggested order within each family is foundational controls first, then richer
+editing and finally advanced workflows. Families can proceed in parallel where
+their contracts allow it. Run the relevant shared Effects regressions for work
+that affects them. Do not
+defer the standalone acceptance gate or assign future items to a release merely
+because they appear here.
 
 Already implemented and excluded from new-feature tasks: raster layers and
 one-level groups, layer opacity, raster layer masks, rectangular/elliptical and
@@ -277,6 +284,8 @@ Native visual and macOS/Linux acceptance remains pending.
   and isolated groups; see [contract](features/BLEND_MODES.md).
 - [ ] Add further darken/lighten,
   contrast, comparison, and hue/saturation/color/luminosity modes incrementally.
+- [ ] Specify each additional mode's alpha, group isolation, clipping and color
+  semantics; compare CPU, GPU, export and linked output on transparent inputs.
 - [x] Preserve preview/export equivalence, history, persistence, recovery, and
   linked output for clipping and the six implemented blend modes.
 
@@ -297,8 +306,18 @@ Native visual and macOS/Linux acceptance remains pending.
 - [x] Add individual Red, Green and Blue Levels alongside the RGB master;
   see the [Levels contract](features/LEVELS.md).
 - [x] Extend Hue/Saturation with Colorize and six fixed color-range controls.
-- [ ] Add color balance, Black & White channel controls, LUT loading, selective
-  color, invert, posterize, and threshold.
+- [ ] Add Color Balance with cyan/red, magenta/green and yellow/blue controls
+  for shadows, midtones and highlights, including an optional luminosity
+  preservation control. Define tonal weights and processing order first.
+- [ ] Add Black & White conversion with controls for source color ranges;
+  specify neutral behavior, alpha and masks.
+- [ ] Add LUT loading for `.cube` and `.3dl` in separately validated increments,
+  including parsing errors, supported dimensions and missing-file recovery.
+- [ ] Add Selective Color, Invert, Posterize and Threshold as separately bounded
+  adjustments; define parameter ranges and color-space semantics for each.
+- [ ] Extend Hue/Saturation with editable range boundaries and transition widths,
+  and Curves with on-image sampling/editing, after defining their interaction
+  with existing values, history and document migration.
 - [ ] Add editable solid-color, gradient, and pattern fill layers and reusable
   adjustment/fill presets.
 
@@ -308,6 +327,8 @@ Native visual and macOS/Linux acceptance remains pending.
   after the simple outline is implemented.
 - [ ] Add drop/inner shadows, outer/inner glow, bevel/emboss, and
   color/gradient/pattern overlays with reeditable parameters and reusable styles.
+- [ ] Define style order, shared lighting controls where appropriate, alpha and
+  mask interactions, preview/export equivalence and reusable style presets.
 - [ ] Add Fill separately from Opacity, defining its interaction with each
   blend mode and style rather than treating it as a second opacity slider.
 - [ ] Add masks on groups, nested groups, configurable layer locks, linked
@@ -319,7 +340,8 @@ Native visual and macOS/Linux acceptance remains pending.
 #### 4.5. Selection refinement, paths, and vector design
 
 - [ ] Add polygonal/magnetic lasso, Quick Selection brush, color-range
-  selection including skin-tone targeting, fixed-size/aspect marquee controls,
+  selection by sampled color and tolerance, including skin-tone targeting,
+  fixed-size/aspect marquee controls,
   and selection intersection.
 - [ ] Add selection transforms, expand/contract, smooth, feather, contrast,
   edge shifting, saved selections, and selection/mask/alpha-channel conversion.
@@ -327,6 +349,8 @@ Native visual and macOS/Linux acceptance remains pending.
   views, refine-edge brush, adaptive radius, and color decontamination.
 - [ ] Add editable Bezier paths, vector masks, path editing, and a channel
   panel for component and alpha channels as supported by the color model.
+- [ ] Define how selection, alpha channels, raster masks and vector masks are
+  stored and converted without silently discarding editable content.
 - [ ] Extend shapes with triangles/polygons, independently rounded rectangle
   corners, and union/subtract/intersect/exclude operations.
 - [ ] Add richer paragraph/character formatting, variable-font axis and
@@ -337,6 +361,8 @@ Native visual and macOS/Linux acceptance remains pending.
 - [ ] Extend paint/erase with hardness, independent opacity/flow, smoothing,
   pressure/tilt input, custom tips, size/angle dynamics, scattering, texture,
   dual brushes, color dynamics, and brush presets.
+- [ ] Define stroke sampling, device input fallback and reproducible stroke
+  replay before adding randomized or pressure-dependent brush dynamics.
 - [ ] Add Mixer Brush wet/load/mix controls and horizontal/vertical/radial
   painting symmetry.
 - [ ] Add Clone Stamp and source rotation/flip/scale controls, then Spot
@@ -366,14 +392,18 @@ Native visual and macOS/Linux acceptance remains pending.
   workflows, plus explicit grayscale/bitmap, CMYK, and Lab document modes in
   separately bounded increments. Define operation/format availability per mode.
 - [ ] Add non-destructive RAW development with exposure, color, and optical
-  controls and preserved original camera data.
+  controls and preserved original camera data. Evaluate supported camera formats,
+  decoding dependencies, licenses, color profiles and a recoverable editing path.
 
 #### 4.9. Automation and asset delivery
 
 - [ ] Add recorded actions/macros, batch processing, reusable presets, and
-  batch/multi-document/artboard export.
+  batch/multi-document/artboard export. Define recordable commands, handling of
+  unsupported actions, cancellation and per-file error reporting.
 - [ ] Add WebP export and SVG export for compatible vector content; importing
   WebP today does not provide WebP export.
+- [ ] Define export format capabilities, transparency, profiles and raster versus
+  vector output; offer per-layer and artboard delivery where supported.
 - [ ] Add controlled layer-based asset generation and a documented
   scripting/extension API with explicit ownership and error boundaries.
 
@@ -383,16 +413,20 @@ Native visual and macOS/Linux acceptance remains pending.
   editable-object selection or the connected-color Magic Wand.
 - [ ] Evaluate content-aware fill, patch/move, multi-source reconstruction,
   and content-aware scaling, with separately editable results where applicable.
+  Include user-controlled sample regions and protected regions in their contracts.
 - [ ] Evaluate generative fill/expand, image/background generation, variants,
   upscaling, harmonization, and prompt-guided editing.
 - [ ] Evaluate neural restoration, skin/portrait tools, colorization, artifact
   removal, and face-aware deformation. Distinguish local and online processing
   and experimental capabilities. Choose concrete implementations only after
   reviewing workload, dependencies/licenses, privacy, and service boundaries.
+- [ ] For assisted workflows, define editable output, selection/mask scope,
+  cancellation, model availability and explicit disclosure when processing is
+  online. Review generated or reconstructed results before accepting them.
 
 #### Delivery requirements for each implementation
 
-Every item above remains **planned, not implemented** until delivered with its
+Every unchecked item above remains **planned, not implemented** until delivered with its
 regression coverage. Cover model behavior, cancellation/no-ops where relevant,
 history, persistence/migration, recovery, rendering/export, and error logging.
 Update the feature-to-verification index with actual test sources/targets when

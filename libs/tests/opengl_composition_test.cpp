@@ -356,7 +356,7 @@ void trackMatteParity(OpenGlFrameCompositor& gpu) {
     }
 }
 
-void glowParity(OpenGlFrameCompositor& gpu)
+void glowParity(OpenGlFrameCompositor& gpu, bool allow_precision_fallback = false)
 {
     auto source = fixture(9, 7, true, 12);
     for (const auto mode : {effects::GlowMode::Outer, effects::GlowMode::Inner,
@@ -373,6 +373,11 @@ void glowParity(OpenGlFrameCompositor& gpu)
         operation.glow = parameters;
         OpenGlCompositionTimings timings;
         const auto output = gpu.processImage(operation, {}, &timings);
+        if (allow_precision_fallback && output.status == OpenGlCompositionStatus::Unsupported) {
+            require(output.operation == "affine-image-transform" && !output.frame,
+                "Core-only Glow must request precision fallback without an output frame");
+            continue;
+        }
         require(expected && output.status == OpenGlCompositionStatus::Complete && output.frame,
             "OpenGL Glow operation failed: " + output.operation + ": " + output.cause);
         const auto actual = gpu.readback(output.frame);
@@ -1174,9 +1179,10 @@ int main(int argc, char** argv) {
         bool context_unavailable = false;
         const bool measure = argc > 1 && std::string(argv[1]) == "--benchmark";
         const bool color_only = argc > 1 && std::string(argv[1]) == "--color-only";
+        const bool glow_only = argc > 1 && std::string(argv[1]) == "--glow-only";
         // GUI-created surface; worker creates/releases everything else. Repeat
         // activation and teardown to exercise resource lifetime with native Qt.
-        for (int activation = 0; activation < (color_only ? 1 : 2); ++activation) {
+        for (int activation = 0; activation < (color_only || glow_only ? 1 : 2); ++activation) {
             std::unique_ptr<QThread> worker(QThread::create([&] {
                 try {
                     OpenGlFrameCompositor gpu(surface.get(), OpenGlPrecisionPolicy::Automatic,
@@ -1191,6 +1197,13 @@ int main(int argc, char** argv) {
                     if (color_only) {
                         colorAdjustmentParity(gpu);
                         primaryGradeStackParity(gpu);
+                        return;
+                    }
+                    if (glow_only) {
+                        glowParity(gpu);
+                        OpenGlFrameCompositor baseline(surface.get(), OpenGlPrecisionPolicy::CoreOnly,
+                            QOpenGLContext::globalShareContext());
+                        glowParity(baseline, true);
                         return;
                     }
                     parity(gpu);
@@ -1237,7 +1250,7 @@ int main(int argc, char** argv) {
                         auto f = fixture(13, 7, true, 3);
                         compare(baseline, 53, 39, {{&f}}, "OpenGL 3.2 without precision extensions");
                         trackMatteParity(baseline);
-                        glowParity(baseline);
+                        glowParity(baseline, true);
                         CompositionLayer blended{&f};blended.blend_mode=BlendMode::Overlay;
                         compare(baseline,53,39,{{&f},blended},"OpenGL 3.2 blend without precision extensions");
                         animation::Transform2D rotated; rotated.rotation_degrees = 90;
