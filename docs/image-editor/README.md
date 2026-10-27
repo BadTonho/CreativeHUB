@@ -45,6 +45,8 @@ existing mask/history/export contract; native visual/platform acceptance is pend
 
 [Hue/Saturation](features/HUE_SATURATION.md): global and six fixed color-range HSL controls, Colorize, CPU/OpenGL preview and v29 persistence/Hub compatibility.
 
+[Color Balance](features/COLOR_BALANCE.md): independent tonal-range color controls and optional lightness preservation.
+
 [RGB and per-channel Levels](features/LEVELS.md): master/channel input/output
 controls, midtone gamma, combined histogram, CPU/OpenGL preview and v27
 persistence/Hub compatibility.

@@ -232,6 +232,14 @@ void testImageDocuments(const QString& root) {
             layers[layers.size()-1] = group;
             fixture.insert("layers", layers);
         }
+        if (version >= 30) {
+            auto layers=fixture.value("layers").toArray(); auto group=layers.last().toObject();
+            auto children=group.value("children").toArray(); auto adjustment=children.last().toObject();
+            adjustment.insert("id", QUuid::createUuid().toString(QUuid::WithoutBraces));
+            adjustment.insert("adjustment",QJsonObject{{"type","color_balance"},{"preserve_lightness",true},
+                {"ranges",QJsonArray{QJsonArray{10,20,30},QJsonArray{-40,50,0},QJsonArray{0,0,0}}}});
+            children.append(adjustment); group.insert("children",children); layers[layers.size()-1]=group; fixture.insert("layers",layers);
+        }
         if (version >= 24) {
             auto layers = fixture.value("layers").toArray();
             auto group = layers.last().toObject();

@@ -1658,6 +1658,17 @@ QString ImageDocumentSession::addHueSaturationAdjustment(std::optional<QPainterP
     return addAdjustment(creative_suite::effects::HueSaturationParameters{},
         QStringLiteral("Hue/Saturation"), std::move(selection));
 }
+QString ImageDocumentSession::addColorBalanceAdjustment(std::optional<QPainterPath> selection) {
+    return addAdjustment(creative_suite::effects::ColorBalanceParameters{}, QStringLiteral("Color Balance"), std::move(selection));
+}
+bool ImageDocumentSession::setColorBalance(const QString& id, const creative_suite::effects::ColorBalanceParameters& value) {
+    const auto* layer = findLayer(data_, id);
+    if (!layer || !layer->adjustment || !std::holds_alternative<creative_suite::effects::ColorBalanceParameters>(*layer->adjustment) ||
+        *layer->adjustment == creative_suite::effects::AdjustmentParameters{value} || !creative_suite::effects::validColorBalance(value)) return false;
+    if (!adjustment_edit_active_) pushEdit();
+    findLayer(data_, id)->adjustment = value;
+    layer_thumbnail_cache_.clear(); invalidateGroupThumbnailCache(); return true;
+}
 QString ImageDocumentSession::addLevelsAdjustment(std::optional<QPainterPath> selection) {
     return addAdjustment(creative_suite::effects::LevelsParameters{},
         QStringLiteral("Levels"), std::move(selection));

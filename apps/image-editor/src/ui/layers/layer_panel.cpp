@@ -4,6 +4,7 @@
 #include "brightness_contrast_editor.h"
 #include "exposure_offset_gamma_editor.h"
 #include "hue_saturation_editor.h"
+#include "color_balance_editor.h"
 #include "levels_editor.h"
 #include "curves_editor.h"
 #include "../translation_helpers.h"
@@ -354,6 +355,13 @@ LayerPanel::LayerPanel(QWidget* parent) : QWidget(parent) {
     hue_editor_->started = [this] { emit adjustmentEditStarted(); };
     hue_editor_->finished = [this] { emit adjustmentEditFinished(); };
     hue_editor_->changed = [this](const auto& value) { emit hueSaturationChanged(selectedItemId(), value); };
+    add_color_balance_action_ = adjustments->addAction(QCoreApplication::translate("ImageEditorUI", "Color Balance"));
+    add_color_balance_action_->setObjectName("addColorBalanceAction");
+    connect(add_color_balance_action_, &QAction::triggered, this, [this] { finishOutlineEdit(); emit addColorBalanceRequested(); });
+    color_balance_editor_ = new ColorBalanceEditor(this); layout->addWidget(color_balance_editor_); color_balance_editor_->hide();
+    color_balance_editor_->started = [this] { emit adjustmentEditStarted(); };
+    color_balance_editor_->finished = [this] { emit adjustmentEditFinished(); };
+    color_balance_editor_->changed = [this](const auto& value) { emit colorBalanceChanged(selectedItemId(), value); };
     add_levels_action_ = adjustments->addAction(QCoreApplication::translate("ImageEditorUI", "Levels"));
     add_levels_action_->setObjectName("addLevelsAction");
     connect(add_levels_action_, &QAction::triggered, this,
@@ -872,6 +880,7 @@ void LayerPanel::finishOutlineEdit() {
     if(hue_editor_)hue_editor_->finish();
     if(levels_editor_)levels_editor_->finish();
     if(curves_editor_)curves_editor_->finish();
+    if(color_balance_editor_)color_balance_editor_->finish();
     if (!outline_editing_) return;
     outline_editing_ = false; emit outlineEditFinished();
 }
@@ -1039,6 +1048,7 @@ void LayerPanel::updateControls() {
     add_hue_action_->setEnabled(add_gradient_action_->isEnabled());
     add_levels_action_->setEnabled(add_gradient_action_->isEnabled());
     add_curves_action_->setEnabled(add_gradient_action_->isEnabled());
+    add_color_balance_action_->setEnabled(add_gradient_action_->isEnabled());
     const bool adjustment=has_layer && layer->adjustment.has_value();
     quick_export_button_->setToolTip(adjustment?QCoreApplication::translate("ImageEditorUI","Adjustment layers have no pixels to export. Export the document or its group."):QString{});
     const auto* gradient=adjustment?std::get_if<creative_suite::effects::GradientMapParameters>(&*layer->adjustment):nullptr;
@@ -1059,6 +1069,9 @@ void LayerPanel::updateControls() {
     const auto* curves = adjustment ? std::get_if<creative_suite::effects::CurvesParameters>(&*layer->adjustment) : nullptr;
     curves_editor_->setVisible(curves && layer_tree_->selectedItems().size() == 1);
     if (curves) curves_editor_->setValue(id, *curves);
+    const auto* balance = adjustment ? std::get_if<creative_suite::effects::ColorBalanceParameters>(&*layer->adjustment) : nullptr;
+    color_balance_editor_->setVisible(balance && layer_tree_->selectedItems().size() == 1);
+    if (balance) color_balance_editor_->setValue(id, *balance);
     const bool outline_editable = has_layer && !adjustment && !layer->background && layer_tree_->selectedItems().size() == 1;
     clipping_action_->setEnabled(has_layer && !layer->background && layer_tree_->selectedItems().size()==1 && (layer->clip_to_base || clippingBases(document_).contains(id)));
     clipping_action_->setText(has_layer && layer->clip_to_base

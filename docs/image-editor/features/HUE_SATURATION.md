@@ -94,8 +94,8 @@ existing contracts.
 
 ## Format and compatibility
 
-Introduced in v23, this kind is read by the current v29 writer alongside
-supported v1-28 documents. Version 28 adds a required `colorize` object; older
+Introduced in v23, this kind is read by the current v30 writer alongside
+supported v1-29 documents. Version 28 adds a required `colorize` object; older
 versions migrate to disabled Colorize with its default values. Store:
 
 ```json
@@ -110,9 +110,9 @@ Hue is 0–360, Saturation is 0–100 and Lightness is -100–100. Reject fracti
 non-numeric, missing and out-of-range controls, this kind before v23, mismatched
 adjustment fields, incompatible Background/content/outline fields and future
 schemas. Invalid Open retains the active document. Earlier binaries cannot open
-v29; there is no downgrade writer. Recovery envelope v1, application versions
-and linked PNG protocol stay unchanged. The current Hub accepts Image v1-29 and rejects v30,
-retaining all six kinds and masks while rebasing existing media paths. Actual
+v30; there is no downgrade writer. Recovery envelope v1, application versions
+and linked PNG protocol stay unchanged. The current Hub accepts Image v1-30 and rejects v31,
+retaining all seven kinds and masks while rebasing existing media paths. Actual
 Image readers verify vault and relocated restores.
 
 ## Regression coverage
@@ -124,7 +124,7 @@ Image readers verify vault and relocated restores.
 | Menu, selection seed, range selector, keyboard/wheel/sliders, range-local Reset, Undo/Redo, tabs and linked PNG | `creative-suite-image-editor-hue-saturation-ui`, full UI and translation catalog |
 | Native OpenGL parity, range and Colorize previews, zero-upload edits, mixed types, cancellation/budgets and 1080p | Interactive `gpuHueSaturation` / `gpuHueSaturationColorGrid`, native shared OpenGL and existing Image interactive gates |
 | Real v23 PNG producer, rotated RGB, mask alpha and isolated clip variant | `creative-suite-main-editor-linked-image`, also reused by the full Video main-window suite |
-| v1–29 backup/rebase/restore and v30 refusal | `hub-backup-format-test`, `hub-backup-manager-test` with the actual Image reader |
+| v1–30 backup/rebase/restore and v31 refusal | `hub-backup-format-test`, `hub-backup-manager-test` with the actual Image reader |
 | Existing shared consumers | Scoped Video adjustment/transform/project/media and Motion preview/GPU/persistence/export/UI suites |
 
 Windows Release execution on 2026-10-26: the Hue/Saturation model and UI,

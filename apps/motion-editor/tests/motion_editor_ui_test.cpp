@@ -2339,6 +2339,11 @@ int main(int argc, char* argv[])
     require(!hue_id.isEmpty() && levels_producer.setHueSaturation(hue_id, hue_ranges) &&
                 levels_producer.renderedImage() != levels_only,
             "the Image Editor producer applies a non-neutral color-range adjustment");
+    const auto balance_id = levels_producer.addColorBalanceAdjustment();
+    creative_suite::effects::ColorBalanceParameters balance;
+    balance.preserve_lightness = false; balance.ranges[1][0] = 5;
+    require(!balance_id.isEmpty() && levels_producer.setColorBalance(balance_id, balance),
+            "the Image Editor producer applies a Color Balance adjustment");
     require(levels_producer.saveDocument(pathToQString(linked_image.document_path)),
             "Image Editor saves the Levels and color-range document");
     require(levels_producer.exportImage(pathToQString(linked_image.published_output_path)),
@@ -2388,6 +2393,9 @@ int main(int argc, char* argv[])
     require(published_revision.save(pathToQString(linked_image.published_output_path), "PNG"),
             "a later linked PNG revision is written");
 #endif
+    const QImage expected_linked_output(pathToQString(linked_image.published_output_path));
+    require(!expected_linked_output.isNull(), "the latest linked output can be inspected");
+    const QColor expected_linked_pixel = expected_linked_output.pixelColor(24, 16);
     require(waitFor([&] {
         const auto frame = viewer->renderedFrame();
         if (frame == nullptr || frame->width != 640 || frame->height != 360) return false;
@@ -2493,7 +2501,7 @@ int main(int argc, char* argv[])
     timeline->setCurrentFrame(0);
     timeline->setCurrentFrame(120);
     timeline->setCurrentFrame(0);
-    const auto is_final_still_frame = [](const auto& frame) {
+    const auto is_final_still_frame = [&expected_linked_pixel](const auto& frame) {
         if (frame == nullptr || frame->width != 640 || frame->height != 360 ||
             frame->stride < 640 * 4) {
             return false;
@@ -2501,9 +2509,9 @@ int main(int argc, char* argv[])
         const auto center = static_cast<std::size_t>(
             180 * frame->stride + 320 * 4);
         return frame->rgba_pixels.size() >= center + 3 &&
-            frame->rgba_pixels[center] == 15 &&
-            frame->rgba_pixels[center + 1] == 220 &&
-            frame->rgba_pixels[center + 2] == 70;
+            frame->rgba_pixels[center] == expected_linked_pixel.red() &&
+            frame->rgba_pixels[center + 1] == expected_linked_pixel.green() &&
+            frame->rgba_pixels[center + 2] == expected_linked_pixel.blue();
     };
     require(waitFor([&] {
         return is_final_still_frame(viewer->renderedFrame());

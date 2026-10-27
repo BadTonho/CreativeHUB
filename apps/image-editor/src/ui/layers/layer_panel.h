@@ -28,6 +28,7 @@ class GradientMapEditor;
 class BrightnessContrastEditor;
 class ExposureOffsetGammaEditor;
 class HueSaturationEditor;
+class ColorBalanceEditor;
 class LevelsEditor;
 class CurvesEditor;
 class LayerPanel final : public QWidget {
@@ -63,6 +64,8 @@ signals:
     void quickExportRequested();
     void addGradientMapRequested();
     void addHueSaturationRequested();
+    void addColorBalanceRequested();
+    void colorBalanceChanged(const QString&, const creative_suite::effects::ColorBalanceParameters&);
     void hueSaturationChanged(const QString&, const creative_suite::effects::HueSaturationParameters&);
     void addLevelsRequested();
     void levelsChanged(const QString&, const creative_suite::effects::LevelsParameters&);
@@ -116,6 +119,8 @@ private:
     QTreeWidget* layer_tree_ = nullptr;
     QMenu* layer_context_menu_ = nullptr;
     HueSaturationEditor* hue_editor_ = nullptr;
+    ColorBalanceEditor* color_balance_editor_ = nullptr;
+    QAction* add_color_balance_action_ = nullptr;
     QAction* add_hue_action_ = nullptr;
     LevelsEditor* levels_editor_ = nullptr;
     QAction* add_levels_action_ = nullptr;

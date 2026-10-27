@@ -1194,6 +1194,9 @@ uniform vec2 levels_output[4];
 uniform bool levels_identity;
 uniform vec4 curve_table[192];
 uniform bool curve_identity;
+uniform vec3 balance_ranges[3];
+uniform bool balance_preserve;
+uniform bool balance_identity;
 uniform bool has_mask;
 uniform bool gray_mask;
 uniform bool bottom_left;
@@ -1204,6 +1207,19 @@ uniform ivec4 clip_rect;
 out vec4 color;
 float adjustHsl(float value, float amount) {
     return amount < 0.0 ? value * (1.0 + amount) : value + (1.0 - value) * amount;
+}
+vec3 adjustColorBalance(vec3 rgb) {
+    if (balance_identity) return rgb;
+    float l = (min(rgb.r,min(rgb.g,rgb.b))+max(rgb.r,max(rgb.g,rgb.b)))*0.5;
+    float shadows=max(0.0,1.0-2.0*l), highlights=max(0.0,2.0*l-1.0);
+    vec3 adjusted=clamp(rgb + balance_ranges[0]*shadows + balance_ranges[1]*(1.0-shadows-highlights) + balance_ranges[2]*highlights,0.0,1.0);
+    if (!balance_preserve) return adjusted;
+    float lo=min(adjusted.r,min(adjusted.g,adjusted.b)), hi=max(adjusted.r,max(adjusted.g,adjusted.b));
+    float delta=hi-lo, lightness=(hi+lo)*0.5;
+    if (delta<=0.0) return vec3(l);
+    float saturation=delta/(1.0-abs(2.0*lightness-1.0));
+    float chroma=(1.0-abs(2.0*l-1.0))*saturation;
+    return clamp((adjusted-vec3(lo))*chroma/delta+vec3(l-chroma*0.5),0.0,1.0);
 }
 vec3 adjustHueSaturation(vec3 rgb) {
     float lo = min(rgb.r, min(rgb.g, rgb.b)), hi = max(rgb.r, max(rgb.g, rgb.b));
@@ -1262,8 +1278,8 @@ void main() {
         vec4 b=texelFetch(backdrop_image,ivec2(gl_FragCoord.xy),0);
         vec3 cb=b.a>0.0?clamp(b.rgb/b.a,0.0,1.0):vec3(0);
         float t=dot(cb,vec3(0.2126,0.7152,0.0722));
-        if(((adjustment_kind==2 && brightness_contrast==vec2(0)) || (adjustment_kind==3 && exposure_offset_gamma==vec3(0,0,1)) || (adjustment_kind==4 && hue_saturation==vec3(0) && !hue_colorize_enabled && hue_ranges_identity) || (adjustment_kind==5 && levels_identity) || (adjustment_kind==6 && curve_identity)) && blend_mode==0){color=b;return;}
-        vec3 mapped=adjustment_kind==2 ? clamp((cb+brightness_contrast.x-.5)*(1.0+brightness_contrast.y)+.5,0.0,1.0) : adjustment_kind==3 ? exposeSrgb(cb) : adjustment_kind==4 ? adjustHueSaturation(cb) : adjustment_kind==5 ? adjustLevels(cb) : adjustment_kind==6 ? vec3(curveValue(cb.r,0),curveValue(cb.g,1),curveValue(cb.b,2)) : gradient_stops[gradient_count-1].rgb;
+        if(((adjustment_kind==2 && brightness_contrast==vec2(0)) || (adjustment_kind==3 && exposure_offset_gamma==vec3(0,0,1)) || (adjustment_kind==4 && hue_saturation==vec3(0) && !hue_colorize_enabled && hue_ranges_identity) || (adjustment_kind==5 && levels_identity) || (adjustment_kind==6 && curve_identity) || (adjustment_kind==7 && balance_identity)) && blend_mode==0){color=b;return;}
+        vec3 mapped=adjustment_kind==2 ? clamp((cb+brightness_contrast.x-.5)*(1.0+brightness_contrast.y)+.5,0.0,1.0) : adjustment_kind==3 ? exposeSrgb(cb) : adjustment_kind==4 ? adjustHueSaturation(cb) : adjustment_kind==5 ? adjustLevels(cb) : adjustment_kind==6 ? vec3(curveValue(cb.r,0),curveValue(cb.g,1),curveValue(cb.b,2)) : adjustment_kind==7 ? adjustColorBalance(cb) : gradient_stops[gradient_count-1].rgb;
         for(int i=1;adjustment_kind==1 && i<gradient_count;++i) {
             if(t<=gradient_stops[i].a){vec4 l=gradient_stops[i-1],r=gradient_stops[i];mapped=mix(l.rgb,r.rgb,clamp((t-l.a)/(r.a-l.a),0.0,1.0));break;}
         }
@@ -1408,7 +1424,13 @@ void main() {
             const auto* hue = adjustment ? std::get_if<effects::HueSaturationParameters>(adjustment) : nullptr;
             const auto* levels = adjustment ? std::get_if<effects::LevelsParameters>(adjustment) : nullptr;
             const auto* curves = adjustment ? std::get_if<effects::CurvesParameters>(adjustment) : nullptr;
-            raster_program->setUniformValue("adjustment_kind",gradient?1:bc?2:exposure?3:hue?4:levels?5:curves?6:0);
+            const auto* balance = adjustment ? std::get_if<effects::ColorBalanceParameters>(adjustment) : nullptr;
+            raster_program->setUniformValue("adjustment_kind",gradient?1:bc?2:exposure?3:hue?4:levels?5:curves?6:balance?7:0);
+            std::array<QVector3D,3> balance_ranges{};
+            if (balance) for (int i=0;i<3;++i) balance_ranges[i]=QVector3D(balance->ranges[i][0]/200.f,balance->ranges[i][1]/200.f,balance->ranges[i][2]/200.f);
+            raster_program->setUniformValueArray("balance_ranges",balance_ranges.data(),3);
+            raster_program->setUniformValue("balance_preserve",balance && balance->preserve_lightness);
+            raster_program->setUniformValue("balance_identity",!balance || effects::identityColorBalance(*balance));
             raster_program->setUniformValue("curve_identity",curves && effects::identityCurves(*curves));
             if (curves) {
                 const auto tables = effects::curvesLuts(*curves);

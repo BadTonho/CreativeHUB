@@ -519,6 +519,15 @@ ImageEditorWindow::ImageEditorWindow(QWidget* parent,
         [this](const QString& id, const creative_suite::effects::HueSaturationParameters& value) {
             if (hasActiveDocumentTab() && activeSession().setHueSaturation(id, value)) updateView(true);
         });
+    connect(layer_panel_, &LayerPanel::addColorBalanceRequested, this, [this] {
+        if (!hasActiveDocumentTab()) return;
+        auto* canvas = activeCanvas(); canvas->commitTextEditing(); canvas->cancelTransientGestures(); clearInteractivePreview(canvas);
+        const auto id = activeSession().addColorBalanceAdjustment(canvas->areaSelectionClipPath());
+        if (!id.isEmpty()) { selectedMaskLayerId().clear(); selectedObjectIds().clear(); deactivateCanvasTools(); updateView(true); }
+    });
+    connect(layer_panel_, &LayerPanel::colorBalanceChanged, this, [this](const QString& id, const creative_suite::effects::ColorBalanceParameters& value) {
+        if (hasActiveDocumentTab() && activeSession().setColorBalance(id, value)) updateView(true);
+    });
     connect(layer_panel_, &LayerPanel::addLevelsRequested, this, [this] {
         if (!hasActiveDocumentTab()) return;
         auto* canvas = activeCanvas();

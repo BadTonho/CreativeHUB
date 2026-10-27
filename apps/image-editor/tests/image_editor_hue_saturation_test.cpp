@@ -53,6 +53,59 @@ double blendReference(BlendMode mode, double b, double s) {
 class HueSaturationTest : public QObject {
     Q_OBJECT
 private slots:
+    void colorBalanceContract() {
+        ColorBalanceParameters p;
+        QVERIFY(validColorBalance(p)); QVERIFY(identityAdjustment(p));
+        QCOMPARE(colorBalanceRgb(p,{.5,.5,.5}),(std::array<unsigned char,3>{128,128,128}));
+        p.preserve_lightness=false; p.ranges[1]={100,0,0};
+        QCOMPARE(colorBalanceRgb(p,{.5,.5,.5}),(std::array<unsigned char,3>{255,128,128}));
+        QCOMPARE(colorBalanceRgb(p,{.25,.25,.25}),(std::array<unsigned char,3>{128,64,64}));
+        QCOMPARE(colorBalanceRgb(p,{.75,.75,.75}),(std::array<unsigned char,3>{255,191,191}));
+        QCOMPARE(colorBalanceRgb(p,{0,0,0}),(std::array<unsigned char,3>{0,0,0}));
+        QCOMPARE(colorBalanceRgb(p,{1,1,1}),(std::array<unsigned char,3>{255,255,255}));
+        p.ranges[0]={-100,100,0};
+        QCOMPARE(colorBalanceRgb(p,{0,0,0}),(std::array<unsigned char,3>{0,128,0}));
+        p.ranges[0]={};
+        p.preserve_lightness=true;
+        QCOMPARE(colorBalanceRgb(p,{.5,.5,.5}),(std::array<unsigned char,3>{255,0,0}));
+        p.ranges[1][0]=101; QVERIFY(!validColorBalance(p));
+        p.ranges[1][0]=40;
+        QTemporaryDir dir; ImageDocumentSession session;
+        QVERIFY(session.createCanvas({8,8},QColor(128,128,128,128)));
+        const auto base=session.selectedLayerId();
+        const auto id=session.addColorBalanceAdjustment(); QVERIFY(!id.isEmpty());
+        const auto original=session.renderedImage(); QVERIFY(session.setColorBalance(id,p));
+        const auto adjusted=session.renderedImage(); QVERIFY(adjusted!=original);
+        QCOMPARE(adjusted.pixelColor(0,0).alpha(),128);
+        QVERIFY(session.undo()); QCOMPARE(session.renderedImage(),original); QVERIFY(session.redo()); QCOMPARE(session.renderedImage(),adjusted);
+        const auto path=dir.filePath("balance.cimg"); QVERIFY(session.saveDocument(path));
+        ImageDocumentSession loaded; QVERIFY(loaded.openDocument(path)); QCOMPARE(loaded.data(),session.data());
+        RecoveryDocumentData recovery{session.data(),path,"balance"}, restored;
+        QVERIFY(ImageDocumentStore::saveRecovery(dir.filePath("recovery.json"),recovery));
+        QVERIFY(ImageDocumentStore::loadRecovery(dir.filePath("recovery.json"),&restored)); QCOMPARE(restored.document,session.data());
+        QVERIFY(session.exportImage(dir.filePath("balance.png")));
+        QCOMPARE(QImage(dir.filePath("balance.png")).convertToFormat(QImage::Format_ARGB32_Premultiplied),adjusted.convertToFormat(QImage::Format_ARGB32_Premultiplied));
+        QFile file(path); QVERIFY(file.open(QIODevice::ReadOnly)); const auto json=QJsonDocument::fromJson(file.readAll()).object(); file.close();
+        for (int bad=0;bad<7;++bad) {
+            auto root=json; auto layers=root.value("layers").toArray(); auto layer=layers.last().toObject(); auto a=layer.value("adjustment").toObject();
+            if(bad==0)a.remove("preserve_lightness");
+            if(bad==1)a.insert("preserve_lightness",1);
+            if(bad==2)a.remove("ranges");
+            if(bad==3)a.insert("ranges",QJsonArray{});
+            if(bad==4){auto ranges=a.value("ranges").toArray();ranges[0]=QJsonArray{101,0,0};a.insert("ranges",ranges);}
+            if(bad==5){auto ranges=a.value("ranges").toArray();ranges[0]=QJsonArray{.5,0,0};a.insert("ranges",ranges);}
+            if(bad==6)root.insert("version",29);
+            layer.insert("adjustment",a); layers[layers.size()-1]=layer; root.insert("layers",layers);
+            QVERIFY(file.open(QIODevice::WriteOnly|QIODevice::Truncate)); file.write(QJsonDocument(root).toJson()); file.close();
+            QVERIFY2(!loaded.openDocument(path),qPrintable(QString::number(bad))); QCOMPARE(loaded.data(),session.data());
+        }
+        QVERIFY(session.setLayerClipping(id,true));
+        QVERIFY(session.setStackBlendMode(id,false,BlendMode::Multiply));
+        QVERIFY(session.setLayerOpacity(id,60));
+        QVERIFY(!session.groupLayers({base,id}).isEmpty());
+        QVERIFY(!session.renderedImage().isNull());
+        QVERIFY(session.undo()); QVERIFY(session.redo());
+    }
     void colorRanges() {
         HueSaturationParameters p;
         const std::array<std::array<double,3>,6> centers{{{1,0,0},{1,1,0},{0,1,0},{0,1,1},{0,0,1},{1,0,1}}};

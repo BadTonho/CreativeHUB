@@ -133,6 +133,8 @@ public:
                                          QString* error = nullptr);
     [[nodiscard]] bool deleteObjects(const QStringList& object_ids);
     [[nodiscard]] QString addHueSaturationAdjustment(std::optional<QPainterPath> selection = {});
+    [[nodiscard]] QString addColorBalanceAdjustment(std::optional<QPainterPath> selection = {});
+    [[nodiscard]] bool setColorBalance(const QString& id, const creative_suite::effects::ColorBalanceParameters& parameters);
     [[nodiscard]] bool setHueSaturation(const QString& id,
         const creative_suite::effects::HueSaturationParameters& parameters);
     [[nodiscard]] QString addLevelsAdjustment(std::optional<QPainterPath> selection = {});

@@ -338,6 +338,18 @@ checks remain manual; record the build, OS, and result.
 
 ## Standalone editing and recovery
 
+### Color Balance
+
+Status: native visual and platform acceptance pending. Record OS, build, Qt and
+GPU/driver. Add Color Balance to an image with shadows, midtones, highlights and
+transparency. Adjust the three axes independently in each range; verify smooth
+transitions, range switching, selected-range Reset, Preserve Lightness and
+Undo/Redo. Compare CPU/OpenGL previews and PNG/JPEG exports, save/reopen and
+recovery. Check selection-seeded and painted masks, groups and clipping, and
+verify linked PNG updates in the Video Editor without modifying the source.
+Repeat with a Motion Studio linked image and verify its refreshed preview and
+reopened composition retain the published output.
+
 ### Hue/Saturation color-range acceptance
 
 Status: owner native visual acceptance pending. Record OS, Qt version, build,

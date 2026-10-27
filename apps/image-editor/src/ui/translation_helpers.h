@@ -11,6 +11,7 @@ namespace image_editor::ui {
 
 [[maybe_unused]] inline constexpr const char* kDynamicUiMessages[] = {
     QT_TRANSLATE_NOOP("ImageEditorUI", "A Hue/Saturation adjustment is invalid."),
+    QT_TRANSLATE_NOOP("ImageEditorUI", "A Color Balance adjustment is invalid."),
     QT_TRANSLATE_NOOP("ImageEditorUI", "A Levels adjustment is invalid."),
     QT_TRANSLATE_NOOP("ImageEditorUI", "An adjustment has incompatible Levels fields."),
     QT_TRANSLATE_NOOP("ImageEditorUI", "A Curves adjustment is invalid."),

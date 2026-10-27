@@ -719,10 +719,16 @@ See [parameters, scope, errors and verification](../features/GRADIENT_MAP.md).
 
 ## Typed adjustments
 
-Shared `AdjustmentParameters` is a variant of Gradient Map, Brightness/Contrast, Exposure / Offset / Gamma, Hue/Saturation, Levels and Curves.
+Shared `AdjustmentParameters` is a variant of Gradient Map, Brightness/Contrast,
+Exposure / Offset / Gamma, Hue/Saturation, Levels, Curves and Color Balance.
 The Image session owns typed editing/history and stack scope; effects owns RGB
 math and validation. CPU adapter and native raster shader dispatch by type, reusing
 mask/content caches and preserving alpha. [Contract](../features/BRIGHTNESS_CONTRAST.md).
+
+Color Balance uses a Qt-free evaluator and matching OpenGL uniforms for three
+tonal ranges and HSL lightness preservation. The Image session owns editing,
+history, masks and v30 persistence; existing linked PNG consumers remain
+independent. See the [Color Balance contract](../features/COLOR_BALANCE.md).
 
 ## Exposure / Offset / Gamma processing
 

@@ -66,7 +66,7 @@ incompatible Background/content/outline data. Failed Open preserves the active
 document. Recovery envelope v1, application version and linked PNG protocol
 remain unchanged. Earlier binaries cannot open v26 Curves documents; v26
 binaries reject v27 documents and there is no downgrade writer. Hub accepts
-Image v1–29, rejects v30, and preserves all four curves,
+Image v1–30, rejects v31, and preserves all four curves,
 masks and media paths in backup and relocated restore.
 
 ## Regression and acceptance

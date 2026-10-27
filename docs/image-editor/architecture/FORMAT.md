@@ -1,6 +1,6 @@
 # Image Editor Document Format
 
-Status: **provisional version 29**. The `.cimg` extension is temporary until a
+Status: **provisional version 30**. The `.cimg` extension is temporary until a
 later format review. Version 4 added editable raster layers; version 5 adds
 eraser strokes; version 6 adds editable line, rectangle, and ellipse shapes;
 version 7 adds stable IDs to paint and eraser strokes; version 8 adds
@@ -10,9 +10,12 @@ version 12 adds independently resizable canvas bounds; version 13 adds optional
 area-selection clipping to paint and eraser strokes; version 14 adds editable
 bucket-fill operations; version 15 adds editable linear-gradient operations;
 version 16 adds editable blur strokes; version 17 adds editable layer outlines.
-Version 18 adds editable clipping masks. Version 19 adds layer/group blend modes. Version 20 adds Gradient Map adjustment layers and selection-seeded masks. Version 21 adds Brightness/Contrast adjustments. Version 22 adds Exposure / Offset / Gamma adjustments. Version 23 adds global Hue/Saturation adjustments. Version 24 adds global Levels adjustments. Version 25 adds global Curves adjustments. Version 26 adds independent RGB-channel curves alongside the RGB master curve. Version 27 adds independent RGB-channel Levels alongside the RGB master. Version 28 adds independent Colorize mode values to Hue/Saturation adjustments. Version 29 adds six fixed Hue/Saturation color ranges. Versions 1 through 28 remain readable and save as v29.
+Version 18 adds editable clipping masks. Version 19 adds layer/group blend modes. Version 20 adds Gradient Map adjustment layers and selection-seeded masks. Version 21 adds Brightness/Contrast adjustments. Version 22 adds Exposure / Offset / Gamma adjustments. Version 23 adds global Hue/Saturation adjustments. Version 24 adds global Levels adjustments. Version 25 adds global Curves adjustments. Version 26 adds independent RGB-channel curves alongside the RGB master curve. Version 27 adds independent RGB-channel Levels alongside the RGB master. Version 28 adds independent Colorize mode values to Hue/Saturation adjustments. Version 29 adds six fixed Hue/Saturation color ranges.
 
-Hub snapshots preserve versions 1–29 and rebase relative source/import paths
+Version 30 adds Color Balance adjustments. The current writer reads versions
+1–29 and saves version 30; earlier binaries cannot read version 30.
+
+Hub snapshots preserve versions 1–30 and rebase relative source/import paths
 to their original absolute locations. The native save contract remains the
 same; media are not bundled. See [Hub backups](../../hub/BACKUPS.md) and the
 producer/consumer `hub-backup-format-test` for relocation coverage.
@@ -24,7 +27,7 @@ A `.cimg` file is UTF-8 JSON with these top-level fields:
 | Field | Type | Meaning |
 | --- | --- | --- |
 | `format` | string | Must be `creative-suite-image-document`. |
-| `version` | integer | Current version is `29`. |
+| `version` | integer | Current version is `30`. |
 | `base` | object | A linked source image or a self-contained canvas. |
 | `canvas` | object | Version 12 current document bounds and base-image offset. |
 | `operations` | array | Version 1–3 edits retained as Background content. |
@@ -228,7 +231,7 @@ crop, quarter-turn, and flip commands continue to transform rendered content
 and layer masks. Image pixels render at their position in the operation list,
 then the layer mask, layer opacity, and group composition apply.
 
-Recovery retains envelope version 1 and accepts document payloads through v29.
+Recovery retains envelope version 1 and accepts document payloads through v30.
 The Video Editor consumes flattened published PNG files; its .csp schema does
 not change.
 
@@ -523,7 +526,7 @@ The optional `blend_mode` string on raster layers and groups uses `normal`,
 writers omit Normal. Background never carries the field. v1-18 load as Normal;
 reject fields in older schemas and unknown/non-string values. Recovery wrapper
 v1 accepts v19, and Hub preserves modes during path rebasing. Older editor
-binaries reject v19; the current Hub accepts through v29 and rejects v30. See [pixel/export contract](../features/BLEND_MODES.md).
+binaries reject v19; the current Hub accepts through v30 and rejects v31. See [pixel/export contract](../features/BLEND_MODES.md).
 
 
 ## Adjustment layers and selection masks (version 20)
@@ -539,7 +542,7 @@ The path uses the existing element encoding and fill-rule identifiers 0/1.
 It seeds black outside and white inside, before existing mask operations;
 absence retains the legacy white mask. Geometry follows canvas offsets/group
 transforms. Both new payloads are rejected before v20. Recovery retains envelope
-v1. Hub supports v1-29 and rejects v30; linked publication remains PNG. See
+v1. Hub supports v1-30 and rejects v31; linked publication remains PNG. See
 [the full contract](../features/GRADIENT_MAP.md).
 
 ## Version 21: Brightness/Contrast adjustments
@@ -548,8 +551,8 @@ Write `adjustment: {"type":"brightness_contrast","brightness":0,"contrast":0}`
 on `kind:"adjustment"`. Both parameters are required integers in [-100,100].
 Reject this type before v21, invalid/non-numeric/fractional values and incompatible
 Background/content/outline fields. Gradient Map keeps its v20 encoding; older
-versions remain readable. Recovery envelope v1 is unchanged. Hub accepts v1-29
-and rejects v30. See [processing contract](../features/BRIGHTNESS_CONTRAST.md).
+versions remain readable. Recovery envelope v1 is unchanged. Hub accepts v1-30
+and rejects v31. See [processing contract](../features/BRIGHTNESS_CONTRAST.md).
 
 ## Exposure / Offset / Gamma (version 22)
 
@@ -559,7 +562,7 @@ numbers: exposure [-20,20], offset [-.5,.5], gamma [.01,9.99], finite. Defaults
 are 0/0/1. Reject the payload in earlier versions, mismatched type fields and
 incompatible Background/raster content/outlines; failed Open retains the session.
 The current writer saves supported v1-28 as v29. Recovery retains envelope v1; Hub accepts
-v1-29 and rejects v30. See [processing and editing contract](../features/EXPOSURE_OFFSET_GAMMA.md).
+v1-30 and rejects v31. See [processing and editing contract](../features/EXPOSURE_OFFSET_GAMMA.md).
 
 ## Global Hue/Saturation (version 23)
 
@@ -569,7 +572,7 @@ hue [-180,180], saturation/lightness [-100,100], neutral 0/0/0. Reject this kind
 before v23, fractional/non-numeric/out-of-range values, incompatible raster/
 Background/outline content and mismatched type fields. Failed Open retains the
 session. The current writer saves supported v1-28 as v29, with recovery envelope v1 and
-PNG handoff unchanged. Hub accepts v1-29 and rejects v30. See
+PNG handoff unchanged. Hub accepts v1-30 and rejects v31. See
 [HSL and editing contract](../features/HUE_SATURATION.md).
 
 ## Global Levels (version 24)
@@ -581,8 +584,8 @@ with input black strictly below input white and output black no higher than
 output white. Gamma is a finite number in [0.10,9.99]. Reject this kind before
 v24, missing or extra fields, invalid bounds and incompatible raster,
 Background or outline data. Failed Open retains the current session.
-The v29 writer reads v1–28 and migrates Levels on save. Recovery envelope v1
-and PNG handoff are unchanged. Hub accepts v1–29 and rejects v30. See the
+The v30 writer reads v1–29 and migrates Levels on save. Recovery envelope v1
+and PNG handoff are unchanged. Hub accepts v1–30 and rejects v31. See the
 [Levels contract](../features/LEVELS.md).
 
 ## Global Curves (version 25)
@@ -596,7 +599,7 @@ v25, extra adjustment/point fields, invalid points and incompatible raster,
 Background or outline data; failed Open preserves the active session. The v25
 writer reads v1–24 and upgrades on save. Recovery envelope v1 and linked PNG
 handoff are unchanged. The v26 writer migrates v25 Curves to the master channel.
-Hub accepts v1–29 and rejects v30. See the
+Hub accepts v1–30 and rejects v31. See the
 [Curves contract](../features/CURVES.md).
 
 ## Per-channel Curves (version 26)
@@ -607,9 +610,9 @@ point constraints. The master lookup is applied first, followed by the matching
 individual channel lookup. Version 25 Curves migrate their `points` to the
 master curve and initialize the individual curves to identity. Reject missing,
 extra, or malformed channel data and reject this schema before v26. Failed Open
-preserves the active session. The v29 writer reads v1–28 and preserves this v26
+preserves the active session. The v30 writer reads v1–29 and preserves this v26
 payload; recovery envelope v1 and linked PNG handoff are unchanged. Hub accepts
-v1–29 and rejects v30. See the [Curves contract](../features/CURVES.md).
+v1–30 and rejects v31. See the [Curves contract](../features/CURVES.md).
 
 ## Per-channel Levels (version 27)
 
@@ -620,8 +623,8 @@ rounded to a byte before the matching channel stage. Levels v24–26 migrate
 their original five values to the master and initialize individual channels to
 identity. Reject missing, extra, malformed, or invalid channel data and reject
 this schema before v27. Existing Curves v26 data remains unchanged. Recovery
-envelope v1 and linked PNG handoff remain unchanged. The v29 writer reads
-v1–28 and upgrades on save; Hub accepts v1–29 and rejects v30. See the
+envelope v1 and linked PNG handoff remain unchanged. The v30 writer reads
+v1–29 and upgrades on save; Hub accepts v1–30 and rejects v31. See the
 [Levels contract](../features/LEVELS.md).
 
 ## Hue/Saturation Colorize mode (version 28)
@@ -631,8 +634,8 @@ Hue/Saturation adjustments retain their normal `hue`, `saturation`, and
 absolute `hue` (0–360), `saturation` (0–100), and `lightness` (-100–100).
 Colorize values are persisted even while the mode is disabled. Versions 1–27
 migrate to disabled Colorize with defaults 0/25/0; malformed or incomplete v28
-objects are rejected. Recovery envelope v1 is unchanged. Hub accepts v1–29 and
-rejects v30. See the [Hue/Saturation contract](../features/HUE_SATURATION.md).
+objects are rejected. Recovery envelope v1 is unchanged. Hub accepts v1–30 and
+rejects v31. See the [Hue/Saturation contract](../features/HUE_SATURATION.md).
 
 ## Hue/Saturation fixed color ranges (version 29)
 
@@ -641,4 +644,12 @@ cyan, blue, magenta order. Each object has integer `hue` (-180 to 180),
 `saturation` and `lightness` (-100 to 100). Missing, extra, fractional or
 out-of-range fields are rejected. Versions 1-28 migrate to six neutral sets.
 Recovery envelope v1 and linked PNG publication are unchanged. The current Hub
-accepts versions 1-29 and rejects v30. See the [editing contract](../features/HUE_SATURATION.md).
+accepts versions 1-30 and rejects v31. See the [editing contract](../features/HUE_SATURATION.md).
+
+## Color Balance (version 30)
+
+The `color_balance` adjustment stores `ranges` as three arrays in shadow,
+midtone and highlight order, each containing three integers in [-100,100] for
+the red, green and blue axes. `preserve_lightness` is a required boolean. Reject
+missing, extra, malformed or out-of-range fields and this kind before v30.
+See the [processing contract](../features/COLOR_BALANCE.md).

@@ -4,6 +4,7 @@
 #include "hue_saturation.h"
 #include "levels.h"
 #include "curves.h"
+#include "color_balance.h"
 #include <cmath>
 #include <variant>
 #include <type_traits>
@@ -22,7 +23,7 @@ struct ExposureOffsetGammaParameters {
 };
 using AdjustmentParameters = std::variant<GradientMapParameters,
     BrightnessContrastParameters, ExposureOffsetGammaParameters, HueSaturationParameters,
-    LevelsParameters, CurvesParameters>;
+    LevelsParameters, CurvesParameters, ColorBalanceParameters>;
 [[nodiscard]] inline bool identityAdjustment(const AdjustmentParameters& p) noexcept {
     if (const auto* value = std::get_if<BrightnessContrastParameters>(&p))
         return *value == BrightnessContrastParameters{};
@@ -36,6 +37,8 @@ using AdjustmentParameters = std::variant<GradientMapParameters,
         return *value == LevelsParameters{};
     if (const auto* value = std::get_if<CurvesParameters>(&p))
         return identityCurves(*value);
+    if (const auto* value = std::get_if<ColorBalanceParameters>(&p))
+        return identityColorBalance(*value);
     return false;
 }
 [[nodiscard]] inline bool validBrightnessContrast(const BrightnessContrastParameters& p) noexcept {
@@ -54,7 +57,8 @@ using AdjustmentParameters = std::variant<GradientMapParameters,
         else if constexpr (std::is_same_v<T, ExposureOffsetGammaParameters>) return validExposureOffsetGamma(value);
         else if constexpr (std::is_same_v<T, HueSaturationParameters>) return validHueSaturation(value);
         else if constexpr (std::is_same_v<T, LevelsParameters>) return validLevels(value);
-        else return validCurves(value);
+        else if constexpr (std::is_same_v<T, CurvesParameters>) return validCurves(value);
+        else return validColorBalance(value);
     }, p);
 }
 // Callers validate parameters and pass finite channels in [0,1]. Alpha is untouched.
@@ -83,7 +87,8 @@ using AdjustmentParameters = std::variant<GradientMapParameters,
         else if constexpr (std::is_same_v<T, ExposureOffsetGammaParameters>) return exposureOffsetGammaRgb(value, rgb);
         else if constexpr (std::is_same_v<T, HueSaturationParameters>) return hueSaturationRgb(value, rgb);
         else if constexpr (std::is_same_v<T, LevelsParameters>) return levelsRgb(value, rgb);
-        else return curvesRgb(value, rgb);
+        else if constexpr (std::is_same_v<T, CurvesParameters>) return curvesRgb(value, rgb);
+        else return colorBalanceRgb(value, rgb);
     }, p);
 }
 } // namespace creative_suite::effects

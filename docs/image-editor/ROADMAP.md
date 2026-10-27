@@ -23,7 +23,7 @@ keeps open implementation and acceptance work plus its required coverage index.
 
 Status: **standalone minimum and multi-document tabs implemented; basic
 editable text, raster layer masks, linked image layers, canvas resizing, the
-RGBA Eyedropper, editable layer outlines, clipping masks, six blend modes, Gradient Map, Brightness/Contrast, Exposure / Offset / Gamma, global and per-color-range Hue/Saturation, global and per-channel Levels, global and per-channel Curves adjustments, and regression coverage implemented; manual text validation,
+RGBA Eyedropper, editable layer outlines, clipping masks, six blend modes, Gradient Map, Brightness/Contrast, Exposure / Offset / Gamma, global and per-color-range Hue/Saturation, Color Balance, global and per-channel Levels, global and per-channel Curves adjustments, and regression coverage implemented; manual text validation,
 packaging, and linked-image
 acceptance remain pending; macOS and Linux validation deferred**.
 Current application version: **Beta 0.1.0**.
@@ -41,10 +41,9 @@ hardware requirements remain measurement-based. See [scope](SCOPE.md).
 
 ## Next code step
 
-**Hue/Saturation per-color-range controls are implemented.** The next proposed
-work is to define a bounded Color Balance adjustment contract. The shared Effects
-Outer Glow assertion was corrected and its focused suite passed. This is a provisional code
-priority, not a release commitment. Colorize is an independent mode; visual and
+**Color Balance is implemented**; select the next bounded feature from the
+provisional sequence in section 4. The shared Effects Outer Glow assertion was
+corrected and its focused suite passed. Colorize is an independent mode; visual and
 platform acceptance remains pending. Levels and Curves provide RGB master and
 independent channels; see their [Levels](features/LEVELS.md) and
 [Curves](features/CURVES.md) contracts.
@@ -306,9 +305,9 @@ Native visual and macOS/Linux acceptance remains pending.
 - [x] Add individual Red, Green and Blue Levels alongside the RGB master;
   see the [Levels contract](features/LEVELS.md).
 - [x] Extend Hue/Saturation with Colorize and six fixed color-range controls.
-- [ ] Add Color Balance with cyan/red, magenta/green and yellow/blue controls
+- [x] Add Color Balance with cyan/red, magenta/green and yellow/blue controls
   for shadows, midtones and highlights, including an optional luminosity
-  preservation control. Define tonal weights and processing order first.
+  preservation control. See [contract](features/COLOR_BALANCE.md).
 - [ ] Add Black & White conversion with controls for source color ranges;
   specify neutral behavior, alpha and masks.
 - [ ] Add LUT loading for `.cube` and `.3dl` in separately validated increments,
@@ -709,6 +708,15 @@ See [execution evidence and unresolved gates](features/EXPOSURE_OFFSET_GAMMA.md#
 and the [Linux measurements](performance/exposure-offset-gamma-linux-2026-10-21.json).
 All six failures reproduced in the pre-feature baseline on the same environment.
 These results do not complete the existing release/manual acceptance gates.
+
+## Color Balance regression coverage
+
+| Behavior | Automated coverage | Acceptance |
+| --- | --- | --- |
+| Tonal weights, identity, alpha, history, v30 persistence, invalid loads, recovery and PNG export | `image_editor_hue_saturation_test.cpp` (`creative-suite-image-editor-hue-saturation`) | Native visual/platform checks pending. |
+| Controls, selected-range Reset, preservation, history and linked PNG | `image_editor_hue_saturation_ui_test.cpp` (`creative-suite-image-editor-hue-saturation-ui`) | [Manual checklist](validation/MANUAL_VALIDATION.md#color-balance) pending. |
+| CPU/OpenGL parity, mask and unchanged uploads | `image_editor_interactive_test.cpp` (`gpuColorBalance`) | Native GPU and platform execution recorded separately. |
+| v30 backup and relocated restore | `test_backup_formats.cpp` (`hub-backup-format-test`) | Hub UI and platform acceptance separate. |
 
 ## Hue/Saturation regression coverage
 

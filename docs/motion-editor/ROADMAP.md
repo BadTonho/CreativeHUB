@@ -185,7 +185,7 @@ readiness checks remain in this roadmap and
 | Motion Studio to Image Editor layer link | `composition_document_test.cpp` (`creative-suite-motion-editor-document`) covers image-only link assignment and per-layer path isolation; `motion_document_store_test.cpp` (`creative-suite-motion-editor-persistence`) covers v6 round-trip, v1-v5 migration, and rejection of shared sidecars; `motion_editor_ui_test.cpp` covers the Layer action, timeline and composition-canvas context menus, multiple asynchronous PNG refreshes, Unicode paths, corrupt-publication fallback, and independent Save As copies; `motion_video_export_test.cpp` (`creative-suite-motion-editor-export`) resolves same-source still frames by layer ID. Image Editor linked publication remains covered by `image_editor_ui_test.cpp` (`creative-suite-image-editor-ui`). | Automated consumer coverage is present; the Image Editor producer UI suite was blocked by its unrelated Magic Wand geometry failure on this Windows run. Manual save/refresh, missing-file recovery, and cross-app reopen checks are pending (**P1 validation**); acceptance remains gated on the Image Editor standalone minimum. |
 
 The Motion UI linked-image fixture also publishes a PNG from an Image Editor
-document with a non-neutral Hue/Saturation color-range adjustment before
+document with non-neutral Hue/Saturation and Color Balance adjustments before
 verifying the Motion preview and a subsequent refresh.
 
 ### Windows updater coverage

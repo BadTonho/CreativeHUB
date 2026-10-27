@@ -3,6 +3,15 @@
 <TS version="2.1" language="pt_BR" sourcelanguage="en_US">
 <context>
     <name>ImageEditorUI</name>
+    <message><source>Color Balance</source><translation>Equilíbrio de Cores</translation></message>
+    <message><source>Shadows</source><translation>Sombras</translation></message>
+    <message><source>Midtones</source><translation>Meios-tons</translation></message>
+    <message><source>Highlights</source><translation>Realces</translation></message>
+    <message><source>Cyan / Red</source><translation>Ciano / Vermelho</translation></message>
+    <message><source>Magenta / Green</source><translation>Magenta / Verde</translation></message>
+    <message><source>Yellow / Blue</source><translation>Amarelo / Azul</translation></message>
+    <message><source>Preserve Lightness</source><translation>Preservar luminosidade</translation></message>
+    <message><source>A Color Balance adjustment is invalid.</source><translation>Um ajuste de Equilíbrio de Cores é inválido.</translation></message>
     <message><source>Global</source><translation>Global</translation></message>
     <message><source>Reds</source><translation>Vermelhos</translation></message>
     <message><source>Yellows</source><translation>Amarelos</translation></message>

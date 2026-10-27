@@ -1261,6 +1261,9 @@ public:
             image_editor::ImageDocumentSession masked_image;
             auto per_channel_curves = creative_suite::effects::CurvesParameters{};
             per_channel_curves.channels[0] = {{0, 255}, {255, 0}};
+            creative_suite::effects::ColorBalanceParameters color_balance;
+            color_balance.preserve_lightness = false;
+            color_balance.ranges[1][0] = 20;
             QString mask_error;
             QColor refreshed_image_color;
             auto per_channel_levels = creative_suite::effects::LevelsParameters{0, 255, 1, 0, 200};
@@ -1283,6 +1286,8 @@ public:
                         masked_image.setLevels(masked_image.selectedLayerId(), per_channel_levels) &&
                         !masked_image.addCurvesAdjustment().isEmpty() &&
                         masked_image.setCurves(masked_image.selectedLayerId(), per_channel_curves) &&
+                        !masked_image.addColorBalanceAdjustment().isEmpty() &&
+                        masked_image.setColorBalance(masked_image.selectedLayerId(), color_balance) &&
                         masked_image.saveDocument(QString::fromStdString(linked_document.string()), &mask_error) &&
                         masked_image.exportImage(QString::fromStdString(linked_output.string()), &mask_error),
                     "The Image Editor could not publish its resized, masked and per-channel Levels/Curves-adjusted v27 image: " + mask_error.toStdString());

@@ -524,6 +524,11 @@ establish native backup UI or Windows/macOS acceptance for v22.
 
 ## Image v29 Hue/Saturation color-range backup coverage
 
+The 2026-10-26 Windows Release `hub-backup-format-test` and
+`hub-backup-manager-test` passed with Image v30 Color Balance and future-version
+rejection. The format test reopens vault and relocated restores with the Image
+reader. Native UI and platform acceptance remain separate.
+
 `hub-backup-format-test` exercises Image v1–29 backup, vault read and relocated
 restore with the Image Editor reader, including non-neutral color-range values;
 it rejects v30. `hub-backup-manager-test` checks future-version rejection.

@@ -1117,6 +1117,10 @@ QJsonObject encodeDocumentJson(const ImageDocumentData& document,
                     {"blue", encode_points(curves->channels[2])}};
                 encoded.insert("adjustment", QJsonObject{{"type", "curves"},
                     {"points", encode_points(curves->points)}, {"channels", channels}});
+            } else if (const auto* balance = std::get_if<creative_suite::effects::ColorBalanceParameters>(&*layer.adjustment)) {
+                QJsonArray ranges;
+                for (const auto& range : balance->ranges) ranges.append(QJsonArray{range[0],range[1],range[2]});
+                encoded.insert("adjustment", QJsonObject{{"type","color_balance"},{"ranges",ranges},{"preserve_lightness",balance->preserve_lightness}});
             } else {
                 const auto& hue = std::get<creative_suite::effects::HueSaturationParameters>(*layer.adjustment);
                 QJsonArray ranges;
@@ -1418,6 +1422,23 @@ bool decodeDocumentJson(const QJsonObject& root,
                         return false;
                     }
                     layer->adjustment = value;
+                } else if (a.value("type") == "color_balance") {
+                    creative_suite::effects::ColorBalanceParameters balance;
+                    const auto ranges = a.value("ranges").toArray();
+                    bool valid = version >= 30 && kind == "adjustment" && a.size() == 3 &&
+                        a.value("ranges").isArray() && ranges.size() == 3 && a.value("preserve_lightness").isBool();
+                    for (int i = 0; valid && i < 3; ++i) {
+                        const auto range = ranges[i].toArray();
+                        valid = ranges[i].isArray() && range.size() == 3;
+                        for (int j = 0; valid && j < 3; ++j) {
+                            const auto v = range[j]; const double n = v.toDouble();
+                            valid = v.isDouble() && std::isfinite(n) && n >= -100 && n <= 100 && std::floor(n) == n;
+                            if (valid) balance.ranges[i][j] = int(n);
+                        }
+                    }
+                    if (!valid) { assignError(error, QStringLiteral("A Color Balance adjustment is invalid.")); return false; }
+                    balance.preserve_lightness = a.value("preserve_lightness").toBool();
+                    layer->adjustment = balance;
                 } else if (a.value("type") == "hue_saturation") {
                     const auto integer = [](const QJsonValue& v, int bound) {
                         return v.isDouble() && std::isfinite(v.toDouble()) &&
