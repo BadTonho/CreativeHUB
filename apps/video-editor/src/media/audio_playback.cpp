@@ -558,6 +558,7 @@ std::optional<AudioPcmChunk> AudioPlaybackSession::decode_samples(
 }
 
 void AudioPlaybackSession::reset() {
+    if (impl_ == nullptr) throw MediaError("The audio playback session is not initialized.");
     const auto source_path = impl_->source_path;
     const auto output = impl_->output;
     impl_ = openImpl(source_path, output);

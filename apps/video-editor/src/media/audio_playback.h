@@ -81,7 +81,7 @@ inline std::vector<float> readNormalizedAudio(AudioPlaybackSession& session,
         const auto begin = std::max(start, chunk->first_sample_index);
         const auto end = std::min(start + static_cast<std::int64_t>(count),
             chunk->first_sample_index + static_cast<std::int64_t>(chunk->sampleCount()));
-        if (end <= begin) break;
+        if (end <= begin) continue; // Chunk precedes the window; keep decoding (EOF ends the loop above).
         for (auto frame = begin; frame < end; ++frame)
             for (int channel = 0; channel < channels; ++channel)
                 result[static_cast<std::size_t>(frame - start) * channels + channel] =

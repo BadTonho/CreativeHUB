@@ -1,6 +1,7 @@
 #include "audio_filter_session.h"
 #include "logging/logger.h"
 #include <algorithm>
+#include <cmath>
 #include <cstring>
 #include <locale>
 #include <sstream>
@@ -51,7 +52,7 @@ AudioFilterSession::AudioFilterSession(const timeline::AudioEffectInstance& effe
         filters << "highpass=f=" << std::min(cleanup->highpass_frequency_hz, rate * .45)
             << ",deesser=i=" << cleanup->deesser_intensity << ":m=0.5:f=0.5";
     } else if (const auto* noise = std::get_if<timeline::AudioNoiseReductionParameters>(&effect.parameters)) {
-        if (noise->reduction_db == 0) filters << "anull";
+        if (std::fabs(noise->reduction_db) < 1e-9) filters << "anull";
         else {
             filters << "afftdn=nr=" << noise->reduction_db << ":nf=" << noise->noise_floor_db
                 << ":tn=0:nl=average";
@@ -77,8 +78,9 @@ AudioFilterSession::AudioFilterSession(const timeline::AudioEffectInstance& effe
     AVChannelLayout layout{};
     av_channel_layout_default(&layout, channels);
     char layout_text[128]{};
-    av_channel_layout_describe(&layout, layout_text, sizeof(layout_text));
+    const int described = av_channel_layout_describe(&layout, layout_text, sizeof(layout_text));
     av_channel_layout_uninit(&layout);
+    check(described, "describe_channel_layout");
     const auto arguments = "time_base=1/" + std::to_string(rate) + ":sample_rate=" + std::to_string(rate) +
         ":sample_fmt=flt:channel_layout=" + layout_text;
     const auto* input_filter = avfilter_get_by_name("abuffer");

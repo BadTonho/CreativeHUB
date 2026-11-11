@@ -95,14 +95,17 @@ class CachedPcm final : public VoiceIsolationPcm {
     mutable int rate_ = 0, output_channels_ = 0;
     mutable qint64 next_ = -1, input_ = 0;
     mutable std::vector<float> pending_;
+    mutable QFile file_;
     std::vector<float> raw(qint64 start, std::size_t count) const {
         std::vector<float> output(count * channels_, 0);
         const auto begin = std::max(start, first_), end = std::min(start + static_cast<qint64>(count), first_ + count_);
         if (end <= begin) return output;
-        QFile file(path_);
-        if (!file.open(QIODevice::ReadOnly) || !file.seek(header_size + (begin - first_) * channels_ * 4))
+        // One handle per artifact: raw() is called per resampling block, so reopening here is costly.
+        if (!file_.isOpen() && !file_.open(QIODevice::ReadOnly))
             throw std::runtime_error("Could not read the voice isolation cache.");
-        const auto bytes = file.read((end - begin) * channels_ * 4);
+        if (!file_.seek(header_size + (begin - first_) * channels_ * 4))
+            throw std::runtime_error("Could not read the voice isolation cache.");
+        const auto bytes = file_.read((end - begin) * channels_ * 4);
         if (bytes.size() != (end - begin) * channels_ * 4) throw std::runtime_error("Truncated voice isolation cache.");
         for (qint64 index = 0; index < (end - begin) * channels_; ++index) {
             const auto word = qFromLittleEndian<quint32>(reinterpret_cast<const uchar*>(bytes.constData()) + index * 4);
@@ -114,7 +117,7 @@ class CachedPcm final : public VoiceIsolationPcm {
     }
 public:
     CachedPcm(QString path, qint64 first, qint64 count, int channels)
-        : path_(std::move(path)), first_(first), count_(count), channels_(channels) {}
+        : path_(std::move(path)), file_(path_), first_(first), count_(count), channels_(channels) {}
     ~CachedPcm() override { swr_free(&resampler_); }
     std::vector<float> read(std::int64_t start, std::size_t count, int rate, int channels) const override {
         if (count > 1048576 || start < 0 || start > std::numeric_limits<std::int64_t>::max() - static_cast<std::int64_t>(count) || rate <= 0 || channels <= 0 || channels > 64)
@@ -178,7 +181,11 @@ QString voiceIsolationModelPath() {
 std::shared_ptr<const VoiceIsolationPcm> findVoiceIsolation(const QString& key) {
     const auto path = cachePath(key);
     std::lock_guard lock(cache_mutex);
-    if (auto held = leases[key.toStdString()].lock()) return held;
+    // Drop leases whose artifacts were released, so the map does not grow with every key seen.
+    std::erase_if(leases, [](const auto& entry) { return entry.second.expired(); });
+    if (const auto found = leases.find(key.toStdString()); found != leases.end()) {
+        if (auto held = found->second.lock()) return held;
+    }
     QFile file(path); if (!file.exists()) return {};
     const auto reject = [&]() -> std::shared_ptr<const VoiceIsolationPcm> {
         logging::Logger::instance().log(logging::Level::Error, "voice_isolation", "validate_cache", "Invalid cached PCM artifact.", {{"key", key.toStdString()}});
