@@ -55,7 +55,9 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install --yes --no-install-recommends \
-            autoconf autoconf-archive automake libtool nasm libdrm-dev libltdl-dev
+            autoconf autoconf-archive automake libtool nasm libdrm-dev libltdl-dev \
+            '^libxcb.*-dev' libx11-xcb-dev libglu1-mesa-dev libxrender-dev \
+            libxi-dev libxkbcommon-dev libxkbcommon-x11-dev libegl-dev
 
       - name: Configure on Windows
         if: runner.os == 'Windows'
