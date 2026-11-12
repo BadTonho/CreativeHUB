@@ -1,0 +1,32 @@
+# CODEOWNERS
+#
+# Review ownership for this repository. The last matching pattern takes
+# precedence. Replace or extend the owners as more maintainers join; use
+# teams (@org/team-name) once an organization exists.
+
+# Default owner for everything not matched below.
+*                       @BadTonho
+
+# Applications
+/apps/hub/              @BadTonho
+/apps/video-editor/     @BadTonho
+/apps/image-editor/     @BadTonho
+/apps/motion-editor/    @BadTonho
+
+# Shared libraries (changes here can affect every application)
+/libs/                  @BadTonho
+
+# Documentation and changelogs
+/docs/                  @BadTonho
+/Changelog/             @BadTonho
+/AGENTS.md              @BadTonho
+/CONTRIBUTING.md        @BadTonho
+
+# Build, packaging, release, and CI (security- and distribution-sensitive)
+/.github/               @BadTonho
+/cmake/                 @BadTonho
+/CMakeLists.txt         @BadTonho
+/vcpkg.json             @BadTonho
+/packaging/             @BadTonho
+/scripts/               @BadTonho
+/LICENSE                @BadTonho
