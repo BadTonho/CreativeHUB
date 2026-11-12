@@ -184,7 +184,8 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install --yes --no-install-recommends \
-            autoconf autoconf-archive automake libtool nasm patchelf
+            autoconf autoconf-archive automake libtool nasm patchelf \
+            libdrm-dev libltdl-dev
 
       - name: Configure
         run: >-

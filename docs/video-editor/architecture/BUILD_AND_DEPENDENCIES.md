@@ -66,10 +66,19 @@ absolute developer-machine path.
 The current vcpkg Qt baseline enables the PostgreSQL SQL driver by default,
 which builds `libpq` and requires Autoconf on macOS. The pinned `gperf` port
 also requires Autoconf, Autoconf Archive, Automake, and Libtool on Linux and
-macOS. GitHub Actions installs these host build tools with Homebrew on macOS
-and `apt` on Linux; Linux also installs NASM for FFmpeg. If the vcpkg feature
-selection or port dependencies change, revisit these prerequisites against a
-clean build on both platforms.
+macOS. GitHub Actions installs these host build tools with `apt` on Linux and,
+when the macOS job is enabled, with Homebrew on macOS; Linux also installs
+NASM for FFmpeg, `libdrm-dev` for the vcpkg `libva` build, and `libltdl-dev`
+for the vcpkg `libxcrypt` build. If the vcpkg feature selection or port
+dependencies change, revisit these prerequisites against a clean build on
+both platforms.
+
+The CI matrix currently runs Windows and Ubuntu 24.04 only. The macOS job is
+paused because no macOS environment is available to reproduce its failures
+(the vcpkg `qtbase` build fails on `__yield`). macOS build and test validation
+is therefore **pending**, and macOS is not claimed as validated for release.
+Re-enable the job by adding `macos-latest` back to the matrix in
+`.github/workflows/ci.yml`; the Homebrew step is kept for that purpose.
 
 ## Qt version and platform baselines
 
