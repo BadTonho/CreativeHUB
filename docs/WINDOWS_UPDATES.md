@@ -7,7 +7,9 @@ installers. A manual installer lifecycle run in a disposable Windows user
 profile is still pending.
 
 This is the current contract for the Hub, Video Editor, Image Editor, and Motion
-Studio. Linux and macOS packaging and update behavior are future work.
+Studio. Linux packages are manual downloads for now; see the
+[Linux update decision](LINUX_UPDATES_DECISION.md). macOS packaging and update
+behavior are future work.
 
 ## Release contract
 
