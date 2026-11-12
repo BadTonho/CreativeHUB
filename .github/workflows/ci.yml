@@ -20,7 +20,7 @@ jobs:
         # failures (the vcpkg qtbase build currently fails on `__yield`).
         # macOS remains a required product target; its validation is pending.
         # To re-enable, add `macos-latest` back to this list.
-        os: [windows-latest, ubuntu-24.04]
+        os: [windows-latest, ubuntu-26.04]
     env:
       VCPKG_ROOT: ${{ github.workspace }}/vcpkg
       VCPKG_BASELINE: 3af1d1e60af2b2abf55760538cd607829029b07a

@@ -73,7 +73,8 @@ for the vcpkg `libxcrypt` build. If the vcpkg feature selection or port
 dependencies change, revisit these prerequisites against a clean build on
 both platforms.
 
-The CI matrix currently runs Windows and Ubuntu 24.04 only. The macOS job is
+The CI matrix currently runs Windows and Ubuntu 26.04 only (the version the
+contributors use; Ubuntu 24.04 is not covered yet). The macOS job is
 paused because no macOS environment is available to reproduce its failures
 (the vcpkg `qtbase` build fails on `__yield`). macOS build and test validation
 is therefore **pending**, and macOS is not claimed as validated for release.
