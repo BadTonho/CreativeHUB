@@ -1,0 +1,239 @@
+name: Draft release
+
+# Pushing a tag named v<SuiteVersion> (for example v2026.11.0) builds the
+# Windows installers plus updates.json and the Linux packages, then attaches
+# all of them to ONE DRAFT GitHub Release. The workflow never publishes: the
+# maintainer reviews the draft and publishes it manually.
+
+on:
+  push:
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref_name }}
+  cancel-in-progress: false
+
+env:
+  VCPKG_BASELINE: 3af1d1e60af2b2abf55760538cd607829029b07a
+
+jobs:
+  prepare:
+    name: Validate the tag
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read # query the CI result for the tagged commit
+    outputs:
+      suite_version: ${{ steps.version.outputs.suite_version }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ github.ref_name }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate the tag and derive the suite version
+        id: version
+        shell: bash
+        run: |
+          if [[ ! "$TAG" =~ ^v([0-9]{4}\.[0-9]+\.[0-9]+)$ ]]; then
+            echo "::error::Tag '$TAG' must look like v<year>.<minor>.<patch>, for example v2026.11.0."
+            exit 1
+          fi
+          echo "suite_version=${BASH_REMATCH[1]}" >> "$GITHUB_OUTPUT"
+
+      - name: Require the tagged commit to be on main
+        shell: bash
+        run: |
+          git fetch origin main
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "::error::Tag '$TAG' points to a commit that is not on main. Releases are built only from main."
+            exit 1
+          fi
+
+      - name: Require a successful CI run for the tagged commit
+        shell: bash
+        run: |
+          count=$(gh run list --workflow ci.yml --commit "$GITHUB_SHA" \
+            --status success --json databaseId --jq 'length')
+          if [[ "$count" -lt 1 ]]; then
+            echo "::error::No successful 'Build and test' run exists for $GITHUB_SHA. Wait for CI to pass, then re-run this workflow."
+            exit 1
+          fi
+
+      - name: Refuse to touch an already published release
+        shell: bash
+        run: |
+          if gh release view "$TAG" --json isDraft --jq '.isDraft' 2>/dev/null | grep -qx false; then
+            echo "::error::Release '$TAG' is already published; refusing to modify it."
+            exit 1
+          fi
+
+  windows:
+    name: Windows installers
+    needs: prepare
+    runs-on: windows-latest
+    timeout-minutes: 150
+    permissions:
+      contents: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      SUITE_VERSION: ${{ needs.prepare.outputs.suite_version }}
+      VCPKG_ROOT: ${{ github.workspace }}/vcpkg
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check out the manifest's vcpkg baseline
+        shell: bash
+        run: |
+          git clone https://github.com/microsoft/vcpkg.git vcpkg
+          git -C vcpkg checkout "$VCPKG_BASELINE"
+
+      - name: Bootstrap vcpkg
+        shell: pwsh
+        run: .\vcpkg\bootstrap-vcpkg.bat -disableMetrics
+
+      - name: Configure
+        shell: pwsh
+        run: >-
+          cmake -S . -B build
+          "-DCMAKE_TOOLCHAIN_FILE=$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake"
+          -DVCPKG_MANIFEST_FEATURES=vulkan
+
+      - name: Build all applications
+        run: cmake --build build --config Release --parallel 4
+
+      - name: Ensure Inno Setup is available
+        shell: pwsh
+        run: |
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path -LiteralPath $iscc)) {
+            choco install innosetup --no-progress --yes
+          }
+          if (-not (Test-Path -LiteralPath $iscc)) { throw "ISCC.exe was not found after installing Inno Setup." }
+          "ISCC=$iscc" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: Download the previous published release's Windows assets
+        id: previous
+        shell: bash
+        run: |
+          prev=$(gh release list --exclude-drafts --exclude-pre-releases \
+            --limit 1 --json tagName --jq '.[0].tagName // ""')
+          if [[ -z "$prev" ]]; then
+            echo "No published release found; building the first suite release."
+            echo "first=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Reusing unchanged installers from $prev."
+            mkdir previous-release-assets
+            gh release download "$prev" --dir previous-release-assets \
+              --pattern 'updates.json' --pattern 'creative-suite-*-setup.exe'
+            echo "first=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build installers and catalog
+        shell: pwsh
+        run: |
+          $arguments = @{
+            BuildDirectory = "./build"
+            OutputDirectory = "./release-assets"
+            SuiteVersion = $env:SUITE_VERSION
+            InnoCompiler = $env:ISCC
+          }
+          if ("${{ steps.previous.outputs.first }}" -eq "true") {
+            $arguments.FirstRelease = $true
+          } else {
+            $arguments.PreviousReleaseAssetsDirectory = "./previous-release-assets"
+          }
+          ./packaging/windows/Build-Installers.ps1 @arguments
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-windows
+          path: release-assets/*
+          if-no-files-found: error
+          retention-days: 7
+
+  linux:
+    name: Linux packages
+    needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    permissions:
+      contents: read
+    env:
+      SUITE_VERSION: ${{ needs.prepare.outputs.suite_version }}
+      VCPKG_ROOT: ${{ github.workspace }}/vcpkg
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check out the manifest's vcpkg baseline
+        run: |
+          git clone https://github.com/microsoft/vcpkg.git vcpkg
+          git -C vcpkg checkout "$VCPKG_BASELINE"
+
+      - name: Bootstrap vcpkg
+        run: ./vcpkg/bootstrap-vcpkg.sh -disableMetrics
+
+      - name: Install Linux build tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends \
+            autoconf autoconf-archive automake libtool nasm patchelf
+
+      - name: Configure
+        run: >-
+          cmake -S . -B build
+          -DCMAKE_TOOLCHAIN_FILE="$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake"
+          -DVCPKG_MANIFEST_FEATURES=vulkan
+
+      - name: Build all applications
+        run: cmake --build build --config Release --parallel 4
+
+      - name: Build the Linux packages
+        run: ./packaging/linux/build-packages.sh ./build ./release-assets "$SUITE_VERSION"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-linux
+          path: release-assets/*
+          if-no-files-found: error
+          retention-days: 7
+
+  draft-release:
+    name: Create the draft release
+    needs: [prepare, windows, linux]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write # create/update the draft release
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ github.ref_name }}
+      SUITE_VERSION: ${{ needs.prepare.outputs.suite_version }}
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+          path: release-assets
+          merge-multiple: true
+
+      - name: List the release assets
+        run: ls -l release-assets
+
+      - name: Create or update the draft release
+        run: |
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Updating the existing draft for $TAG."
+            gh release upload "$TAG" release-assets/* --clobber --repo "$GITHUB_REPOSITORY"
+          else
+            gh release create "$TAG" release-assets/* \
+              --repo "$GITHUB_REPOSITORY" --draft --verify-tag \
+              --title "Creative Suite $SUITE_VERSION" \
+              --generate-notes
+          fi

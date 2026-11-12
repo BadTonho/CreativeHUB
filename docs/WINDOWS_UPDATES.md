@@ -173,6 +173,29 @@ stages the CMake install component for each app, compiles changed versions with
 catalog with actual file sizes and hashes. The release operator uploads the
 four `.exe` files and `updates.json` to the same GitHub Release.
 
+[`../.github/workflows/release.yml`](../.github/workflows/release.yml)
+automates this. Pushing a tag named `v<year>.<minor>.<patch>` (for example
+`v2026.11.0`; the suite version is the tag without `v`) builds the four apps
+in Release on Windows and Linux runners and attaches everything to **one draft**
+GitHub Release: the Windows installers plus `updates.json`, and the Linux
+`.tar.gz` packages plus `SHA256SUMS-linux.txt` (see
+[`../packaging/linux/README.md`](../packaging/linux/README.md)). On Windows the
+workflow downloads the latest published non-prerelease's installers and catalog
+as the previous release, or selects `-FirstRelease` when none exists. It never
+publishes; the maintainer reviews the draft and publishes it manually. It
+refuses to run when the tag is malformed, the tagged commit is not on `main`,
+the `Build and test` workflow has no successful run for that commit, or the
+release is already published. Re-running it for a tag whose draft exists
+replaces the draft's assets.
+
+The update catalog covers only the Windows installers: Linux packages are
+manual downloads and are not offered by the in-app updater. macOS packaging is
+pending. Installers and packages are unsigned, and the workflow is unvalidated
+until its first run, so check the draft's catalog, installers, and packages
+(see the Windows validation checklist in
+[`../packaging/windows/README.md`](../packaging/windows/README.md)) before
+publishing.
+
 The script accepts the previous release's assets directory so that unchanged
 installers can be verified and reused byte-for-byte. An app version must be
 advanced when its installer contents change.

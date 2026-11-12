@@ -75,3 +75,19 @@ machine-wide redistributable installer from the per-user package. Microsoft
 supports local deployment for installs that do not have administrator rights,
 but notes that the app owner must service those files; see the
 [deployment-method guidance](https://learn.microsoft.com/en-us/cpp/windows/choosing-a-deployment-method?view=msvc-170).
+
+## Automated draft release
+
+Pushing a tag such as `v2026.11.0` runs
+[`.github/workflows/release.yml`](../../.github/workflows/release.yml), which
+runs this script on a Windows runner and, together with the Linux packages
+(`packaging/linux/`), creates one draft GitHub Release with the four installers
+and `updates.json`. It is never published automatically.
+Before publishing the draft, confirm that the catalog versions and hashes match
+the attached installers and run the Windows validation described above.
+The tagged commit must be on `main` and have a successful `Build and test` run.
+
+```bash
+git tag v2026.11.0 <commit-on-main>
+git push origin v2026.11.0
+```
