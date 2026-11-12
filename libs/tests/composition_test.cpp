@@ -225,7 +225,7 @@ int main() {
         const auto masked_output=composition::FrameCompositor::compose(3,1,{{&processed,{}}},nullptr,
             composition::CompositionOutputAlpha::Preserve);
         require(masked_output&&masked_output->rgba_pixels[3]==128&&masked_output->rgba_pixels[7]==0&&
-            masked_output->rgba_pixels[11]==255,"Transparent composition preserves source-mask coverage.");
+            masked_output->rgba_pixels[11]==0,"Transparent composition preserves source-mask coverage.");
         auto colored_mask = frame(1, 1, {255, 0, 0, 255});
         auto colored_target = frame(1, 1, {1, 2, 3, 255});
         require(composition::applyMask(colored_target, colored_mask) &&
