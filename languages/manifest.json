@@ -12,22 +12,22 @@
       "application": "image-editor",
       "locale": "pt_BR",
       "path": "image-editor/pt_BR.qm",
-      "size_bytes": 81373,
-      "sha256": "9dc176eb995a969b0aa06c18085dcb5c745e063262146b6b4807bf90eb57759b"
+      "size_bytes": 85712,
+      "sha256": "6fe3e7072ccf0252ab4a4eeb5b21f6e07b6cb6e3049697b5b3607da342fc3f91"
     },
     {
       "application": "motion-editor",
       "locale": "pt_BR",
       "path": "motion-editor/pt_BR.qm",
-      "size_bytes": 63473,
-      "sha256": "0cb664742e27e49cf5fb398ed119b4c9e4716a2fc963bb50961508675cdc987f"
+      "size_bytes": 68679,
+      "sha256": "4b038c6309955c9912d31cff94d9d4e1970c3953fcde9db7535db18b017f08af"
     },
     {
       "application": "video-editor",
       "locale": "pt_BR",
       "path": "video-editor/pt_BR.qm",
-      "size_bytes": 81811,
-      "sha256": "5eee1d905870a525e4d020252720d149481048f45d8ff212f3ccc919b43f4ab1"
+      "size_bytes": 103427,
+      "sha256": "dde5e0ce0f2b54b69fd4f056987e7d7fa7b9641658bb7fe58cadca899c12deb1"
     }
   ]
 }
