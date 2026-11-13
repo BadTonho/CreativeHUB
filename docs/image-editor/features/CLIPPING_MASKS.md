@@ -103,8 +103,8 @@ manual responsiveness acceptance remain separate. See the
 ## Development outputs
 
 Canonical Image Editor Release and Debug and Hub Debug builds succeeded without
-installers; application version metadata remains unchanged. `lugarExecutaveis.md`
-selects Image Release for direct launch and Hub Debug. The Hub launcher selects
+installers; application version metadata remains unchanged. The maintainer's launch configuration
+selected Image Release for direct launch and Hub Debug. The Hub launcher selects
 its matching Image Debug sibling; no Image installation registry override or
 Image executable in the Hub output directory was present during verification.
 

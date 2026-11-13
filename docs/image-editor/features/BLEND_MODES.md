@@ -121,7 +121,7 @@ text/shape/imported-image parity: native QtTest reports 16 passed, zero skipped
 
 Canonical Release builds completed for Image, Video and Motion; Image and Hub
 Debug also compiled successfully. No installer was generated and application
-versions remain unchanged. `lugarExecutaveis.md` identifies direct Image Release
+versions remain unchanged. The maintainer's launch configuration identified direct Image Release
 and Hub Debug; the launcher resolves matching Image Debug first. No Image
 installation-registry override was present.
 
