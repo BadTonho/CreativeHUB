@@ -1,6 +1,6 @@
 # Hub Project Backups
 
-Image `.cimg` v30 is accepted, including Color Balance and Hue/Saturation values; future v31 is rejected. Glow extends native backup support to Motion v18; CSP v32 adds the Video Editor Primary Grade effect, v33 adds the Color Gallery, v34 stores the Color correction graph, v35 expands primary controls, v36 adds independent Log adjustments, v37 stores named per-clip grade graph snapshots, v38 adds Color Curves and tonal qualifiers, v39 adds qualifier matte refinement, v40 adds animated Color Power Windows, and v41 adds Audio mixer buses, routes, sends, pan, and Master settings; v42 adds per-track EQ/compressor chains and v43 adds per-clip EQ/compressor chains. Gallery PNG sidecars are copied beside each backup snapshot so Gallery items remain available after restore. Color graphs, windows and geometry, matte bindings and visibility, blend mode, Scale Y, link state, affine compensation, Anchor bases and curves, parent IDs and pose-preserving compensation, Null control layers, optional presentation metadata, shared mask definitions, stage associations, effect parameter keyframes, and v42-v43 audio mix/effect data are retained; external media/Input paths are rebased. Future CSP v44 and Motion v19 remain unsupported. The referenced `.cscomp` file is not required to reopen an imported native project. See [contract](../COMPOSITION_INTERCHANGE.md).
+Image `.cimg` v31 is accepted, including Invert, Color Balance and Hue/Saturation values; future v32 is rejected. Glow extends native backup support to Motion v18; CSP v32 adds the Video Editor Primary Grade effect, v33 adds the Color Gallery, v34 stores the Color correction graph, v35 expands primary controls, v36 adds independent Log adjustments, v37 stores named per-clip grade graph snapshots, v38 adds Color Curves and tonal qualifiers, v39 adds qualifier matte refinement, v40 adds animated Color Power Windows, and v41 adds Audio mixer buses, routes, sends, pan, and Master settings; v42 adds per-track EQ/compressor chains and v43 adds per-clip EQ/compressor chains. Gallery PNG sidecars are copied beside each backup snapshot so Gallery items remain available after restore. Color graphs, windows and geometry, matte bindings and visibility, blend mode, Scale Y, link state, affine compensation, Anchor bases and curves, parent IDs and pose-preserving compensation, Null control layers, optional presentation metadata, shared mask definitions, stage associations, effect parameter keyframes, and v42-v43 audio mix/effect data are retained; external media/Input paths are rebased. Future CSP v44 and Motion v19 remain unsupported. The referenced `.cscomp` file is not required to reopen an imported native project. See [contract](../COMPOSITION_INTERCHANGE.md).
 
 ## Video Editor v29 Background presets
 
@@ -229,7 +229,7 @@ Native Hub restore UI and platform acceptance remain pending.
 
 ## Image Editor v17 outlines
 
-Backup/restore accepts Image documents through v30 and preserves optional layer
+Backup/restore accepts Image documents through v31 and preserves optional layer
 outline parameters, including disabled styles, while rebasing existing source
 and imported-image paths. `hub-backup-format-test` reopens vault and relocated
 restores with the actual Image reader, including an outlined grouped image.

@@ -1,6 +1,6 @@
 # Image Editor Document Format
 
-Status: **provisional version 30**. The `.cimg` extension is temporary until a
+Status: **provisional version 31**. The `.cimg` extension is temporary until a
 later format review. Version 4 added editable raster layers; version 5 adds
 eraser strokes; version 6 adds editable line, rectangle, and ellipse shapes;
 version 7 adds stable IDs to paint and eraser strokes; version 8 adds
@@ -12,8 +12,10 @@ bucket-fill operations; version 15 adds editable linear-gradient operations;
 version 16 adds editable blur strokes; version 17 adds editable layer outlines.
 Version 18 adds editable clipping masks. Version 19 adds layer/group blend modes. Version 20 adds Gradient Map adjustment layers and selection-seeded masks. Version 21 adds Brightness/Contrast adjustments. Version 22 adds Exposure / Offset / Gamma adjustments. Version 23 adds global Hue/Saturation adjustments. Version 24 adds global Levels adjustments. Version 25 adds global Curves adjustments. Version 26 adds independent RGB-channel curves alongside the RGB master curve. Version 27 adds independent RGB-channel Levels alongside the RGB master. Version 28 adds independent Colorize mode values to Hue/Saturation adjustments. Version 29 adds six fixed Hue/Saturation color ranges.
 
-Version 30 adds Color Balance adjustments. The current writer reads versions
-1–29 and saves version 30; earlier binaries cannot read version 30.
+Version 31 adds Invert adjustments. The current writer reads versions 1–30 and
+saves version 31; earlier binaries cannot read version 31.
+
+Version 30 adds Color Balance adjustments.
 
 Hub snapshots preserve versions 1–30 and rebase relative source/import paths
 to their original absolute locations. The native save contract remains the
@@ -231,7 +233,7 @@ crop, quarter-turn, and flip commands continue to transform rendered content
 and layer masks. Image pixels render at their position in the operation list,
 then the layer mask, layer opacity, and group composition apply.
 
-Recovery retains envelope version 1 and accepts document payloads through v30.
+Recovery retains envelope version 1 and accepts document payloads through v31.
 The Video Editor consumes flattened published PNG files; its .csp schema does
 not change.
 
@@ -526,7 +528,7 @@ The optional `blend_mode` string on raster layers and groups uses `normal`,
 writers omit Normal. Background never carries the field. v1-18 load as Normal;
 reject fields in older schemas and unknown/non-string values. Recovery wrapper
 v1 accepts v19, and Hub preserves modes during path rebasing. Older editor
-binaries reject v19; the current Hub accepts through v30 and rejects v31. See [pixel/export contract](../features/BLEND_MODES.md).
+binaries reject v19; the current Hub accepts through v31 and rejects v32. See [pixel/export contract](../features/BLEND_MODES.md).
 
 
 ## Adjustment layers and selection masks (version 20)
@@ -653,3 +655,10 @@ midtone and highlight order, each containing three integers in [-100,100] for
 the red, green and blue axes. `preserve_lightness` is a required boolean. Reject
 missing, extra, malformed or out-of-range fields and this kind before v30.
 See the [processing contract](../features/COLOR_BALANCE.md).
+
+## Invert (version 31)
+
+The `invert` adjustment stores only `{"type": "invert"}`; it has no parameters.
+Reject any extra field, this kind before v31, and an Invert payload on a
+Background, raster or otherwise non-adjustment layer. See the
+[processing contract](../features/INVERT.md).

@@ -525,6 +525,12 @@ ImageEditorWindow::ImageEditorWindow(QWidget* parent,
         const auto id = activeSession().addColorBalanceAdjustment(canvas->areaSelectionClipPath());
         if (!id.isEmpty()) { selectedMaskLayerId().clear(); selectedObjectIds().clear(); deactivateCanvasTools(); updateView(true); }
     });
+    connect(layer_panel_, &LayerPanel::addInvertRequested, this, [this] {
+        if (!hasActiveDocumentTab()) return;
+        auto* canvas = activeCanvas(); canvas->commitTextEditing(); canvas->cancelTransientGestures(); clearInteractivePreview(canvas);
+        const auto id = activeSession().addInvertAdjustment(canvas->areaSelectionClipPath());
+        if (!id.isEmpty()) { selectedMaskLayerId().clear(); selectedObjectIds().clear(); deactivateCanvasTools(); updateView(true); }
+    });
     connect(layer_panel_, &LayerPanel::colorBalanceChanged, this, [this](const QString& id, const creative_suite::effects::ColorBalanceParameters& value) {
         if (hasActiveDocumentTab() && activeSession().setColorBalance(id, value)) updateView(true);
     });

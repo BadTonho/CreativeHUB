@@ -47,6 +47,8 @@ existing mask/history/export contract; native visual/platform acceptance is pend
 
 [Color Balance](features/COLOR_BALANCE.md): independent tonal-range color controls and optional lightness preservation.
 
+[Invert](features/INVERT.md): parameterless encoded-RGB inversion adjustment layer and v31 persistence.
+
 [RGB and per-channel Levels](features/LEVELS.md): master/channel input/output
 controls, midtone gamma, combined histogram, CPU/OpenGL preview and v27
 persistence/Hub compatibility.

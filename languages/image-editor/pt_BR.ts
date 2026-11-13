@@ -4,6 +4,7 @@
 <context>
     <name>ImageEditorUI</name>
     <message><source>Color Balance</source><translation>Equilíbrio de Cores</translation></message>
+    <message><source>Invert</source><translation>Inverter</translation></message>
     <message><source>Shadows</source><translation>Sombras</translation></message>
     <message><source>Midtones</source><translation>Meios-tons</translation></message>
     <message><source>Highlights</source><translation>Realces</translation></message>

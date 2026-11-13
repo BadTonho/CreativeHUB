@@ -358,6 +358,9 @@ LayerPanel::LayerPanel(QWidget* parent) : QWidget(parent) {
     add_color_balance_action_ = adjustments->addAction(QCoreApplication::translate("ImageEditorUI", "Color Balance"));
     add_color_balance_action_->setObjectName("addColorBalanceAction");
     connect(add_color_balance_action_, &QAction::triggered, this, [this] { finishOutlineEdit(); emit addColorBalanceRequested(); });
+    add_invert_action_ = adjustments->addAction(QCoreApplication::translate("ImageEditorUI", "Invert"));
+    add_invert_action_->setObjectName("addInvertAction");
+    connect(add_invert_action_, &QAction::triggered, this, [this] { finishOutlineEdit(); emit addInvertRequested(); });
     color_balance_editor_ = new ColorBalanceEditor(this); layout->addWidget(color_balance_editor_); color_balance_editor_->hide();
     color_balance_editor_->started = [this] { emit adjustmentEditStarted(); };
     color_balance_editor_->finished = [this] { emit adjustmentEditFinished(); };
@@ -1049,6 +1052,7 @@ void LayerPanel::updateControls() {
     add_levels_action_->setEnabled(add_gradient_action_->isEnabled());
     add_curves_action_->setEnabled(add_gradient_action_->isEnabled());
     add_color_balance_action_->setEnabled(add_gradient_action_->isEnabled());
+    add_invert_action_->setEnabled(add_gradient_action_->isEnabled());
     const bool adjustment=has_layer && layer->adjustment.has_value();
     quick_export_button_->setToolTip(adjustment?QCoreApplication::translate("ImageEditorUI","Adjustment layers have no pixels to export. Export the document or its group."):QString{});
     const auto* gradient=adjustment?std::get_if<creative_suite::effects::GradientMapParameters>(&*layer->adjustment):nullptr;

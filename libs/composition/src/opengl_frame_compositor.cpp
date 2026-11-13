@@ -1279,7 +1279,7 @@ void main() {
         vec3 cb=b.a>0.0?clamp(b.rgb/b.a,0.0,1.0):vec3(0);
         float t=dot(cb,vec3(0.2126,0.7152,0.0722));
         if(((adjustment_kind==2 && brightness_contrast==vec2(0)) || (adjustment_kind==3 && exposure_offset_gamma==vec3(0,0,1)) || (adjustment_kind==4 && hue_saturation==vec3(0) && !hue_colorize_enabled && hue_ranges_identity) || (adjustment_kind==5 && levels_identity) || (adjustment_kind==6 && curve_identity) || (adjustment_kind==7 && balance_identity)) && blend_mode==0){color=b;return;}
-        vec3 mapped=adjustment_kind==2 ? clamp((cb+brightness_contrast.x-.5)*(1.0+brightness_contrast.y)+.5,0.0,1.0) : adjustment_kind==3 ? exposeSrgb(cb) : adjustment_kind==4 ? adjustHueSaturation(cb) : adjustment_kind==5 ? adjustLevels(cb) : adjustment_kind==6 ? vec3(curveValue(cb.r,0),curveValue(cb.g,1),curveValue(cb.b,2)) : adjustment_kind==7 ? adjustColorBalance(cb) : gradient_stops[gradient_count-1].rgb;
+        vec3 mapped=adjustment_kind==2 ? clamp((cb+brightness_contrast.x-.5)*(1.0+brightness_contrast.y)+.5,0.0,1.0) : adjustment_kind==3 ? exposeSrgb(cb) : adjustment_kind==4 ? adjustHueSaturation(cb) : adjustment_kind==5 ? adjustLevels(cb) : adjustment_kind==6 ? vec3(curveValue(cb.r,0),curveValue(cb.g,1),curveValue(cb.b,2)) : adjustment_kind==7 ? adjustColorBalance(cb) : adjustment_kind==8 ? 1.0-cb : gradient_stops[gradient_count-1].rgb;
         for(int i=1;adjustment_kind==1 && i<gradient_count;++i) {
             if(t<=gradient_stops[i].a){vec4 l=gradient_stops[i-1],r=gradient_stops[i];mapped=mix(l.rgb,r.rgb,clamp((t-l.a)/(r.a-l.a),0.0,1.0));break;}
         }
@@ -1425,7 +1425,8 @@ void main() {
             const auto* levels = adjustment ? std::get_if<effects::LevelsParameters>(adjustment) : nullptr;
             const auto* curves = adjustment ? std::get_if<effects::CurvesParameters>(adjustment) : nullptr;
             const auto* balance = adjustment ? std::get_if<effects::ColorBalanceParameters>(adjustment) : nullptr;
-            raster_program->setUniformValue("adjustment_kind",gradient?1:bc?2:exposure?3:hue?4:levels?5:curves?6:balance?7:0);
+            const auto* invert = adjustment ? std::get_if<effects::InvertParameters>(adjustment) : nullptr;
+            raster_program->setUniformValue("adjustment_kind",gradient?1:bc?2:exposure?3:hue?4:levels?5:curves?6:balance?7:invert?8:0);
             std::array<QVector3D,3> balance_ranges{};
             if (balance) for (int i=0;i<3;++i) balance_ranges[i]=QVector3D(balance->ranges[i][0]/200.f,balance->ranges[i][1]/200.f,balance->ranges[i][2]/200.f);
             raster_program->setUniformValueArray("balance_ranges",balance_ranges.data(),3);

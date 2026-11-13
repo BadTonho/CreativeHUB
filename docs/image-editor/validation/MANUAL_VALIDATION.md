@@ -1194,3 +1194,21 @@ GPU/driver, canvas dimensions and outcome; use copies of original images.
    latency, content uploads, cancellation and constrained GPU recovery.
 
 Automated mapping: [Curves contract](../features/CURVES.md).
+
+## Invert adjustments
+
+Status: pending on Windows/macOS/Linux native UI; Image Editor automated suites
+not yet run (see the [contract](../features/INVERT.md#verification-and-acceptance)).
+
+1. Create Layers > New Adjustment Layer > Invert above Background, inside a group
+   and above a clipping chain; confirm no editor appears and colors invert.
+2. Capture a feathered selection first and confirm only that region inverts;
+   edit the mask without painting content.
+3. Lower opacity, switch each blend mode, toggle visibility and clip a layer
+   above it; confirm transparent areas stay transparent.
+4. Stack two Inverts and confirm the original colors return; check Undo/Redo.
+5. Compare CPU/Automatic preview, the thumbnail and PNG/JPEG/group exports.
+   Confirm Quick Export of the adjustment alone is refused.
+6. Save and reopen, recover an autosave, restore a relocated Hub backup and
+   publish a linked PNG consumed by Video Editor and Motion Studio.
+7. Open the app in Portuguese (Brazil) and confirm the menu entry reads "Inverter".

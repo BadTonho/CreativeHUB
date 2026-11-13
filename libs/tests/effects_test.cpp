@@ -484,6 +484,14 @@ int main(int argc, char** argv) {
         require(validAdjustment(BrightnessContrastParameters{-100,100}) && !validAdjustment(BrightnessContrastParameters{101,0}),"Brightness/Contrast validation");
         require(adjustmentRgb(BrightnessContrastParameters{25,50},{.2,.4,.8})==std::array<unsigned char,3>{108,185,255},"Brightness-before-contrast reference");
         require(adjustmentRgb(BrightnessContrastParameters{100,-100},{0.,.5,1.})==std::array<unsigned char,3>{128,128,128},"Zero contrast midpoint");
+        require(validAdjustment(InvertParameters{}) && !identityAdjustment(InvertParameters{}),"Invert is valid and never an identity");
+        require(adjustmentRgb(InvertParameters{},{0.,1.,.5})==std::array<unsigned char,3>{255,0,128},"Invert reference");
+        require(adjustmentRgb(InvertParameters{},{-1.,2.,64./255.})==std::array<unsigned char,3>{255,0,191},"Invert clamps out-of-range input");
+        for (int v = 0; v <= 255; ++v) {
+            const auto once = adjustmentRgb(InvertParameters{},{v/255.,v/255.,v/255.});
+            const auto twice = adjustmentRgb(InvertParameters{},{once[0]/255.,once[1]/255.,once[2]/255.});
+            require(once[0]==255-v && once[1]==255-v && once[2]==255-v && twice[0]==v,"Invert is an exact involution on bytes");
+        }
         require(adjustmentRgb(BrightnessContrastParameters{-100,0},{0.,.5,1.})==std::array<unsigned char,3>{0,0,0},"Brightness saturation");
     }
     {

@@ -21,9 +21,13 @@ struct ExposureOffsetGammaParameters {
     double gamma = 1;
     bool operator==(const ExposureOffsetGammaParameters&) const = default;
 };
+// Inverts encoded RGB (255 - v); it has no controls and never alters alpha.
+struct InvertParameters {
+    bool operator==(const InvertParameters&) const = default;
+};
 using AdjustmentParameters = std::variant<GradientMapParameters,
     BrightnessContrastParameters, ExposureOffsetGammaParameters, HueSaturationParameters,
-    LevelsParameters, CurvesParameters, ColorBalanceParameters>;
+    LevelsParameters, CurvesParameters, ColorBalanceParameters, InvertParameters>;
 [[nodiscard]] inline bool identityAdjustment(const AdjustmentParameters& p) noexcept {
     if (const auto* value = std::get_if<BrightnessContrastParameters>(&p))
         return *value == BrightnessContrastParameters{};
@@ -58,6 +62,7 @@ using AdjustmentParameters = std::variant<GradientMapParameters,
         else if constexpr (std::is_same_v<T, HueSaturationParameters>) return validHueSaturation(value);
         else if constexpr (std::is_same_v<T, LevelsParameters>) return validLevels(value);
         else if constexpr (std::is_same_v<T, CurvesParameters>) return validCurves(value);
+        else if constexpr (std::is_same_v<T, InvertParameters>) return true;
         else return validColorBalance(value);
     }, p);
 }
@@ -77,6 +82,13 @@ using AdjustmentParameters = std::variant<GradientMapParameters,
     }
     return result;
 }
+// Callers pass finite channels in [0,1]; out-of-range input is clamped first.
+[[nodiscard]] inline std::array<unsigned char,3> invertRgb(std::array<double,3> rgb) noexcept {
+    std::array<unsigned char,3> result{};
+    for (int i = 0; i < 3; ++i)
+        result[i] = static_cast<unsigned char>(std::lround((1. - std::clamp(rgb[i], 0., 1.)) * 255));
+    return result;
+}
 [[nodiscard]] inline std::array<unsigned char,3> adjustmentRgb(const AdjustmentParameters& p,std::array<double,3> rgb) noexcept {
     return std::visit([&](const auto& value) {
         using T = std::decay_t<decltype(value)>;
@@ -88,6 +100,7 @@ using AdjustmentParameters = std::variant<GradientMapParameters,
         else if constexpr (std::is_same_v<T, HueSaturationParameters>) return hueSaturationRgb(value, rgb);
         else if constexpr (std::is_same_v<T, LevelsParameters>) return levelsRgb(value, rgb);
         else if constexpr (std::is_same_v<T, CurvesParameters>) return curvesRgb(value, rgb);
+        else if constexpr (std::is_same_v<T, InvertParameters>) return invertRgb(rgb);
         else return colorBalanceRgb(value, rgb);
     }, p);
 }

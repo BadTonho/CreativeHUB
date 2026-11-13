@@ -41,7 +41,8 @@ hardware requirements remain measurement-based. See [scope](SCOPE.md).
 
 ## Next code step
 
-**Color Balance is implemented**; select the next bounded feature from the
+**Invert is implemented** (build verification pending; see its
+[contract](features/INVERT.md)); select the next bounded feature from the
 provisional sequence in section 4. The shared Effects Outer Glow assertion was
 corrected and its focused suite passed. Colorize is an independent mode; visual and
 platform acceptance remains pending. Levels and Curves provide RGB master and
@@ -312,7 +313,9 @@ Native visual and macOS/Linux acceptance remains pending.
   specify neutral behavior, alpha and masks.
 - [ ] Add LUT loading for `.cube` and `.3dl` in separately validated increments,
   including parsing errors, supported dimensions and missing-file recovery.
-- [ ] Add Selective Color, Invert, Posterize and Threshold as separately bounded
+- [x] Add Invert; see [contract](features/INVERT.md). Native automated
+  verification and visual acceptance are pending.
+- [ ] Add Selective Color, Posterize and Threshold as separately bounded
   adjustments; define parameter ranges and color-space semantics for each.
 - [ ] Extend Hue/Saturation with editable range boundaries and transition widths,
   and Curves with on-image sampling/editing, after defining their interaction
@@ -717,6 +720,14 @@ These results do not complete the existing release/manual acceptance gates.
 | Controls, selected-range Reset, preservation, history and linked PNG | `image_editor_hue_saturation_ui_test.cpp` (`creative-suite-image-editor-hue-saturation-ui`) | [Manual checklist](validation/MANUAL_VALIDATION.md#color-balance) pending. |
 | CPU/OpenGL parity, mask and unchanged uploads | `image_editor_interactive_test.cpp` (`gpuColorBalance`) | Native GPU and platform execution recorded separately. |
 | v30 backup and relocated restore | `test_backup_formats.cpp` (`hub-backup-format-test`) | Hub UI and platform acceptance separate. |
+
+## Invert regression coverage
+
+| Contract | Automated coverage | Status |
+| --- | --- | --- |
+| Byte-exact inversion, involution, clamping, never-identity | `effects_test.cpp` (`creative-suite-effects`) | Passed on Windows Release. |
+| Alpha, mask/opacity, history, selection mask, v31 persistence, recovery, export, preview parity, invalid and pre-v31 loads | `image_editor_invert_test.cpp` (`creative-suite-image-editor-invert`) | Registered; not yet built or run (see contract). |
+| v31 backup/restore and future-version rejection | `test_backup_formats.cpp`, `test_backup_manager.cpp` | Manager passed; format test needs the Image build. |
 
 ## Hue/Saturation regression coverage
 

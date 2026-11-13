@@ -461,7 +461,7 @@ Image native v20 introduces app-owned adjustment scope and selection-seeded mask
 ## Brightness/Contrast shared boundary
 
 Image v21 adds a typed adjustment without changing PNG publication. Hub preserves
-all current adjustment types and masks and accepts v1-30, rejecting v31. The shared RGB
+all current adjustment types and masks and accepts v1-31, rejecting v32. Invert (v31) is parameterless; see [Image contract](image-editor/features/INVERT.md). The shared RGB
 evaluator preserves existing Video/Motion effects; no new registry entries are
 added. [Contract](image-editor/features/BRIGHTNESS_CONTRAST.md).
 

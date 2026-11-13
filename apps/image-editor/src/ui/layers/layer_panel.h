@@ -65,6 +65,7 @@ signals:
     void addGradientMapRequested();
     void addHueSaturationRequested();
     void addColorBalanceRequested();
+    void addInvertRequested();
     void colorBalanceChanged(const QString&, const creative_suite::effects::ColorBalanceParameters&);
     void hueSaturationChanged(const QString&, const creative_suite::effects::HueSaturationParameters&);
     void addLevelsRequested();
@@ -121,6 +122,7 @@ private:
     HueSaturationEditor* hue_editor_ = nullptr;
     ColorBalanceEditor* color_balance_editor_ = nullptr;
     QAction* add_color_balance_action_ = nullptr;
+    QAction* add_invert_action_ = nullptr;
     QAction* add_hue_action_ = nullptr;
     LevelsEditor* levels_editor_ = nullptr;
     QAction* add_levels_action_ = nullptr;

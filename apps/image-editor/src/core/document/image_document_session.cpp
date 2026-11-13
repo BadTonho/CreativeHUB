@@ -1661,6 +1661,9 @@ QString ImageDocumentSession::addHueSaturationAdjustment(std::optional<QPainterP
 QString ImageDocumentSession::addColorBalanceAdjustment(std::optional<QPainterPath> selection) {
     return addAdjustment(creative_suite::effects::ColorBalanceParameters{}, QStringLiteral("Color Balance"), std::move(selection));
 }
+QString ImageDocumentSession::addInvertAdjustment(std::optional<QPainterPath> selection) {
+    return addAdjustment(creative_suite::effects::InvertParameters{}, QStringLiteral("Invert"), std::move(selection));
+}
 bool ImageDocumentSession::setColorBalance(const QString& id, const creative_suite::effects::ColorBalanceParameters& value) {
     const auto* layer = findLayer(data_, id);
     if (!layer || !layer->adjustment || !std::holds_alternative<creative_suite::effects::ColorBalanceParameters>(*layer->adjustment) ||

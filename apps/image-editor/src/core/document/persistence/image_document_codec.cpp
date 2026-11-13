@@ -1121,6 +1121,8 @@ QJsonObject encodeDocumentJson(const ImageDocumentData& document,
                 QJsonArray ranges;
                 for (const auto& range : balance->ranges) ranges.append(QJsonArray{range[0],range[1],range[2]});
                 encoded.insert("adjustment", QJsonObject{{"type","color_balance"},{"ranges",ranges},{"preserve_lightness",balance->preserve_lightness}});
+            } else if (std::holds_alternative<creative_suite::effects::InvertParameters>(*layer.adjustment)) {
+                encoded.insert("adjustment", QJsonObject{{"type", "invert"}});
             } else {
                 const auto& hue = std::get<creative_suite::effects::HueSaturationParameters>(*layer.adjustment);
                 QJsonArray ranges;
@@ -1439,6 +1441,12 @@ bool decodeDocumentJson(const QJsonObject& root,
                     if (!valid) { assignError(error, QStringLiteral("A Color Balance adjustment is invalid.")); return false; }
                     balance.preserve_lightness = a.value("preserve_lightness").toBool();
                     layer->adjustment = balance;
+                } else if (a.value("type") == "invert") {
+                    if (version < 31 || kind != "adjustment" || a.size() != 1) {
+                        assignError(error, QStringLiteral("An Invert adjustment is invalid."));
+                        return false;
+                    }
+                    layer->adjustment = creative_suite::effects::InvertParameters{};
                 } else if (a.value("type") == "hue_saturation") {
                     const auto integer = [](const QJsonValue& v, int bound) {
                         return v.isDouble() && std::isfinite(v.toDouble()) &&

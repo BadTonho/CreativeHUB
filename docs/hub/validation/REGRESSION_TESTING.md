@@ -522,6 +522,13 @@ Linux Release evidence (2026-10-21): both backup gates passed against Image v22
 using the actual reader, including all three adjustment payloads. This does not
 establish native backup UI or Windows/macOS acceptance for v22.
 
+## Image v31 Invert backup coverage
+
+`hub-backup-manager-test` passed on Windows Release with Image v31 accepted and
+v32 rejected as a future version. `hub-backup-format-test` now includes an Invert
+layer for v31 through the real Image reader but has not been run, because the Image
+Editor could not be built on the development machine. Native acceptance is separate.
+
 ## Image v29 Hue/Saturation color-range backup coverage
 
 The 2026-10-26 Windows Release `hub-backup-format-test` and

@@ -29,9 +29,9 @@ alignment, movement, and width resizing. While editing, its box grows
 horizontally to fit the longest line up to the canvas edge, then wraps and grows
 vertically. Text is kept editable in its own `Text N` layer.
 
-Documents use the provisional `.cimg` version 30 format. The application reads
-versions 1 through 29 and writes version 30, migrating older documents on save;
-version 1 recovery envelopes accept a version 30 document payload. Source images
+Documents use the provisional `.cimg` version 31 format. The application reads
+versions 1 through 30 and writes version 31, migrating older documents on save;
+version 1 recovery envelopes accept a version 31 document payload. Source images
 remain unchanged, and original source dimensions are retained for relinking.
 Area Selection is a separate tool from object Selection. Its Rectangle and
 Ellipse gestures can replace, add to, or subtract from the temporary per-tab
@@ -119,7 +119,7 @@ performance guarantee is approved yet.
 ## Compatibility and Release Order
 
 The current implementation preserves the ability to open existing `.cimg`
-versions 1 through 29 and writes the current version 30 format on save. Automated
+versions 1 through 30 and writes the current version 31 format on save. Automated
 regression tests cover migration, canvas-size persistence, clipped paint/erase,
 bucket-fill, linear-gradient, blur, adjustment channels, and version 29 recovery payload. This implementation does not mark manual text checks or
 Video Editor linked-image acceptance complete.
