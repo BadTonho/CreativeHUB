@@ -9,6 +9,7 @@ These are the default shortcuts currently registered by Motion Studio. Standard 
 | Save composition | Ctrl+S | Command+S |
 | Save composition as | Ctrl+Shift+S | Command+Shift+S |
 | Import media | Ctrl+I | Command+I |
+| Split selected layer at the playhead ([details](features/SPLIT_LAYER.md)) | Ctrl+Shift+D | Command+Shift+D |
 | Undo | Ctrl+Z | Command+Z |
 | Redo | Ctrl+Y or the platform standard | Command+Shift+Z or the platform standard |
 | Play/pause | Space | Space |

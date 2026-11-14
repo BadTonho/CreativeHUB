@@ -194,6 +194,16 @@ MainWindow::MainWindow(QWidget* parent,
     connect(new_ellipse_layer_action_, &QAction::triggered, this, [this] {
         createContentLayer(model::LayerKind::Shape, model::ShapeKind::Ellipse);
     });
+    split_layer_action_ = layer_menu->addAction(MotionUiTranslation::tr("Split Layer at Playhead"));
+    split_layer_action_->setObjectName(QStringLiteral("motion-split-layer-action"));
+    split_layer_action_->setEnabled(false);
+    split_layer_action_->setShortcut(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_D));
+    split_layer_action_->setShortcutContext(Qt::WindowShortcut);
+    addAction(split_layer_action_);
+    shortcut_manager_.registerAction(
+        QStringLiteral("layer.split"), MotionUiTranslation::tr("Split Layer at Playhead"),
+        split_layer_action_);
+    connect(split_layer_action_, &QAction::triggered, this, [this] { splitSelectedLayerAtPlayhead(); });
     layer_menu->addSeparator();
     edit_image_in_image_editor_action_ = layer_menu->addAction(
         MotionUiTranslation::tr("Edit Image in Image Editor"));

@@ -1,4 +1,5 @@
 #include "composition_document.h"
+#include "layer_split.h"
 #include "layer_transform_hierarchy.h"
 #include "track_matte_graph.h"
 
@@ -900,6 +901,58 @@ bool CompositionDocument::resizeLayerDuration(
     }
     layer->duration_frames = duration_frames;
     return true;
+}
+
+SplitLayerResult CompositionDocument::splitLayerAtFrame(
+    LayerId id,
+    std::int64_t composition_frame,
+    LayerId* new_layer_id)
+{
+    const auto found = std::find_if(layers_.begin(), layers_.end(),
+        [id](const CompositionLayer& layer) { return layer.id == id; });
+    if (found == layers_.end()) return SplitLayerResult::InvalidLayer;
+    const CompositionLayer& layer = *found;
+    if (layer.duration_frames <= 1 || composition_frame <= layer.timeline_start_frame ||
+        composition_frame >= layer.timeline_start_frame + layer.duration_frames) {
+        return SplitLayerResult::InvalidFrame;
+    }
+    bool has_effect_mask = false;
+    for (const auto& effect : layer.effects) {
+        std::visit([&](const auto& e) { has_effect_mask = has_effect_mask || e.mask != 0; }, effect);
+    }
+    if (layer.source_mask != 0 || layer.transform_mask != 0 || has_effect_mask) return SplitLayerResult::HasMasks;
+    if (layer.track_matte.has_value() || layer.linked_image.has_value() || layer.presentation.has_value()) {
+        return layer.track_matte.has_value() ? SplitLayerResult::HasTrackMatte : SplitLayerResult::LinkedMedia;
+    }
+    for (const auto& other : layers_) {
+        if (other.track_matte && other.track_matte->source_id == id) return SplitLayerResult::HasTrackMatte;
+        if (other.parent_id == id) return SplitLayerResult::HasChildren;
+    }
+    if (next_layer_id_ == 0) return SplitLayerResult::Failed;
+
+    LayerSplit split;
+    const auto status = splitLayer(layer, composition_frame - layer.timeline_start_frame, next_layer_id_,
+                                   frame_rate_, split);
+    if (status != SplitLayerResult::Split) return status;
+    if (!validLayer(split.first) || !validLayer(split.second)) return SplitLayerResult::Failed;
+    const auto before = layerKeyframeCount(layer);
+    const auto after = layerKeyframeCount(split.first) + layerKeyframeCount(split.second);
+    if (!canInsertKeyframes(after > before ? after - before : 0)) return SplitLayerResult::TooManyKeyframes;
+
+    auto candidate = layers_;
+    const auto index = static_cast<std::size_t>(found - layers_.begin());
+    candidate[index] = std::move(split.first);
+    candidate.insert(candidate.begin() + static_cast<std::ptrdiff_t>(index + 1), std::move(split.second));
+    try {
+        (void)LayerTransformHierarchy(canvas_size_, candidate);
+        (void)TrackMatteGraph(candidate);
+    } catch (...) {
+        return SplitLayerResult::Failed;
+    }
+    layers_ = std::move(candidate);
+    if (new_layer_id != nullptr) *new_layer_id = next_layer_id_;
+    ++next_layer_id_;
+    return SplitLayerResult::Split;
 }
 
 bool CompositionDocument::setVideoSourceRange(

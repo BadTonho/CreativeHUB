@@ -561,6 +561,59 @@ void MainWindow::removeCompositionLayer(model::LayerId id)
     }
 }
 
+void MainWindow::splitSelectedLayerAtPlayhead()
+{
+    finishPendingTransformEdit();
+    if (!document_ || selected_layer_id_ == 0 || timeline_ == nullptr || export_worker_ ||
+        audio_keyframe_worker_) return;
+    const auto id = selected_layer_id_;
+    const auto frame = timeline_->currentFrame();
+    const auto notify = [this](const QString& message) {
+        if (statusBar() != nullptr) statusBar()->showMessage(message, 5000);
+    };
+    try {
+        auto before = captureEditState();
+        model::LayerId added = 0;
+        switch (document_->splitLayerAtFrame(id, frame, &added)) {
+        case model::SplitLayerResult::Split:
+            break;
+        case model::SplitLayerResult::InvalidFrame:
+            notify(MotionUiTranslation::tr("Move the playhead inside the selected layer to split it."));
+            return;
+        case model::SplitLayerResult::HasMasks:
+            notify(MotionUiTranslation::tr("This layer uses masks and cannot be split yet."));
+            return;
+        case model::SplitLayerResult::HasTrackMatte:
+            notify(MotionUiTranslation::tr("This layer uses or provides a track matte and cannot be split yet."));
+            return;
+        case model::SplitLayerResult::HasChildren:
+            notify(MotionUiTranslation::tr("Unparent the layers attached to this layer before splitting it."));
+            return;
+        case model::SplitLayerResult::LinkedMedia:
+            notify(MotionUiTranslation::tr("Layers with linked Image Editor or Video Editor media cannot be split."));
+            return;
+        case model::SplitLayerResult::InexactEasing:
+            notify(MotionUiTranslation::tr("An animation curve cannot be split without changing it, so the layer was not split."));
+            return;
+        case model::SplitLayerResult::TooManyKeyframes:
+            notify(MotionUiTranslation::tr("The composition has too many keyframes to split this layer."));
+            return;
+        default:
+            notify(MotionUiTranslation::tr("The layer could not be split."));
+            return;
+        }
+        (void)recordCompositionEdit(std::move(before));
+        selected_layer_id_ = added;
+        updateDocumentState();
+        refreshTimeline();
+        syncTransformInspector();
+        requestPreview();
+    } catch (const std::exception& error) {
+        reportDocumentError("split_layer", document_path_.value_or(std::filesystem::path{}),
+                            std::runtime_error("Layer " + std::to_string(id) + ": " + error.what()));
+    }
+}
+
 void MainWindow::changeSelectedLayerTrackMatte(qulonglong source,int mode) {
     const auto target=selected_layer_id_;
     finishPendingTransformEdit();
