@@ -1,3 +1,4 @@
+#include <creative_suite/app_locator/app_locator.h>
 #include "app_launcher.h"
 #include "../diagnostics/hub_logger.h"
 
@@ -73,15 +74,7 @@ std::optional<QString> AppLauncher::findExecutable(const QString& executableName
         return std::nullopt;
     }
 
-    QStringList candidates = {executableName};
-    if (executableName.endsWith(QStringLiteral(".exe"), Qt::CaseInsensitive)) {
-        candidates.append(executableName.left(executableName.size() - 4));
-    } else {
-        candidates.append(executableName + QStringLiteral(".exe"));
-    }
-    const QString bundleExecutable = executableName.endsWith(QStringLiteral(".exe"), Qt::CaseInsensitive)
-        ? executableName.left(executableName.size() - 4) : executableName;
-    candidates.append(bundleExecutable + QStringLiteral(".app/Contents/MacOS/") + bundleExecutable);
+    const QStringList candidates = creative_suite::app_locator::executableCandidateNames(executableName);
 
     for (const auto& searchDir : m_searchPaths) {
         QDir dir(searchDir);
@@ -111,7 +104,7 @@ bool AppLauncher::launch(const AppInfo& app, const QStringList& arguments) {
         HubLogger::instance().logError(
             QStringLiteral("AppLauncher"),
             QStringLiteral("launch"),
-            QStringLiteral("Executável não encontrado"),
+            QStringLiteral("Executable not found"),
             QStringLiteral("app: %1, exe: %2").arg(app.id(), app.executableName())
         );
         return false;
@@ -132,7 +125,7 @@ bool AppLauncher::launch(const AppInfo& app, const QStringList& arguments) {
         HubLogger::instance().logError(
             QStringLiteral("AppLauncher"),
             QStringLiteral("launch"),
-            QStringLiteral("Falha ao iniciar processo"),
+            QStringLiteral("Failed to start process"),
             path
         );
         return false;

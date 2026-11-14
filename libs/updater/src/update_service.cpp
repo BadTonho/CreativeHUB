@@ -735,8 +735,11 @@ void UpdateService::downloadUpdate() {
 
     const auto stem = m_config.app_id + QLatin1Char('-') + m_release->version;
     m_partial_path = QDir(m_config.download_directory).filePath(stem + QStringLiteral(".part"));
+    // Keep the catalog asset's own extension (.exe, .AppImage, .deb, ...) instead of assuming Windows.
+    const auto installer_suffix = QFileInfo(m_release->installer_asset).suffix();
     m_downloaded_installer_path = QDir(m_config.download_directory).filePath(
-        stem + QStringLiteral("-setup.exe"));
+        stem + QStringLiteral("-setup") +
+        (installer_suffix.isEmpty() ? QString() : QLatin1Char('.') + installer_suffix));
     if (verifyFile(m_downloaded_installer_path)) {
         releaseDownloadLock();
         setState(UpdateState::ReadyToInstall);

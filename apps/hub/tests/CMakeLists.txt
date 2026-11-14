@@ -29,6 +29,11 @@ if(HUB_LAUNCHER_BUILD_ARGUMENTS)
         --built-apps "$<TARGET_FILE_DIR:creative-suite-hub>" ${HUB_LAUNCHER_BUILD_ARGUMENTS})
 endif()
 
+add_executable(hub-startup-integration-test test_startup_integration.cpp)
+target_link_libraries(hub-startup-integration-test PRIVATE creative-suite-hub-core Qt6::Core)
+target_compile_features(hub-startup-integration-test PRIVATE cxx_std_20)
+add_creative_suite_test(NAME hub-startup-integration-test COMMAND hub-startup-integration-test)
+
 add_executable(hub-logger-test test_hub_logger.cpp)
 target_link_libraries(hub-logger-test PRIVATE creative-suite-hub-core Qt6::Core)
 target_compile_features(hub-logger-test PRIVATE cxx_std_20)
@@ -147,6 +152,7 @@ if(WIN32)
     foreach(TEST_TARGET IN ITEMS
             hub-catalog-test
             hub-launcher-test
+            hub-startup-integration-test
             hub-logger-test
             hub-card-widget-test
             hub-details-modal-test

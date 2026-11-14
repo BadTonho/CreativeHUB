@@ -294,6 +294,7 @@ target_link_libraries(creative-suite-main-editor-core PUBLIC
     creative-suite::composition-exchange
     creative-suite::motion-handoff
     creative-suite::translations
+    creative-suite::app-locator
     Qt6::Widgets
     Qt6::OpenGL
     Qt6::OpenGLWidgets

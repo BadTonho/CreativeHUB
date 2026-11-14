@@ -30,6 +30,8 @@ add_library(creative-suite-hub-core STATIC
     src/diagnostics/hub_logger.cpp
     src/application/app_launcher.h
     src/application/app_launcher.cpp
+    src/application/startup_integration.h
+    src/application/startup_integration.cpp
     src/ui/theme/hub_palette.h
     src/ui/theme/hub_palette.cpp
     src/ui/theme/hub_style.h
@@ -82,6 +84,7 @@ target_link_libraries(creative-suite-hub-core PUBLIC
     Qt6::Widgets
     Qt6::Concurrent
     creative-suite::updater
+    creative-suite::app-locator
     creative-suite::translations
     creative-suite::translation-updater
 )

@@ -26,7 +26,7 @@ public:
             if (!object.contains(name)) continue;
             const auto value = object.value(name);
             if (!value.isString() || value.toString().contains(QChar::Null))
-                return fail(QStringLiteral("O campo de caminho '%1' é inválido.").arg(name));
+                return fail(QStringLiteral("The path field '%1' is invalid.").arg(name));
             const auto path = value.toString();
             if (path.isEmpty() || QDir::isAbsolutePath(path)) continue;
             const auto relative = QDir::cleanPath(path);
@@ -40,7 +40,7 @@ public:
                     QFileInfo(base.absolutePath()).filesystemFilePath());
                 if (relative == ".." || relative.startsWith("../") || ec ||
                     inside.empty() || inside.is_absolute() || *inside.begin() == "..")
-                    return fail(QStringLiteral("Uma referência relativa sai da pasta do documento: %1").arg(path));
+                    return fail(QStringLiteral("A relative reference leaves the document folder: %1").arg(path));
             }
             object.insert(name, absolute);
             changed = true;
@@ -53,7 +53,7 @@ public:
         const auto name = QLatin1String(key);
         if (!owner.contains(name)) return true;
         if (!owner.value(name).isObject())
-            return fail(QStringLiteral("A seção de referências '%1' é inválida.").arg(name));
+            return fail(QStringLiteral("The reference section '%1' is invalid.").arg(name));
         auto object = owner.value(name).toObject();
         if (!function(object)) return false;
         owner.insert(name, object);
@@ -65,11 +65,11 @@ public:
         const auto name = QLatin1String(key);
         if (!owner.contains(name)) return true;
         if (!owner.value(name).isArray())
-            return fail(QStringLiteral("A lista de referências '%1' é inválida.").arg(name));
+            return fail(QStringLiteral("The reference list '%1' is invalid.").arg(name));
         auto values = owner.value(name).toArray();
         for (qsizetype i = 0; i < values.size(); ++i) {
             if (!values[i].isObject())
-                return fail(QStringLiteral("A lista '%1' contém uma referência inválida.").arg(name));
+                return fail(QStringLiteral("The list '%1' contains an invalid reference.").arg(name));
             auto object = values[i].toObject();
             if (!function(object)) return false;
             values[i] = object;
@@ -161,15 +161,16 @@ bool prepareProjectBackup(const QByteArray& original, const QString& originalPat
     const QStringList editorSuffixes{"cimg", "csie", "csp", "csve", "motion", "csme"};
     if (!image && !video && !motion) {
         if (editorSuffixes.contains(QFileInfo(originalPath).suffix().toLower()))
-            return fail(QStringLiteral("O projeto não tem um formato JSON reconhecido (código %1): %2")
+            return fail(QStringLiteral("The project does not have a recognized JSON format (code %1): %2")
                 .arg(static_cast<int>(parseError.error)).arg(parseError.errorString()));
         *prepared = original;
         return true;
     }
     const int version = root.value("version").toInt(-1);
-    const int maximum = image ? 31 : video ? 45 : 18;
+    const int maximum = image ? kMaxBackupImageDocumentVersion
+        : video ? kMaxBackupVideoProjectVersion : kMaxBackupMotionDocumentVersion;
     if (version < 1 || version > maximum)
-        return fail(QStringLiteral("A versão %1 do formato '%2' não é suportada para backup.").arg(version).arg(format));
+        return fail(QStringLiteral("Version %1 of the '%2' format is not supported for backup.").arg(version).arg(format));
     const QFileInfo source(originalPath);
     std::error_code canonicalError;
     const auto canonical = std::filesystem::weakly_canonical(source.filesystemFilePath(), canonicalError);

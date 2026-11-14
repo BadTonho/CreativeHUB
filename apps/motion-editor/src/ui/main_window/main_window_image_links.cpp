@@ -1,6 +1,7 @@
 #include "ui/translation_helpers.h"
 #include "main_window.h"
 #include "main_window_support.h"
+#include <creative_suite/app_locator/app_locator.h>
 
 #include "ui/media_pool/media_pool_widget.h"
 
@@ -45,28 +46,8 @@ using detail::pathFromQString;
 
 QString linkedImageExecutable()
 {
-#if defined(Q_OS_WIN)
-    const QString binary = QStringLiteral("creative-suite-image-editor.exe");
-#else
-    const QString binary = QStringLiteral("creative-suite-image-editor");
-#endif
-    QSettings settings;
-    const auto configured = settings.value(
-        QStringLiteral("applications/image_editor_executable")).toString();
-    if (!configured.isEmpty() && QFileInfo(configured).isFile()) return configured;
-
-    const QDir app_dir(QCoreApplication::applicationDirPath());
-    const QStringList candidates{
-        app_dir.filePath(binary),
-        app_dir.filePath(QStringLiteral("../image-editor/Release/") + binary),
-        app_dir.filePath(QStringLiteral("../image-editor/Debug/") + binary),
-        app_dir.filePath(QStringLiteral("../../image-editor/Release/") + binary),
-        app_dir.filePath(QStringLiteral("../../image-editor/Debug/") + binary)};
-    for (const auto& candidate : candidates) {
-        const QFileInfo info(candidate);
-        if (info.isFile() && info.isExecutable()) return info.absoluteFilePath();
-    }
-    return QStandardPaths::findExecutable(QStringLiteral("creative-suite-image-editor"));
+    return creative_suite::app_locator::findApplicationExecutable(
+        QStringLiteral("image-editor"), QCoreApplication::applicationDirPath());
 }
 
 RgbaFramePtr frameFromImage(QImage image)

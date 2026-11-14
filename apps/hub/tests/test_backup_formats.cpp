@@ -1,5 +1,6 @@
 #include "../src/model/backup_manager.h"
 #include "../src/model/activity_manager.h"
+#include "../src/model/project_backup_paths.h"
 #include "../src/diagnostics/hub_logger.h"
 #include "../../../cmake/test_support/test_check.h"
 
@@ -28,6 +29,19 @@
 #include <filesystem>
 #include <iostream>
 #include <memory>
+
+// The Hub adapter must accept exactly the versions the editors currently write.
+#ifdef HUB_BACKUP_IMAGE_CONTRACT
+static_assert(creative_suite::hub::kMaxBackupImageDocumentVersion ==
+              image_editor::ImageDocumentStore::kCurrentDocumentVersion);
+#endif
+#ifdef HUB_BACKUP_VIDEO_CONTRACT
+static_assert(creative_suite::hub::kMaxBackupVideoProjectVersion == project::current_format_version);
+#endif
+#ifdef HUB_BACKUP_MOTION_CONTRACT
+static_assert(creative_suite::hub::kMaxBackupMotionDocumentVersion ==
+              motion::persistence::MotionDocumentStore::current_format_version);
+#endif
 
 namespace {
 

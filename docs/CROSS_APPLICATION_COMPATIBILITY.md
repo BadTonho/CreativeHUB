@@ -371,8 +371,8 @@ contract used by the project's own applications.
 
 ## Image Editor Layer Mask Publication
 
-The Image Editor writes `.cimg` v10 with optional raster layer masks and reads
-v1–v9. Linked saves still publish an ordinary flattened PNG with straight alpha;
+Raster layer masks were introduced in `.cimg` v10; the Image Editor now writes
+v31 and reads v1–v30. Linked saves still publish an ordinary flattened PNG with straight alpha;
 the Video Editor `.csp` format and handoff arguments are unchanged. Producer UI
 coverage edits and saves a mask through linked mode. When `BUILD_IMAGE_EDITOR`
 is enabled, the Video Editor main-window regression links the Image Editor core
@@ -382,10 +382,12 @@ runtime dependencies or a Video Editor-only build.
 
 ## Video adjustment persistence and Hub backups
 
-The Video Editor owns source-free Adjustment Clips in `.csp` v26. Their ordered
+The Video Editor owns source-free Adjustment Clips, introduced in `.csp` v26. Their ordered
 lower-track composition is an editor-specific timeline operation, reusing shared
 animation, effects and composition primitives. It does not introduce a shared
 Motion/Image document or handoff protocol. The Hub path adapter accepts v26
+and later (up to the maximums named in `project_backup_paths.h`, which
+`hub-backup-format-test` keeps equal to each editor's current writer version)
 and preserves adjustment duration, effects and transform curves without adding
 media references. `hub-backup-format-test` produces with the Video Editor writer
 and restores through its reader, alongside versions 1–25. Application version
