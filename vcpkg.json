@@ -24,7 +24,14 @@
     },
     "qtbase",
     "qtimageformats",
-    "qtmultimedia"
+    "qtmultimedia",
+    {
+      "name": "qttools",
+      "default-features": false,
+      "features": [
+        "linguist"
+      ]
+    }
   ],
   "features": {
     "vulkan": {

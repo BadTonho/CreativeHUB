@@ -41,6 +41,15 @@ and Linux x86/x64 `nvcodec`, `vaapi`, and `qsv` in both manifests. These add
 pinned open-source hardware integration dependencies without the CUDA toolkit
 or vendor driver. FFmpeg's LGPL switches remain unchanged;
 runtime acceptance is separate. See [the pipeline contract](../gpu/GPU_PIPELINE.md).
+All applications and the translation library also require the Qt Linguist
+tools (`lrelease`, `lupdate`, and the CMake `Qt6LinguistTools` package), which
+the manifest requests through `qttools` with only the `linguist` feature and
+default features disabled. In the pinned vcpkg baseline that feature also
+builds Qt Designer's components as a dependency, but not Qt Assistant, QDoc,
+or LLVM. Qt Tools uses the same LGPL/GPL licensing family as the other Qt
+modules and is used only as build-time tooling. Without it, CMake configuration
+fails with `Qt6LinguistTools` not found. The added vcpkg build time has not been
+measured yet; record it here after the first CI run.
 The Image Editor also uses the `qtimageformats`
 add-on so its WebP and TIFF image I/O plugins can be deployed. The Video Editor
 uses the FFmpeg `AVFORMAT`, `AVCODEC`,
