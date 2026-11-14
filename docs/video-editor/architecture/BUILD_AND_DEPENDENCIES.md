@@ -73,10 +73,13 @@ for the vcpkg `libxcrypt` build. If the vcpkg feature selection or port
 dependencies change, revisit these prerequisites against a clean build on
 both platforms.
 
-The CI matrix currently runs Windows and Ubuntu 26.04 only (the version the
-contributors use; Ubuntu 24.04 is not covered yet). The macOS job is
-paused because no macOS environment is available to reproduce its failures
-(the vcpkg `qtbase` build fails on `__yield`). macOS build and test validation
+The CI matrix currently runs Windows and Ubuntu 24.04 only. Ubuntu 26.04
+(the version some contributors use) is not covered: the vcpkg `libsystemd`
+port fails to build there with `-Werror=override-init`, so Linux validation on
+26.04 is **pending**.
+
+The macOS job is paused because no macOS environment is available to reproduce
+its failures (the vcpkg `qtbase` build fails on `__yield`). macOS build and test validation
 is therefore **pending**, and macOS is not claimed as validated for release.
 Re-enable the job by adding `macos-latest` back to the matrix in
 `.github/workflows/ci.yml`; the Homebrew step is kept for that purpose.
