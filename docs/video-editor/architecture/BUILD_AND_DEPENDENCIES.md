@@ -81,8 +81,30 @@ port fails to build there with `-Werror=override-init`, so Linux validation on
 The macOS job is paused because no macOS environment is available to reproduce
 its failures (the vcpkg `qtbase` build fails on `__yield`). macOS build and test validation
 is therefore **pending**, and macOS is not claimed as validated for release.
-Re-enable the job by adding `macos-latest` back to the matrix in
-`.github/workflows/ci.yml`; the Homebrew step is kept for that purpose.
+Re-enable the job by adding `macos-latest` to both platform lists in the matrix
+expression of `.github/workflows/ci.yml`; the Homebrew step is kept for that
+purpose.
+
+### Running the CI workflow
+
+`Build and test` runs only on demand, to limit GitHub Actions usage. Start it
+from the repository's Actions tab (**Run workflow**) or with
+`gh workflow run ci.yml --ref <branch> -f platforms=all|windows|linux`. Choosing
+one platform builds only that matrix entry. A new run for the same ref and
+platform choice cancels one still in progress. Because nothing runs
+automatically, dispatch it before merging and before tagging a release; the
+release process requires a successful run for the tagged commit.
+
+The workflow restores prebuilt vcpkg packages (Qt, FFmpeg, and the other
+dependencies) from the Actions cache, keyed by `vcpkg.json`, the vcpkg baseline,
+and the triplet files, and saves them after configuration even when the project
+build later fails. It builds dependencies with the Release-only triplets in
+`cmake/vcpkg-triplets/` (`x64-windows-release`, `x64-linux-release`), which
+match the default triplets except that Debug libraries are not built. These
+triplets are CI-only: local builds and `release.yml` keep the default triplets,
+so CI validates a Release dependency set equivalent to, but not byte-identical
+with, the release build. The first run after a manifest change rebuilds the
+dependencies and is slow; later runs reuse the cache.
 
 ## Qt version and platform baselines
 

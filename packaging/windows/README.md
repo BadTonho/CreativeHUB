@@ -86,6 +86,8 @@ and `updates.json`. It is never published automatically.
 Before publishing the draft, confirm that the catalog versions and hashes match
 the attached installers and run the Windows validation described above.
 The tagged commit must be on `main` and have a successful `Build and test` run.
+That workflow is manual, so dispatch it for the commit before tagging (Actions
+tab > Build and test > Run workflow, or `gh workflow run ci.yml --ref main`).
 
 ```bash
 git tag v2026.11.0 <commit-on-main>
