@@ -223,6 +223,12 @@ Important decisions must be recorded in the documentation, indicating whether th
   explicitly requests them. Build only the application(s) and targets needed
   for the requested change and its required verification; do not rebuild
   unrelated applications or the whole suite without need.
+- Do not create or push release tags (`v<year>.<minor>.<patch>`) or publish a
+  GitHub Release without explicit maintainer authorization. A tag push triggers
+  `.github/workflows/release.yml`, which builds the Windows installers and
+  Linux packages and attaches them to a draft release; the maintainer reviews
+  and publishes it manually. Keep `release.yml`, `packaging/windows/`, and
+  `packaging/linux/` documentation aligned when the release flow changes.
 - On Windows, the canonical development build root for all four applications
   is `.\build\apps\`, with one subdirectory per
   application ID: `hub`, `video-editor`, `image-editor`, and `motion-editor`.
