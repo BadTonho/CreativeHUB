@@ -34,6 +34,8 @@ add_library(creative-suite-motion-editor-core STATIC
     src/ui/dialogs/motion_png_sequence_export_dialog.h
     src/model/composition_interchange.cpp
     src/model/composition_document.cpp
+    src/model/layer_split.cpp
+    src/model/layer_split.h
     src/model/composition_document.h
     src/model/layer_transform_hierarchy.cpp
     src/model/layer_anchor.cpp

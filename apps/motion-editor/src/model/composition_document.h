@@ -335,6 +335,19 @@ struct CompositionLayer {
 [[nodiscard]] const creative_suite::animation::ScalarKeyframes& layerScaleKeys(const CompositionLayer&,ScaleAxis) noexcept;
 [[nodiscard]] std::array<double,2> evaluateLayerScale(const CompositionLayer&,std::int64_t local_frame) noexcept;
 
+enum class SplitLayerResult {
+    Split,
+    InvalidLayer,
+    InvalidFrame,       // not strictly inside the layer's visible interval
+    HasMasks,           // shared mask objects would need per-half copies
+    HasTrackMatte,      // the layer uses, or is used as, a track matte
+    HasChildren,        // children would lose the parent motion after the split
+    LinkedMedia,        // linked Image Editor or Video Editor media identity is unique per layer
+    InexactEasing,      // an easing could not be subdivided without changing the animation
+    TooManyKeyframes,
+    Failed,
+};
+
 enum class AddMediaLayerResult {
     Added,
     InvalidKind,
@@ -418,6 +431,14 @@ public:
     [[nodiscard]] bool resizeLayerDuration(
         LayerId id,
         std::int64_t duration_frames) noexcept;
+    // Splits a layer at a composition frame strictly inside its interval. The original keeps the
+    // earlier part; the new layer (inserted directly above it, with the same name) holds the later
+    // part with its animation rebased to start at the split. The two halves render identically to
+    // the original. `new_layer_id` receives the later half. Nothing changes unless Split is returned.
+    [[nodiscard]] SplitLayerResult splitLayerAtFrame(
+        LayerId id,
+        std::int64_t composition_frame,
+        LayerId* new_layer_id = nullptr);
     [[nodiscard]] bool setVideoSourceRange(
         LayerId id,
         std::int64_t source_start_frame,

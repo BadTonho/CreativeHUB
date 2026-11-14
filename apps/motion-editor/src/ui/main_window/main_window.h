@@ -154,6 +154,7 @@ private:
     void commitParentPickWhip(model::LayerId child, model::LayerId parent);
     void cancelParentPickWhip();
     void removeCompositionLayer(model::LayerId id);
+    void splitSelectedLayerAtPlayhead();
     void editSelectedLayerAnchor(std::size_t axis);
     void editSelectedScaleAxis(std::size_t axis);
     void toggleSelectedScaleAxisKeyframe(std::size_t axis);
@@ -243,6 +244,7 @@ private:
     QAction* export_video_action_ = nullptr;
     QAction* export_png_sequence_action_ = nullptr;
     QAction* generate_audio_keyframes_action_ = nullptr;
+    QAction* split_layer_action_ = nullptr;
     QAction* import_media_action_ = nullptr;
     QAction* new_text_layer_action_ = nullptr;
     QAction* new_null_layer_action_ = nullptr;

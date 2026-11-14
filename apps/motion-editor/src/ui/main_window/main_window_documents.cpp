@@ -630,6 +630,10 @@ void MainWindow::updateDocumentState()
     }
     if (edit_image_in_image_editor_action_ != nullptr)
         edit_image_in_image_editor_action_->setEnabled(selected_image_layer);
+    if (split_layer_action_ != nullptr) {
+        split_layer_action_->setEnabled(
+            selected_layer_exists && !audio_keyframe_worker_ && !export_worker_);
+    }
     if (generate_audio_keyframes_action_ != nullptr) {
         generate_audio_keyframes_action_->setEnabled(
             selected_layer_exists && !audio_keyframe_worker_ && !export_worker_);

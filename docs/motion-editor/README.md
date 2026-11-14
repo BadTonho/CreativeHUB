@@ -12,6 +12,7 @@ This directory groups approved scope and open work with the native format, featu
 | Choosing parents by dragging in the timeline | [Parent & Link pick-whip](features/PARENT_PICK_WHIP.md) |
 | Independent animated scales and proportional linking | [Scale X/Y](features/SCALE_AXES.md) |
 | Animated pixel pivots and compensated repositioning | [Anchor Point](features/ANCHOR_POINT.md) |
+| Cutting a layer in two at the playhead with exact animation | [Split Layer at Playhead](features/SPLIT_LAYER.md) |
 | Dragging pivots without moving content | [Pan Behind](features/PAN_BEHIND.md) |
 | Moving layers directly in the Viewer | [Position drag](features/POSITION_DRAG.md) |
 | Rotating layers directly in the Viewer | [Rotation drag](features/ROTATION_DRAG.md) |
