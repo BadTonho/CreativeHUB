@@ -35,6 +35,12 @@ Their clean target builds are part of the local regression gate; a previously
 built executable cannot verify these dependencies. Shared decoding itself retains
 its Qt-independent API; tagged YUV test fixtures use the existing FFmpeg libraries.
 
+The root `vcpkg.json` `version-string` is informational only; application
+versions are defined once in `packaging/app-versions.json`, and the manifest
+stays at the 0.1.0 baseline until a maintainer-authorized release preparation.
+The `creative-suite::app-locator` library (Qt Core only) holds the shared lookup
+of sibling suite executables used by the Hub and both editors.
+
 The root `vcpkg.json` tracks Qt 6 through `qtbase` and `qtmultimedia`, and
 FFmpeg through `ffmpeg`, with conditional Windows x64 `nvcodec`, `amf`, and `qsv`
 and Linux x86/x64 `nvcodec`, `vaapi`, and `qsv` in both manifests. These add

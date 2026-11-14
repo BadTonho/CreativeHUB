@@ -145,6 +145,7 @@ target_include_directories(creative-suite-motion-editor-core PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/src
 )
 target_link_libraries(creative-suite-motion-editor-core PUBLIC
+    creative-suite::app-locator
     creative-suite::composition-exchange
     creative-suite::motion-handoff
     creative-suite::translations

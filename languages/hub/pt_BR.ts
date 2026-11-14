@@ -348,6 +348,19 @@
     </message>
 </context>
 <context>
+    <name>BackupManager</name>
+    <message>
+        <location filename="../../apps/hub/src/model/backup_manager.cpp" line="338"/>
+        <source>Backup Created</source>
+        <translation>Backup Criado</translation>
+    </message>
+    <message>
+        <location filename="../../apps/hub/src/model/backup_manager.cpp" line="339"/>
+        <source>Backup created for '%1' (%2)</source>
+        <translation>Cópia de segurança criada para '%1' (%2)</translation>
+    </message>
+</context>
+<context>
     <name>BackupsPage</name>
     <message>
         <location filename="../../apps/hub/src/ui/pages/backups_page.cpp" line="46"/>
@@ -776,8 +789,8 @@ Comece criando um novo projeto ou abrindo um arquivo existente da suíte.</trans
     </message>
     <message>
         <location filename="../../apps/hub/src/ui/pages/settings_page.cpp" line="169"/>
-        <source>Start Creative Suite Hub with Windows</source>
-        <translation>Iniciar o Creative Suite Hub junto com o Windows</translation>
+        <source>Start Creative Suite Hub at login</source>
+        <translation>Iniciar o Creative Suite Hub ao entrar no sistema</translation>
     </message>
     <message>
         <location filename="../../apps/hub/src/ui/pages/settings_page.cpp" line="178"/>

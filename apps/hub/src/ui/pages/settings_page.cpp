@@ -1,5 +1,6 @@
 #include "settings_page.h"
 #include <QCoreApplication>
+#include "../../application/startup_integration.h"
 #include "../../diagnostics/hub_logger.h"
 #include "../theme/hub_palette.h"
 #include "../theme/hub_style.h"
@@ -171,7 +172,7 @@ void SettingsPage::setupUi() {
 
     const bool notify_updates = m_enableStartupIntegration
         ? QSettings().value(QStringLiteral("hub/notify_updates"), true).toBool() : true;
-    m_autostartCheck = new QCheckBox(QCoreApplication::translate("SettingsPage", "Start Creative Suite Hub with Windows"), generalCard);
+    m_autostartCheck = new QCheckBox(QCoreApplication::translate("SettingsPage", "Start Creative Suite Hub at login"), generalCard);
     m_autostartCheck->setObjectName(QStringLiteral("hubAutostartCheckBox"));
     m_autostartCheck->setMinimumHeight(24);
     m_autostartCheck->setStyleSheet(QStringLiteral(
@@ -179,27 +180,15 @@ void SettingsPage::setupUi() {
         "QCheckBox::indicator { width: 16px; height: 16px; border-radius: 4px; border: 1px solid #383838; background: #1a1a1a; }"
         "QCheckBox::indicator:checked { background: #ffffff; border-color: #ffffff; }"
     ));
-    const QString run_key = QStringLiteral("HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Run");
-    const QString startup_name = QStringLiteral("CreativeSuiteHub");
-#ifdef Q_OS_WIN
-    if (m_enableStartupIntegration) {
-        QSettings startup(run_key, QSettings::NativeFormat);
-        m_autostartCheck->setChecked(startup.contains(startup_name));
-        connect(m_autostartCheck, &QCheckBox::toggled, this,
-                [this, run_key, startup_name](bool enabled) {
-            QSettings startup_settings(run_key, QSettings::NativeFormat);
-            if (enabled) {
-                startup_settings.setValue(startup_name,
-                    QLatin1Char('"') + QDir::toNativeSeparators(QCoreApplication::applicationFilePath()) + QLatin1Char('"'));
-            } else {
-                startup_settings.remove(startup_name);
-            }
-            startup_settings.sync();
-            if (startup_settings.status() != QSettings::NoError) {
+    if (m_enableStartupIntegration && startup_integration::isSupported()) {
+        m_autostartCheck->setChecked(startup_integration::isEnabled());
+        connect(m_autostartCheck, &QCheckBox::toggled, this, [this](bool enabled) {
+            QString cause;
+            if (!startup_integration::setEnabled(enabled, QCoreApplication::applicationFilePath(), &cause)) {
                 HubLogger::instance().logError(QStringLiteral("SettingsPage"),
                     QStringLiteral("set_startup_preference"),
                     QStringLiteral("Could not update the current-user startup entry."),
-                    QCoreApplication::applicationFilePath());
+                    cause);
                 QSignalBlocker blocker(m_autostartCheck);
                 m_autostartCheck->setChecked(!enabled);
             }
@@ -208,11 +197,6 @@ void SettingsPage::setupUi() {
         m_autostartCheck->setChecked(false);
         m_autostartCheck->setEnabled(false);
     }
-#else
-    m_autostartCheck->setChecked(false);
-    m_autostartCheck->setEnabled(false);
-    m_autostartCheck->setVisible(false);
-#endif
     generalLayout->addWidget(m_autostartCheck);
 
     m_notificationsCheck = new QCheckBox(QCoreApplication::translate("SettingsPage", "Notify me automatically about available updates"), generalCard);

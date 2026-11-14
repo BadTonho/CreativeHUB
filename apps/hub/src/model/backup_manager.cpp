@@ -3,6 +3,7 @@
 #include "project_backup_paths.h"
 #include "../diagnostics/hub_logger.h"
 
+#include <QCoreApplication>
 #include <QFile>
 #include <QFileInfo>
 #include <QDir>
@@ -89,24 +90,24 @@ std::optional<BackupRecord> readBackupRecord(const QFileInfo& directory) {
         return std::nullopt;
     };
     if (!metadataInfo.isFile() || metadataInfo.isSymLink() || metadataInfo.size() > 256 * 1024)
-        return fail(QStringLiteral("Metadados de backup inválidos: arquivo irregular ou tamanho excessivo."));
+        return fail(QStringLiteral("Invalid backup metadata: irregular file or excessive size."));
     QFile metadata(metadataPath);
     if (!metadata.open(QIODevice::ReadOnly))
-        return fail(QStringLiteral("Não foi possível ler os metadados (código %1): %2")
+        return fail(QStringLiteral("Could not read the metadata (code %1): %2")
             .arg(static_cast<int>(metadata.error())).arg(metadata.errorString()));
     const QByteArray bytes = metadata.readAll();
     if (metadata.error() != QFileDevice::NoError)
-        return fail(QStringLiteral("Falha na leitura dos metadados (código %1): %2")
+        return fail(QStringLiteral("Failed while reading the metadata (code %1): %2")
             .arg(static_cast<int>(metadata.error())).arg(metadata.errorString()));
     QJsonParseError parseError;
     const auto document = QJsonDocument::fromJson(bytes, &parseError);
     if (parseError.error != QJsonParseError::NoError || !document.isObject())
-        return fail(QStringLiteral("Metadados de backup não são um objeto JSON válido (código %1): %2")
+        return fail(QStringLiteral("The backup metadata is not a valid JSON object (code %1): %2")
             .arg(static_cast<int>(parseError.error)).arg(parseError.errorString()));
     const auto object = document.object();
     if (object.value(QStringLiteral("format")).toString() != QStringLiteral("creative-suite.hub-backup")
         || object.value(QStringLiteral("version")).toDouble(-1) != 1)
-        return fail(QStringLiteral("Formato ou versão dos metadados de backup não suportados."));
+        return fail(QStringLiteral("Unsupported backup metadata format or version."));
     BackupRecord record;
     record.originalFilePath = object.value(QStringLiteral("original_path")).toString();
     record.projectName = object.value(QStringLiteral("project_name")).toString();
@@ -118,10 +119,10 @@ std::optional<BackupRecord> readBackupRecord(const QFileInfo& directory) {
         || fileName.compare(QStringLiteral("record.json"), Qt::CaseInsensitive) == 0
         || fileName.contains('/') || fileName.contains('\\') || fileName == QStringLiteral(".")
         || fileName == QStringLiteral("..") || QDir::isAbsolutePath(fileName))
-        return fail(QStringLiteral("Origem, nome, data ou referência do snapshot são inválidos."));
+        return fail(QStringLiteral("The snapshot source, name, date, or reference is invalid."));
     const QFileInfo snapshot(QDir(directory.absoluteFilePath()).filePath(fileName));
     if (!snapshot.isFile() || snapshot.isSymLink())
-        return fail(QStringLiteral("O snapshot registrado está ausente ou não é um arquivo regular: %1")
+        return fail(QStringLiteral("The recorded snapshot is missing or is not a regular file: %1")
             .arg(snapshot.absoluteFilePath()));
     record.backupFilePath = snapshot.absoluteFilePath();
     record.fileSizeBytes = snapshot.size();
@@ -228,7 +229,7 @@ bool BackupManager::createBackup(const QString& projectFilePath, QString* outBac
     if (outBackupPath) outBackupPath->clear();
     if (outError) outError->clear();
     if (projectFilePath.isEmpty() || !QFile::exists(projectFilePath)) {
-        const QString err = QStringLiteral("O arquivo do projeto não existe ou o caminho é inválido: %1").arg(projectFilePath);
+        const QString err = QStringLiteral("The project file does not exist or the path is invalid: %1").arg(projectFilePath);
         if (outError) *outError = err;
         HubLogger::instance().logError(
             QStringLiteral("BackupManager"),
@@ -247,13 +248,13 @@ bool BackupManager::createBackup(const QString& projectFilePath, QString* outBac
     };
     QFile source(projectFilePath);
     if (!QFileInfo(projectFilePath).isFile())
-        return fail(QStringLiteral("O caminho do projeto não é um arquivo regular."), projectFilePath);
+        return fail(QStringLiteral("The project path is not a regular file."), projectFilePath);
     if (!source.open(QIODevice::ReadOnly))
-        return fail(QStringLiteral("Não foi possível ler o projeto (código %1): %2")
+        return fail(QStringLiteral("Could not read the project (code %1): %2")
             .arg(static_cast<int>(source.error())).arg(source.errorString()), projectFilePath);
     const auto original = source.readAll();
     if (source.error() != QFileDevice::NoError)
-        return fail(QStringLiteral("Falha na leitura do projeto (código %1): %2")
+        return fail(QStringLiteral("Failed while reading the project (code %1): %2")
             .arg(static_cast<int>(source.error())).arg(source.errorString()), projectFilePath);
     source.close();
     QByteArray prepared;
@@ -262,7 +263,7 @@ bool BackupManager::createBackup(const QString& projectFilePath, QString* outBac
         return fail(referenceError, projectFilePath);
 
     if (!QDir().mkpath(m_backupDirectory)) {
-        const QString err = QStringLiteral("Não foi possível criar o diretório de backups: %1").arg(m_backupDirectory);
+        const QString err = QStringLiteral("Could not create the backup directory: %1").arg(m_backupDirectory);
         if (outError) *outError = err;
         HubLogger::instance().logError(
             QStringLiteral("BackupManager"),
@@ -287,13 +288,13 @@ bool BackupManager::createBackup(const QString& projectFilePath, QString* outBac
     // Committing record.json is the publication point; readers ignore it before then.
     QTemporaryDir pending(QDir(m_backupDirectory).filePath(QStringLiteral("backup-XXXXXX")));
     if (!pending.isValid())
-        return fail(QStringLiteral("Não foi possível reservar a pasta do backup: %1")
+        return fail(QStringLiteral("Could not reserve the backup folder: %1")
             .arg(pending.errorString()), m_backupDirectory);
     const QString targetPath = QDir(pending.path()).filePath(targetFileName);
     QSaveFile snapshot(targetPath);
     if (!snapshot.open(QIODevice::WriteOnly)
         || snapshot.write(prepared) != prepared.size() || !snapshot.commit())
-        return fail(QStringLiteral("Falha ao gravar o backup (código %1): %2")
+        return fail(QStringLiteral("Failed to write the backup (code %1): %2")
             .arg(static_cast<int>(snapshot.error())).arg(snapshot.errorString()), targetPath);
     const QString source_gallery = projectFilePath + QStringLiteral(".gallery");
     const QString target_gallery = targetPath + QStringLiteral(".gallery");
@@ -319,7 +320,7 @@ bool BackupManager::createBackup(const QString& projectFilePath, QString* outBac
     QSaveFile metadataFile(metadataPath);
     if (!metadataFile.open(QIODevice::WriteOnly)
         || metadataFile.write(metadataBytes) != metadataBytes.size() || !metadataFile.commit())
-        return fail(QStringLiteral("Falha ao publicar os metadados (código %1): %2")
+        return fail(QStringLiteral("Failed to publish the metadata (code %1): %2")
             .arg(static_cast<int>(metadataFile.error())).arg(metadataFile.errorString()), metadataPath);
     pending.setAutoRemove(false);
 
@@ -330,13 +331,13 @@ bool BackupManager::createBackup(const QString& projectFilePath, QString* outBac
     HubLogger::instance().logInfo(
         QStringLiteral("BackupManager"),
         QStringLiteral("createBackup"),
-        QStringLiteral("Backup de projeto criado com sucesso"),
+        QStringLiteral("Project backup created successfully"),
         targetPath
     );
 
     ActivityManager::instance().addActivity(
-        QStringLiteral("Backup Criado"),
-        QStringLiteral("Cópia de segurança criada para '%1' (%2)").arg(baseName, targetFileName),
+        QCoreApplication::translate("BackupManager", "Backup Created"),
+        QCoreApplication::translate("BackupManager", "Backup created for '%1' (%2)").arg(baseName, targetFileName),
         QStringLiteral("backup")
     );
 

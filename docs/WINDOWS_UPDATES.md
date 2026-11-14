@@ -55,6 +55,26 @@ same release catalog as the installer. The catalog is not digitally signed, so
 the hash detects transfer or artifact mismatch but does not authenticate the
 publisher if the release metadata and installer are both compromised.
 
+**Known limitation and hardening direction (provisional).** The updater launches
+the downloaded installer after the hash matches, so a compromised release
+account could ship a malicious installer with a matching catalog. Closing this
+needs a publisher identity that does not live in the release itself, and the
+choice needs a maintainer decision because it involves key management:
+
+- *Authenticode signing of the installers* (verified with `WinVerifyTrust`
+  before launch) uses the Windows trust store but requires a code-signing
+  certificate. Verifying only "signed installers are valid" gives no protection
+  because an attacker can strip the signature, so enforcement must require a
+  signature from the expected publisher.
+- *A detached catalog signature* with a public key embedded in the shipped
+  updater. Installed clients ignore unknown catalog keys, so the signature can
+  be added without a schema change, but already-installed builds cannot verify
+  it; enforcement can only begin after a release that carries the key.
+
+Neither is implemented. Until one is adopted, treat release-account security as
+part of the update trust boundary. The downloaded installer keeps the
+extension of the catalog's `installer_asset` (`.exe` for Windows).
+
 Updater downloads, pending-install records, and rollback snapshots live in the
 per-user persistent data directory. On first startup after this storage change,
 the updater copies the former cache-based tree before resuming pending work. If

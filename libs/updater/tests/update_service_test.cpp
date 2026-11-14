@@ -90,10 +90,11 @@ struct NetworkHarness final {
     }
 };
 
-QByteArray makeCatalog(const QByteArray& installer, const QByteArray& digest) {
+QByteArray makeCatalog(const QByteArray& installer, const QByteArray& digest,
+                       const QString& asset = QStringLiteral("video-editor-setup.exe")) {
     QJsonObject entry;
     entry.insert(QStringLiteral("version"), QStringLiteral("0.1.1"));
-    entry.insert(QStringLiteral("installer_asset"), QStringLiteral("video-editor-setup.exe"));
+    entry.insert(QStringLiteral("installer_asset"), asset);
     entry.insert(QStringLiteral("size_bytes"), installer.size());
     entry.insert(QStringLiteral("sha256"), QString::fromLatin1(digest));
     entry.insert(QStringLiteral("release_notes"), QStringLiteral("Update test release"));
@@ -140,6 +141,7 @@ class UpdateServiceTest final : public QObject {
 
 private slots:
     void resumesAfterNetworkFailure();
+    void downloadedInstallerKeepsCatalogAssetExtension();
     void cancellationPreservesPartialDownload();
     void incompleteInstallerIsNeverPublished();
     void invalidHashNeverProducesInstaller();
@@ -185,6 +187,23 @@ void UpdateServiceTest::resumesAfterNetworkFailure() {
     QFile verified(service.downloadedInstallerPath());
     QVERIFY(verified.open(QIODevice::ReadOnly));
     QCOMPARE(verified.readAll(), installer);
+}
+
+void UpdateServiceTest::downloadedInstallerKeepsCatalogAssetExtension() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    const QByteArray installer("portable-package-bytes");
+    const auto digest = QCryptographicHash::hash(installer, QCryptographicHash::Sha256).toHex();
+    NetworkHarness network;
+    UpdateService service(makeConfig(directory.path()), network.handler());
+    QVERIFY(prepareDownload(service, network,
+        makeCatalog(installer, digest, QStringLiteral("video-editor-x86_64.AppImage"))));
+    network.replies[1]->beginResponse(200);
+    network.replies[1]->pushData(installer);
+    network.replies[1]->finishResponse();
+    QVERIFY(service.state() == UpdateState::ReadyToInstall);
+    QVERIFY(service.downloadedInstallerPath().endsWith(QStringLiteral("-setup.AppImage")));
+    QVERIFY(!service.downloadedInstallerPath().endsWith(QStringLiteral(".exe")));
 }
 
 void UpdateServiceTest::cancellationPreservesPartialDownload() {

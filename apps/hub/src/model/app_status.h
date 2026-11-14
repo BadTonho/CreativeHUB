@@ -15,17 +15,17 @@ enum class AppStatus {
 inline QString appStatusToString(AppStatus status) {
     switch (status) {
         case AppStatus::NotInstalled:
-            return QStringLiteral("Não instalado");
+            return QStringLiteral("Not installed");
         case AppStatus::Installed:
-            return QStringLiteral("Instalado");
+            return QStringLiteral("Installed");
         case AppStatus::UpdateAvailable:
-            return QStringLiteral("Atualização disponível");
+            return QStringLiteral("Update available");
         case AppStatus::Downloading:
-            return QStringLiteral("Baixando...");
+            return QStringLiteral("Downloading...");
         case AppStatus::Installing:
-            return QStringLiteral("Instalando...");
+            return QStringLiteral("Installing...");
     }
-    return QStringLiteral("Desconhecido");
+    return QStringLiteral("Unknown");
 }
 
 } // namespace creative_suite::hub

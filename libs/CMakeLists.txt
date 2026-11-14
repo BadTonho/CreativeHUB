@@ -163,6 +163,7 @@ endif()
 
 if(BUILD_VIDEO_EDITOR OR BUILD_IMAGE_EDITOR OR BUILD_MOTION_EDITOR OR BUILD_CREATIVE_HUB)
     add_subdirectory(updater)
+    add_subdirectory(app-locator)
 endif()
 
 add_library(creative-suite-system-monitor STATIC
