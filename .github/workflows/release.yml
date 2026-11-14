@@ -63,7 +63,7 @@ jobs:
           count=$(gh run list --workflow ci.yml --commit "$GITHUB_SHA" \
             --status success --json databaseId --jq 'length')
           if [[ "$count" -lt 1 ]]; then
-            echo "::error::No successful 'Build and test' run exists for $GITHUB_SHA. Wait for CI to pass, then re-run this workflow."
+            echo "::error::No successful 'Build and test' run exists for $GITHUB_SHA. The CI workflow is manual: run 'Build and test' for this commit, wait for it to pass, then re-run this workflow."
             exit 1
           fi
 

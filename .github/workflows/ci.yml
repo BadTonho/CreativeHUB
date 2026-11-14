@@ -1,12 +1,25 @@
 name: Build and test
 
+# Manual only, to keep Actions minutes under control: run it from the Actions tab
+# ("Run workflow") on the branch or commit to validate, or with
+# `gh workflow run ci.yml --ref <branch> -f platforms=all|windows|linux`.
+# A release tag still requires a successful run of this workflow for its commit.
 on:
-  push:
-  pull_request:
   workflow_dispatch:
+    inputs:
+      platforms:
+        description: Platforms to build and test
+        type: choice
+        options: [all, windows, linux]
+        default: all
 
 permissions:
   contents: read
+
+# A newer manual run of the same ref and platform choice replaces one that is still going.
+concurrency:
+  group: ci-${{ github.ref }}-${{ inputs.platforms }}
+  cancel-in-progress: true
 
 jobs:
   build-and-test:
@@ -19,11 +32,15 @@ jobs:
         # macOS is paused: no environment is available to reproduce or fix its
         # failures (the vcpkg qtbase build currently fails on `__yield`).
         # macOS remains a required product target; its validation is pending.
-        # To re-enable, add `macos-latest` back to this list.
-        os: [windows-latest, ubuntu-24.04]
+        # To re-enable, add `macos-latest` to both lists in the expression below.
+        os: ${{ fromJSON(inputs.platforms == 'windows' && '["windows-latest"]' || inputs.platforms == 'linux' && '["ubuntu-24.04"]' || '["windows-latest","ubuntu-24.04"]') }}
     env:
       VCPKG_ROOT: ${{ github.workspace }}/vcpkg
       VCPKG_BASELINE: 3af1d1e60af2b2abf55760538cd607829029b07a
+      # Prebuilt dependency packages (Qt, FFmpeg, ...) are restored from the Actions cache.
+      VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}/vcpkg-binary-cache
+      # Release-only dependency triplets (see cmake/vcpkg-triplets) halve dependency build time.
+      VCPKG_TRIPLET: ${{ startsWith(matrix.os, 'windows') && 'x64-windows-release' || 'x64-linux-release' }}
 
     steps:
       - uses: actions/checkout@v4
@@ -33,6 +50,15 @@ jobs:
         run: |
           git clone https://github.com/microsoft/vcpkg.git vcpkg
           git -C vcpkg checkout "$VCPKG_BASELINE"
+
+      - name: Restore the vcpkg binary cache
+        id: vcpkg-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: vcpkg-binary-cache
+          key: vcpkg-${{ runner.os }}-${{ env.VCPKG_TRIPLET }}-${{ env.VCPKG_BASELINE }}-${{ hashFiles('vcpkg.json', 'cmake/vcpkg-triplets/*.cmake') }}
+          restore-keys: |
+            vcpkg-${{ runner.os }}-${{ env.VCPKG_TRIPLET }}-${{ env.VCPKG_BASELINE }}-
 
       - name: Bootstrap vcpkg on Windows
         if: runner.os == 'Windows'
@@ -65,6 +91,8 @@ jobs:
         run: >-
           cmake -S . -B build
           "-DCMAKE_TOOLCHAIN_FILE=$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake"
+          "-DVCPKG_OVERLAY_TRIPLETS=$env:GITHUB_WORKSPACE/cmake/vcpkg-triplets"
+          "-DVCPKG_TARGET_TRIPLET=$env:VCPKG_TRIPLET"
           -DVCPKG_MANIFEST_FEATURES=vulkan
 
       - name: Configure on macOS and Linux
@@ -73,7 +101,17 @@ jobs:
         run: >-
           cmake -S . -B build
           -DCMAKE_TOOLCHAIN_FILE="$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake"
+          -DVCPKG_OVERLAY_TRIPLETS="$GITHUB_WORKSPACE/cmake/vcpkg-triplets"
+          -DVCPKG_TARGET_TRIPLET="$VCPKG_TRIPLET"
           -DVCPKG_MANIFEST_FEATURES=vulkan
+
+      # Saved even when the project build below fails, so a later run reuses the dependencies.
+      - name: Save the vcpkg binary cache
+        if: always() && steps.vcpkg-cache.outputs.cache-hit != 'true' && hashFiles('vcpkg-binary-cache/**') != ''
+        uses: actions/cache/save@v4
+        with:
+          path: vcpkg-binary-cache
+          key: vcpkg-${{ runner.os }}-${{ env.VCPKG_TRIPLET }}-${{ env.VCPKG_BASELINE }}-${{ hashFiles('vcpkg.json', 'cmake/vcpkg-triplets/*.cmake') }}
 
       - name: Build
         run: cmake --build build --config Release --parallel 4
