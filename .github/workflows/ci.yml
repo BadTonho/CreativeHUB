@@ -145,7 +145,7 @@ jobs:
         run: >-
           xvfb-run -a bash -c
           'openbox & sleep 1;
-          BIN=$(find build -type f -name "*drop_shadow*" -executable | head -n1);
+          BIN=$(find build -type f -name "*drop-shadow*" -executable | head -n1);
           if [ -n "$BIN" ]; then
             QT_QPA_PLATFORM=xcb gdb -batch -ex run -ex "bt 30" --args "$BIN";
           fi'
