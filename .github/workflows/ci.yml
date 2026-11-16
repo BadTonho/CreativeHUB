@@ -126,6 +126,8 @@ jobs:
 
       - name: Test on Linux
         if: runner.os == 'Linux'
+        env:
+          CREATIVE_SUITE_QT_QPA_PLATFORM_OVERRIDE: xcb
         run: xvfb-run -a ctest --test-dir build -C Release -LE native-gpu --output-on-failure
 
       - name: Test on macOS
