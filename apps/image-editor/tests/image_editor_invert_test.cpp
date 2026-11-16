@@ -150,7 +150,8 @@ private slots:
         ImageDocumentSession s;
         QVERIFY(s.createCanvas({60, 40}, QColor(40, 80, 150, 170)));
         QVERIFY(s.applyPaintStroke({{10, 20}, {50, 20}}, Qt::red, 12));
-        QVERIFY(!s.addInvertAdjustment().isEmpty());
+        const QString invert_id = s.addInvertAdjustment();
+        QVERIFY(!invert_id.isEmpty());
         ImageInteractiveRasterCache cache;
         QCOMPARE(ImageInteractiveRasterCache::composite(cache.prepare(s.exportSnapshot(), "invert")),
                  s.renderedImage().convertToFormat(QImage::Format_ARGB32_Premultiplied));
@@ -161,7 +162,7 @@ private slots:
         QCOMPARE(QImage(dir.filePath("full.png")).convertToFormat(QImage::Format_ARGB32_Premultiplied),
                  s.renderedImage().convertToFormat(QImage::Format_ARGB32_Premultiplied));
         // The adjustment cannot be exported in isolation.
-        QVERIFY(s.selectLayer(s.selectedLayerId()));
+        QCOMPARE(s.selectedLayerId(), invert_id);
         options.scope = ImageExportScope::SelectedLayer;
         QVERIFY(!s.exportImage(dir.filePath("isolated.png"), options));
     }
