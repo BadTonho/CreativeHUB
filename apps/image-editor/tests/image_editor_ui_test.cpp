@@ -4992,7 +4992,7 @@ int main(int argc, char* argv[]) {
 
     QSignalSpy live_erase_preview_spy(canvas, &image_editor::ImageCanvas::erasePreviewRequested);
     QSignalSpy erase_committed_spy(canvas, &image_editor::ImageCanvas::eraseStrokeSelected);
-    const QColor painted_center_pixel = canvas->grab().toImage().pixelColor(paint_center);
+    const QColor painted_center_pixel = grabBrushCanvas().pixelColor(paint_center);
     eraser_button->click();
     if (!eraser_button->isChecked() || paint_button->isChecked() || !canvas->eraserMode() ||
         !paint_options_action->isVisible() || !eraser_preview->isVisible() ||
@@ -5011,7 +5011,7 @@ int main(int argc, char* argv[]) {
     QTest::mouseMove(canvas, paint_center + QPoint(20, 0));
     processImageEditorEvents();
     const bool default_eraser_preview_was_live = live_erase_preview_spy.size() > 0;
-    const QColor live_erased_center_pixel = canvas->grab().toImage().pixelColor(paint_center);
+    const QColor live_erased_center_pixel = grabBrushCanvas().pixelColor(paint_center);
     QTest::mouseRelease(canvas, Qt::LeftButton, Qt::NoModifier,
                         paint_center + QPoint(20, 0));
     const bool live_erase_committed_once = erase_committed_spy.size() == 1 &&
@@ -5029,7 +5029,7 @@ int main(int argc, char* argv[]) {
     const bool overlay_preview_kept_layer_pixels_until_release =
         live_erase_preview_spy.size() == live_preview_count_before_overlay &&
         erase_committed_spy.size() == 1;
-    const QColor overlay_center_pixel = canvas->grab().toImage().pixelColor(paint_center);
+    const QColor overlay_center_pixel = grabBrushCanvas().pixelColor(paint_center);
     QTest::mouseRelease(canvas, Qt::LeftButton, Qt::NoModifier,
                         paint_center + QPoint(20, 0));
     const bool overlay_erase_committed_once = erase_committed_spy.size() == 2;
