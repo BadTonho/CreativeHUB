@@ -22,11 +22,13 @@
 #include <QWindow>
 #include <QFile>
 #include <QLibrary>
-#include <QVulkanInstance>
 #include <QCoreApplication>
 #if !QT_CONFIG(vulkan)
 #undef CS_HAS_VULKAN
 #undef CS_VULKAN_NATIVE_EXPORT
+#endif
+#ifdef CS_HAS_VULKAN
+#include <QVulkanInstance>
 #endif
 #include <algorithm>
 #include <array>
