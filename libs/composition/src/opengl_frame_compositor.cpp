@@ -1256,12 +1256,12 @@ vec3 exposeSrgb(vec3 rgb) {
     return clamp(mix(1.055 * pow(corrected, vec3(1.0 / 2.4)) - .055, corrected * 12.92, lessThanEqual(corrected, vec3(.0031308))), 0.0, 1.0);
 }
 float levelsValue(float value, int channel_set) {
-    vec3 input = levels_input[channel_set];
-    vec2 output = levels_output[channel_set];
-    float normalized = clamp((value * 255.0 - input.x) /
-        (input.y - input.x), 0.0, 1.0);
-    return (output.x + (output.y - output.x) *
-        pow(normalized, 1.0 / input.z)) / 255.0;
+    vec3 in_range = levels_input[channel_set];
+    vec2 out_range = levels_output[channel_set];
+    float normalized = clamp((value * 255.0 - in_range.x) /
+        (in_range.y - in_range.x), 0.0, 1.0);
+    return (out_range.x + (out_range.y - out_range.x) *
+        pow(normalized, 1.0 / in_range.z)) / 255.0;
 }
 vec3 adjustLevels(vec3 rgb) {
     vec3 master = vec3(levelsValue(rgb.r, 0), levelsValue(rgb.g, 0), levelsValue(rgb.b, 0));
