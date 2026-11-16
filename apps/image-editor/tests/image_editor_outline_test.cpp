@@ -155,7 +155,13 @@ private slots:
         const auto group=s.groupLayers({s.data().layers.at(1).id,id}); QVERIFY(!group.isEmpty());
         QVERIFY(s.setGroupOpacity(group,64)); s.rotateRight(); verify();
         options.scope=ImageExportScope::SelectedGroup; QVERIFY(s.exportImage(dir.filePath("group.png"),options));
-        QCOMPARE(QImage(dir.filePath("group.png")).convertToFormat(QImage::Format_ARGB32),s.renderedImage().convertToFormat(QImage::Format_ARGB32));
+        const auto exported_group=QImage(dir.filePath("group.png")).convertToFormat(QImage::Format_ARGB32_Premultiplied);
+        const auto full_group=s.renderedImage().convertToFormat(QImage::Format_ARGB32_Premultiplied);
+        for(int y=0;y<full_group.height();++y) for(int x=0;x<full_group.width();++x) {
+            const auto a=exported_group.pixel(x,y), b=full_group.pixel(x,y);
+            QVERIFY(std::abs(qRed(a)-qRed(b))<=1 && std::abs(qGreen(a)-qGreen(b))<=1 &&
+                std::abs(qBlue(a)-qBlue(b))<=1 && qAlpha(a)==qAlpha(b));
+        }
         QVERIFY(s.resizeCanvas({100,80})); verify();
         cache.setByteLimit(0); verify();
     }

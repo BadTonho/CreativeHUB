@@ -4889,6 +4889,18 @@ int main(int argc, char* argv[]) {
         }
         return false;
     };
+    const auto grabBrushCanvas = [canvas]() {
+        canvas->repaint();
+        for (auto* gl : canvas->findChildren<QOpenGLWidget*>()) {
+            if (gl->isVisible()) {
+                gl->repaint();
+                QCoreApplication::processEvents();
+                return gl->grabFramebuffer();
+            }
+        }
+        QCoreApplication::processEvents();
+        return canvas->grab().toImage();
+    };
     brush_size->setValue(12);
     const QPoint preview_anchor = canvas->rect().center();
     const QPoint expected_restored_cursor = canvas->mapToGlobal(preview_anchor);
@@ -4897,7 +4909,7 @@ int main(int argc, char* argv[]) {
     const QPoint preview_drag_position = preview_anchor + QPoint(20, 5);
     QTest::mouseMove(canvas, preview_drag_position);
     processImageEditorEvents();
-    const QImage resized_brush_preview = canvas->grab().toImage();
+    const QImage resized_brush_preview = grabBrushCanvas();
     const qreal resized_brush_radius = std::max(
         3.0, brush_size->value() * canvas->zoomFactor()) / 2.0;
     const QPoint anchored_edge(qRound(preview_anchor.x() + resized_brush_radius),
@@ -4911,7 +4923,7 @@ int main(int argc, char* argv[]) {
     const QPoint outside_image(0, preview_anchor.y());
     QTest::mouseMove(canvas, outside_image);
     processImageEditorEvents();
-    const QImage resized_outside_preview = canvas->grab().toImage();
+    const QImage resized_outside_preview = grabBrushCanvas();
     const qreal minimum_brush_radius = std::max(
         3.0, brush_size->value() * canvas->zoomFactor()) / 2.0;
     const QPoint outside_drag_anchor_edge(
@@ -4923,7 +4935,7 @@ int main(int argc, char* argv[]) {
     QTest::mouseRelease(canvas, Qt::LeftButton,
                         Qt::ControlModifier | Qt::AltModifier, outside_image);
     processImageEditorEvents();
-    const QImage released_preview = canvas->grab().toImage();
+    const QImage released_preview = grabBrushCanvas();
     const bool cursor_restored_to_press_position =
         QCursor::pos() == expected_restored_cursor;
     const bool brush_preview_stayed_at_anchor_after_release =
@@ -4931,7 +4943,7 @@ int main(int argc, char* argv[]) {
     const QPoint reentered_image = preview_anchor + QPoint(80, 0);
     QTest::mouseMove(canvas, reentered_image);
     processImageEditorEvents();
-    const QImage reentered_preview = canvas->grab().toImage();
+    const QImage reentered_preview = grabBrushCanvas();
     const bool brush_preview_followed_cursor_after_release =
         hasBrightPixelNear(reentered_preview,
                            QPoint(qRound(reentered_image.x() + minimum_brush_radius),
@@ -4944,7 +4956,14 @@ int main(int argc, char* argv[]) {
         !brush_preview_stayed_at_anchor_after_release ||
         !brush_preview_followed_cursor_after_release ||
         window.windowTitle().startsWith('*') || undo_action->isEnabled()) {
-        std::cerr << "The brush preview did not stay anchored during resizing and resume cursor tracking after release.\n";
+        std::cerr << "The brush preview did not stay anchored during resizing and resume cursor tracking after release ("
+                  << "anchor=" << brush_preview_stayed_at_anchor
+                  << ", outside=" << brush_preview_remained_visible_outside_image
+                  << ", cursor=" << cursor_restored_to_press_position
+                  << ", afterRelease=" << brush_preview_stayed_at_anchor_after_release
+                  << ", follow=" << brush_preview_followed_cursor_after_release
+                  << ", modified=" << window.windowTitle().startsWith('*')
+                  << ", undo=" << undo_action->isEnabled() << ").\n";
         return 1;
     }
 
