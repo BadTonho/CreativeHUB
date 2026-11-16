@@ -60,6 +60,10 @@ jobs:
           restore-keys: |
             vcpkg-${{ runner.os }}-${{ env.VCPKG_TRIPLET }}-${{ env.VCPKG_BASELINE }}-
 
+      - name: Ensure vcpkg binary cache directory exists
+        shell: bash
+        run: mkdir -p vcpkg-binary-cache
+
       - name: Bootstrap vcpkg on Windows
         if: runner.os == 'Windows'
         shell: pwsh
