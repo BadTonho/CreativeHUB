@@ -717,7 +717,7 @@ AddMediaLayerResult CompositionDocument::addMediaLayer(
             source_frames = *metadata.frame_count;
         } else if (validPositiveFinite(metadata.duration_seconds)) {
             const auto estimated_source_frames = checkedCeiling(
-                static_cast<long double>(*metadata.duration_seconds) * source_rate);
+                static_cast<long double>(*metadata.duration_seconds * source_rate));
             if (!estimated_source_frames.has_value()) {
                 return AddMediaLayerResult::InvalidTimingMetadata;
             }

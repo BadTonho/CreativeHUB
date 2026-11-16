@@ -87,7 +87,7 @@ jobs:
           sudo apt-get install --yes --no-install-recommends \
             autoconf autoconf-archive automake libtool nasm libdrm-dev libltdl-dev \
             '^libxcb.*-dev' libx11-xcb-dev libglu1-mesa-dev libxrender-dev \
-            libxi-dev libxkbcommon-dev libxkbcommon-x11-dev libegl-dev xvfb openbox
+            libxi-dev libxkbcommon-dev libxkbcommon-x11-dev libegl-dev xvfb openbox ffmpeg gdb
 
       - name: Configure on Windows
         if: runner.os == 'Windows'
@@ -130,7 +130,25 @@ jobs:
           CREATIVE_SUITE_QT_QPA_PLATFORM_OVERRIDE: xcb
         run: >-
           xvfb-run -a bash -c
-          'openbox & sleep 1; ctest --test-dir build -C Release -LE native-gpu --output-on-failure'
+          'mkdir -p prototypes/testdata &&
+          if [ ! -f prototypes/testdata/reference.mkv ]; then
+            ffmpeg -y -v error -f lavfi -i testsrc=size=320x180:rate=30:duration=4 -f lavfi -i sine=frequency=440:sample_rate=48000:duration=4 -c:v ffv1 -c:a pcm_s16le prototypes/testdata/reference.mkv &&
+            cp prototypes/testdata/reference.mkv prototypes/testdata/reference-second.mkv;
+          fi &&
+          openbox & sleep 1;
+          ctest --test-dir build -C Release -LE native-gpu --output-on-failure'
+
+      - name: Capture motion-editor segfault backtrace on failure
+        if: failure() && runner.os == 'Linux'
+        env:
+          CREATIVE_SUITE_QT_QPA_PLATFORM_OVERRIDE: xcb
+        run: >-
+          xvfb-run -a bash -c
+          'openbox & sleep 1;
+          BIN=$(find build -type f -name "*drop_shadow*" -executable | head -n1);
+          if [ -n "$BIN" ]; then
+            QT_QPA_PLATFORM=xcb gdb -batch -ex run -ex "bt 30" --args "$BIN";
+          fi'
 
       - name: Test on macOS
         if: runner.os == 'macOS'
