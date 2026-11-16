@@ -1208,7 +1208,15 @@ bool testAreaSelectionToolUi(const QString& root) {
                          std::abs(left.blue() - right.blue()),
                          std::abs(left.alpha() - right.alpha())});
     };
-    const QImage before_lasso_preview = canvas->grab().toImage();
+    const auto grabCanvas = [canvas]() {
+        canvas->repaint();
+        for (auto* gl : canvas->findChildren<QOpenGLWidget*>()) {
+            if (gl->isVisible()) gl->repaint();
+        }
+        QCoreApplication::processEvents();
+        return canvas->grab().toImage();
+    };
+    const QImage before_lasso_preview = grabCanvas();
     QTest::mousePress(canvas, Qt::LeftButton, Qt::NoModifier, widgetPoint(4, 4));
     QTest::mouseMove(canvas, widgetPoint(16, 4));
     QTest::mouseMove(canvas, widgetPoint(16, 16));
@@ -1218,7 +1226,7 @@ bool testAreaSelectionToolUi(const QString& root) {
         std::cerr << "The Lasso tool did not track an in-progress gesture.\n";
         return false;
     }
-    const QImage during_lasso_preview = canvas->grab().toImage();
+    const QImage during_lasso_preview = grabCanvas();
     if (colorDelta(before_lasso_preview.pixelColor(widgetPoint(9, 10)),
                    during_lasso_preview.pixelColor(widgetPoint(9, 10))) < 4) {
         std::cerr << "The Lasso contour did not update the live canvas preview.\n";

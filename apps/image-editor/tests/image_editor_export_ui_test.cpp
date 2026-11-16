@@ -47,6 +47,19 @@ bool driveExportAction(
     bool file_dialog_was_seen = false;
     bool interaction_failed = false;
     QString last_modal_type;
+    struct ProgressShowFilter : QObject {
+        bool* seen = nullptr;
+        bool eventFilter(QObject* watched, QEvent* event) override {
+            if (event->type() == QEvent::Show &&
+                qobject_cast<image_editor::ImageExportProgressDialog*>(watched) != nullptr &&
+                seen != nullptr) {
+                *seen = true;
+            }
+            return false;
+        }
+    } progress_filter;
+    progress_filter.seen = progress_was_seen;
+    QCoreApplication::instance()->installEventFilter(&progress_filter);
     QTimer poll;
     poll.setInterval(5);
     QObject::connect(&poll, &QTimer::timeout, &window, [&]() {
@@ -108,6 +121,7 @@ bool driveExportAction(
     }
     poll.stop();
     watchdog.stop();
+    QCoreApplication::instance()->removeEventFilter(&progress_filter);
     return file_dialog_was_seen && !interaction_failed;
 }
 
