@@ -286,7 +286,7 @@ void directWorker(QOffscreenSurface* surface, playback::CompositionLayerSpec ima
     direct.recoverPreviewFrame(delivered, 0, 31, epoch);
     const auto old = delivered.rgba;
     delivered = {}; direct.setGpuCompositionEnabled(false, surface);
-    QThread::msleep(6); QCoreApplication::processEvents(); ++epoch; enable();
+    QThread::msleep(40); QCoreApplication::processEvents(); ++epoch; enable();
     image.still_frame = refreshed;
     direct.setComposition({image}, {}, 32); direct.renderCompositionFrame(0, 0, 32);
     require(bool(delivered.gpu), "Refreshed PNG did not use direct delivery.");
@@ -294,7 +294,7 @@ void directWorker(QOffscreenSurface* surface, playback::CompositionLayerSpec ima
     require(old && delivered.rgba && old->rgba_pixels != delivered.rgba->rgba_pixels,
         "Direct delivery cached the previous published PNG.");
     delivered = {}; direct.setGpuCompositionEnabled(false, surface);
-    QThread::msleep(6); QCoreApplication::processEvents(); ++epoch; enable();
+    QThread::msleep(40); QCoreApplication::processEvents(); ++epoch; enable();
     auto outgoing = image; outgoing.track_index = 2; outgoing.clip_index = 0;
     outgoing.timeline_start_frame = 0; outgoing.segment_frame_count = 60;
     auto transitioning = incoming; transitioning.track_index = 2; transitioning.clip_index = 1;
@@ -335,7 +335,7 @@ void directWorker(QOffscreenSurface* surface, playback::CompositionLayerSpec ima
         "GPU Adjustment Preview did not recover through CPU under bounded texture pressure.");
     held_adjustment_textures.clear();
     delivered = {}; direct.setGpuCompositionEnabled(false, surface);
-    QThread::msleep(6); QCoreApplication::processEvents(); ++epoch; enable();
+    QThread::msleep(40); QCoreApplication::processEvents(); ++epoch; enable();
     direct.setPreviewQuality(playback::PreviewQuality::Quarter);
     direct.setComposition({image}, {}, 33);
     std::vector<rendering::PreviewFramePayload> held;

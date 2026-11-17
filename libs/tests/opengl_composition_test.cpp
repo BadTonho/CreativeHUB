@@ -606,7 +606,7 @@ void matteBudgetFallback(QOffscreenSurface* surface) {
     operation.kind = OpenGlImageOperationKind::Color;
     operation.background.rgba = &source;
     operation.colors = {adjustment};
-    auto budget = std::make_shared<OpenGlTexturePoolBudget>(128, 1);
+    auto budget = std::make_shared<OpenGlTexturePoolBudget>(80, 1);
     OpenGlFrameCompositor constrained(surface, OpenGlPrecisionPolicy::Automatic,
         nullptr, budget);
     const auto refused = constrained.processImage(operation);

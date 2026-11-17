@@ -336,6 +336,9 @@ void FunctionPalette::createDialog() {
         item->setData(Qt::UserRole, effect.id);
         item->setIcon(functionPaletteIcon(effect.id));
         item->setToolTip(effect.name);
+        if (effects::isDraggable(effect.id)) {
+            item->setFlags(item->flags() | Qt::ItemIsDragEnabled);
+        }
     }
     layout->addWidget(effect_list_, 1);
     entry_hint_ = new QLabel(dialog_);

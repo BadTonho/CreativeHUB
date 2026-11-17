@@ -65,8 +65,14 @@ std::optional<creative_suite::media::RgbaFrame> copyToFrame(const QImage& image)
 
 std::optional<QImage> rasterizeText(const model::TextLayerContent& content)
 {
-    auto image = createImage(content.box_width, content.box_height);
-    if (!image.has_value()) return std::nullopt;
+    if (content.box_width <= 0 || content.box_height <= 0) return std::nullopt;
+    if (static_cast<std::uint64_t>(content.box_width) >
+        kMaximumRasterBytes / 4ULL / static_cast<std::uint64_t>(content.box_height)) {
+        return std::nullopt;
+    }
+    QImage image(content.box_width, content.box_height, QImage::Format_RGBA8888_Premultiplied);
+    if (image.isNull()) return std::nullopt;
+    image.fill(Qt::transparent);
 
     const QString text = fromUtf8(content.text);
     QFont font(fromUtf8(content.font_family));
@@ -80,13 +86,13 @@ std::optional<QImage> rasterizeText(const model::TextLayerContent& content)
     case model::TextAlignment::Right: flags |= Qt::AlignRight; break;
     }
 
-    QPainter painter(&*image);
+    QPainter painter(&image);
     painter.setRenderHint(QPainter::TextAntialiasing, true);
     painter.setFont(font);
     painter.setPen(toColor(content.color));
-    painter.drawText(image->rect(), flags, text);
+    painter.drawText(image.rect(), flags, text);
     painter.end();
-    return image;
+    return image.convertToFormat(QImage::Format_RGBA8888);
 }
 
 std::optional<QImage> rasterizeShape(const model::ShapeLayerContent& content)

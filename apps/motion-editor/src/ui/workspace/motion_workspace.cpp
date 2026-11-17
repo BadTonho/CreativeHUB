@@ -35,7 +35,7 @@ MotionWorkspace::MotionWorkspace(QMainWindow* window,
                                  QWidget* timeline,
                                  QWidget* graph_editor,
                                  TimelineNavigator* navigator)
-    : QObject(window), window_(window), navigator_(navigator)
+    : QObject(nullptr), window_(window), navigator_(navigator)
 {
     if (window_ == nullptr) return;
     window_->setDockNestingEnabled(true);

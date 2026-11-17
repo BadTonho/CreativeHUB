@@ -226,6 +226,9 @@ int main(int argc, char* argv[]) {
                 "A maximized window must return to its original maximized state and geometry.");
 
         QMainWindow content_window;
+#ifdef Q_OS_UNIX
+        content_window.setWindowFlag(Qt::BypassWindowManagerHint, true);
+#endif
         content_window.menuBar()->addMenu("File");
         content_window.menuBar()->addMenu("Edit");
         content_window.menuBar()->addMenu("View");
@@ -248,7 +251,7 @@ int main(int argc, char* argv[]) {
             &content_window,
             ui::WorkspacePageId::Edit,
             ui::WorkspacePageId::Fusion,
-            120,
+            300,
             [&content_page]() { content_page = ui::WorkspacePageId::Fusion; },
             settings::WorkspacePageTransitionStyle::WorkspaceContent);
         auto* overlay = content_window.findChild<QWidget*>(

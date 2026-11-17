@@ -121,6 +121,7 @@ void verifyFunctionPalette(QSettings& settings) {
     require(functions_list->dragEnabled() &&
                 functions_list->dragDropMode() == QAbstractItemView::DragOnly,
             "Functions effects must support copy-only dragging.");
+    palette.setContext(effects::Workspace::Fusion, true);
     const QStringList fusion_effect_ids{
         QStringLiteral("video.grayscale"),
         QStringLiteral("video.brightness"),

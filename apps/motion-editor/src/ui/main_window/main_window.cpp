@@ -381,6 +381,9 @@ MainWindow::MainWindow(QWidget* parent,
 }
 MainWindow::~MainWindow()
 {
+    for (auto* bar : findChildren<QTabBar*>(QString(), Qt::FindDirectChildrenOnly)) {
+        bar->setParent(nullptr);
+    }
     delete std::exchange(workspace_, nullptr);
     delete std::exchange(pen_tool_,nullptr);
     cancelScaleDrag();
@@ -405,9 +408,6 @@ MainWindow::~MainWindow()
     if (preview_renderer_) preview_renderer_->stopAndWait();
     preview_renderer_.reset();
     gpu_composition_surface_.reset();
-    for (auto* bar : findChildren<QTabBar*>(QString(), Qt::FindDirectChildrenOnly)) {
-        bar->setParent(nullptr);
-    }
 }
 const model::CompositionDocument* MainWindow::compositionDocument() const noexcept
 {

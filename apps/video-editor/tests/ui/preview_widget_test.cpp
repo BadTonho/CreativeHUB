@@ -6,6 +6,7 @@
 #include <QColor>
 #include <QLabel>
 #include <QMouseEvent>
+#include <QThread>
 
 #include <cstdint>
 #include <cstdio>
@@ -44,6 +45,11 @@ int main(int argc, char* argv[]) {
         PreviewWidget widget;
         widget.resize(640, 360);
         widget.show();
+        for (int i = 0; i < 20; ++i) {
+            application.processEvents();
+            if (widget.isVisible()) break;
+            QThread::msleep(10);
+        }
 
         const auto frame = makeFrame();
         auto shared_frame = std::make_shared<const media::VideoFrame>(frame);
@@ -56,7 +62,11 @@ int main(int argc, char* argv[]) {
         shared_frame.reset();
         require(!weak_frame.expired(),
                 "Preview did not retain the submitted frame while displayed.");
-        application.processEvents();
+        for (int i = 0; i < 100; ++i) {
+            application.processEvents();
+            if (metrics.snapshot().cpu_presented_frames >= 1) break;
+            QThread::msleep(10);
+        }
         const auto preview_snapshot = metrics.takeSnapshotAndReset();
         require(preview_snapshot.submitted_frames == 1,
                 "Preview metrics did not record the submitted frame.");
