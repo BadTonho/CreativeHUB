@@ -147,7 +147,7 @@ jobs:
           'openbox & sleep 1;
           BIN=$(find build -type f -name "*drop-shadow*" -executable | head -n1);
           if [ -n "$BIN" ]; then
-            QT_QPA_PLATFORM=xcb valgrind --num-callers=25 --error-exitcode=0 "$BIN" || true;
+            QT_QPA_PLATFORM=xcb gdb -batch -ex run -ex "bt 30" --args "$BIN" || true;
           fi'
 
       - name: Test on macOS
