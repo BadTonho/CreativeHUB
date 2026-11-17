@@ -67,8 +67,18 @@ bool driveExportAction(
         if (modal != nullptr) last_modal_type = QString::fromLatin1(modal->metaObject()->className());
         if (auto* file_dialog = qobject_cast<QFileDialog*>(modal)) {
             file_dialog_was_seen = true;
-            file_dialog->selectFile(output_path);
-            static_cast<QDialog*>(file_dialog)->accept();
+            const QFileInfo target_info(output_path);
+            file_dialog->setDirectory(target_info.absolutePath());
+            file_dialog->selectFile(target_info.fileName());
+            auto* buttons = file_dialog->findChild<QDialogButtonBox*>();
+            auto* save_button = buttons == nullptr
+                ? nullptr : buttons->button(QDialogButtonBox::Save);
+            if (save_button == nullptr) {
+                interaction_failed = true;
+                file_dialog->reject();
+            } else if (save_button->isEnabled()) {
+                save_button->click();
+            }
             return;
         }
         if (auto* options_dialog =

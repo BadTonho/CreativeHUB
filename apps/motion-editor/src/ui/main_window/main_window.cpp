@@ -406,6 +406,7 @@ MainWindow::~MainWindow()
     delete std::exchange(workspace_, nullptr);
     for (auto* dock : {media_pool_dock_, inspector_dock_, timeline_dock_, graph_editor_dock_}) {
         if (dock != nullptr) {
+            dock->blockSignals(true);
             removeDockWidget(dock);
             delete dock;
         }
