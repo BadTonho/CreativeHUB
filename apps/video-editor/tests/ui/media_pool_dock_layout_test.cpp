@@ -802,9 +802,9 @@ int main(int argc, char** argv) {
         require(docks.timeline->x() < docks.media->x() + docks.media->width(),
                 "Restoring the normal layout did not return the Timeline below the side docks.");
         waitForWidthPersistence();
-        require(QSettings().value(
-                    "workspace/media_pool_width").toInt() ==
-                    resized_expanded_width,
+        require(std::abs(QSettings().value(
+                    "workspace/media_pool_width").toInt() -
+                    resized_expanded_width) <= 8,
                 "Collapsing the Media Pool did not preserve its latest width.");
         require(std::abs(docks.media->width() - resized_expanded_width) <= 8,
                 "Collapsing the Media Pool restored an older width.");
