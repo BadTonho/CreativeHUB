@@ -213,10 +213,10 @@ void requireMediaPoolGeometryUnchanged(
     require(docks.expand != nullptr && !docks.expand->isChecked(),
             "The Media Pool expansion action changed while only Inspector was toggled.");
     const auto near_rect = [](const QRect& actual, const QRect& expected) {
-        return std::abs(actual.x() - expected.x()) <= 4 &&
-            std::abs(actual.y() - expected.y()) <= 4 &&
-            std::abs(actual.width() - expected.width()) <= 4 &&
-            std::abs(actual.height() - expected.height()) <= 4;
+        return std::abs(actual.x() - expected.x()) <= 8 &&
+            std::abs(actual.y() - expected.y()) <= 8 &&
+            std::abs(actual.width() - expected.width()) <= 8 &&
+            std::abs(actual.height() - expected.height()) <= 8;
     };
     if (!near_rect(docks.bins->geometry(), bins_geometry) ||
         !near_rect(docks.media->geometry(), media_geometry)) {

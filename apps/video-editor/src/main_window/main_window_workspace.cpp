@@ -2596,15 +2596,6 @@ void MainWindow::applyExpandedDockLayout(
                                            media_pool_width - inspector_width -
                                            2 * separator),
                          inspector_width}, Qt::Horizontal);
-            layout()->activate();
-            if (bins_dock_->width() != media_pool_width) {
-                const int delta = bins_dock_->width() - media_pool_width;
-                resizeDocks({bins_dock_, preview_dock_},
-                            {media_pool_width,
-                             std::max(280, preview_dock_->width() + delta)},
-                            Qt::Horizontal);
-                layout()->activate();
-            }
         } else if (inspector_expanded) {
             addDockWidget(Qt::RightDockWidgetArea, inspector_dock_);
             addDockWidget(Qt::RightDockWidgetArea, preview_dock_);
