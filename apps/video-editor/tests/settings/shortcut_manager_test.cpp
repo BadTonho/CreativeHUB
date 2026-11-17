@@ -151,6 +151,7 @@ void verifyFunctionPalette(QSettings& settings) {
     require(!functions_add->isEnabled(),
             "Filtering must remain available while Add is disabled.");
     functions_search->clear();
+    palette.setContext(effects::Workspace::Edit, false);
     require(palette.toggleAction()->shortcut() ==
                 QKeySequence(QStringLiteral("Shift+Space")),
             "Functions window shortcut default is incorrect.");

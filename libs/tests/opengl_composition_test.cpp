@@ -263,11 +263,6 @@ void asynchronousReadbackParity(OpenGlFrameCompositor& gpu) {
         require(std::abs(int(alpha_cpu->rgba_pixels[index]) -
                     int(alpha_sync.frame->rgba_pixels[index])) <= (index % 4 == 3 ? 0 : 2),
             "transparent CPU/OpenGL composition differs");
-    const auto alpha_empty = gpu.compose(13, 9, {}, {}, nullptr,
-        CompositionOutputAlpha::Preserve);
-    require(alpha_empty.frame && std::all_of(alpha_empty.frame->rgba_pixels.begin(),
-            alpha_empty.frame->rgba_pixels.end(), [](std::uint8_t value) { return value == 0; }),
-        "empty OpenGL alpha output must be transparent");
     const auto alpha_submitted = gpu.submitAsyncReadback(73, 51, second_layers, {},
         CompositionOutputAlpha::Preserve);
     require(alpha_submitted.status == OpenGlCompositionStatus::Complete,
@@ -276,6 +271,11 @@ void asynchronousReadbackParity(OpenGlFrameCompositor& gpu) {
     require(alpha_collected.status == OpenGlCompositionStatus::Complete && alpha_collected.frame &&
         alpha_collected.frame->rgba_pixels == alpha_sync.frame->rgba_pixels,
         "asynchronous OpenGL readback changed transparent straight-alpha pixels");
+    const auto alpha_empty = gpu.compose(13, 9, {}, {}, nullptr,
+        CompositionOutputAlpha::Preserve);
+    require(alpha_empty.frame && std::all_of(alpha_empty.frame->rgba_pixels.begin(),
+            alpha_empty.frame->rgba_pixels.end(), [](std::uint8_t value) { return value == 0; }),
+        "empty OpenGL alpha output must be transparent");
     const auto reused = gpu.submitAsyncReadback(73, 51, second_layers);
     require(reused.status == OpenGlCompositionStatus::Complete,
         "a collected PBO slot could not be reused");

@@ -2586,9 +2586,15 @@ void MainWindow::applyExpandedDockLayout(
             timeline_dock_->show();
             resizeDocks({bins_dock_, media_dock_},
                         {normal_bins_height, normal_media_height}, Qt::Vertical);
+            const int separator = std::max(
+                0,
+                style()->pixelMetric(
+                    QStyle::PM_DockWidgetSeparatorExtent, nullptr, this));
             resizeDocks({bins_dock_, preview_dock_, inspector_dock_},
                         {media_pool_width,
-                         std::max(280, width() - media_pool_width - inspector_width),
+                         std::max(280, contentsRect().width() -
+                                           media_pool_width - inspector_width -
+                                           2 * separator),
                          inspector_width}, Qt::Horizontal);
         } else if (inspector_expanded) {
             addDockWidget(Qt::RightDockWidgetArea, inspector_dock_);

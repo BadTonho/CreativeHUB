@@ -942,6 +942,15 @@ int main(int argc, char* argv[])
                 "animated Color Adjustment keyframes are evaluated per exported frame");
         const auto linked_image_offset = static_cast<std::size_t>(41) * decoded[3]->stride +
             static_cast<std::size_t>(54) * 4U;
+        if (!(decoded[3]->rgba_pixels[linked_image_offset] > 130 &&
+              decoded[3]->rgba_pixels[linked_image_offset + 1] < 70 &&
+              decoded[3]->rgba_pixels[linked_image_offset + 2] > 120)) {
+            std::cerr << "linked_image_offset RGBA="
+                      << int(decoded[3]->rgba_pixels[linked_image_offset]) << ","
+                      << int(decoded[3]->rgba_pixels[linked_image_offset + 1]) << ","
+                      << int(decoded[3]->rgba_pixels[linked_image_offset + 2]) << ","
+                      << int(decoded[3]->rgba_pixels[linked_image_offset + 3]) << "\n";
+        }
         require(decoded[3]->rgba_pixels[linked_image_offset] > 130 &&
                     decoded[3]->rgba_pixels[linked_image_offset + 1] < 70 &&
                     decoded[3]->rgba_pixels[linked_image_offset + 2] > 120,

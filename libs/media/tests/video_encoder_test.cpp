@@ -277,7 +277,10 @@ int main(int argc, char** argv)
                     const auto alpha_decoded = alpha_reader->decode_next_frame();
                     require(alpha_decoded && *alpha_decoded && (*alpha_decoded)->width == 32 &&
                         (*alpha_decoded)->height == 32,
-                        ("An advertised alpha adapter (" + alpha_settings.container_name + "/" + alpha_settings.video_encoder_name + ") did not decode its output frame.").c_str());
+                        ("An advertised alpha adapter (" + alpha_settings.container_name + "/" +
+                         alpha_settings.video_encoder_name + ", bytes=" +
+                         std::to_string(std::filesystem::file_size(alpha_path)) +
+                         ") did not decode its output frame.").c_str());
                     const auto* pixels = (*alpha_decoded)->rgba_pixels.data();
                     const auto transparent_alpha = pixels[3];
                     const auto partial_alpha = pixels[11 * 4 + 3];
