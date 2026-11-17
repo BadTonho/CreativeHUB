@@ -402,6 +402,7 @@ MainWindow::~MainWindow()
     if (preview_renderer_) preview_renderer_->stopAndWait();
     preview_renderer_.reset();
     gpu_composition_surface_.reset();
+    delete std::exchange(workspace_, nullptr);
     for (auto* dock : {media_pool_dock_, inspector_dock_, timeline_dock_, graph_editor_dock_}) {
         if (dock != nullptr) {
             removeDockWidget(dock);
