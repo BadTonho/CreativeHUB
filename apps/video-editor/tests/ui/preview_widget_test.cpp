@@ -62,9 +62,8 @@ int main(int argc, char* argv[]) {
         shared_frame.reset();
         require(!weak_frame.expired(),
                 "Preview did not retain the submitted frame while displayed.");
-        for (int i = 0; i < 100; ++i) {
+        for (int i = 0; i < 20; ++i) {
             application.processEvents();
-            if (metrics.snapshot().cpu_presented_frames >= 1) break;
             QThread::msleep(10);
         }
         const auto preview_snapshot = metrics.takeSnapshotAndReset();
