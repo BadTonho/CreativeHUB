@@ -87,7 +87,7 @@ jobs:
           sudo apt-get install --yes --no-install-recommends \
             autoconf autoconf-archive automake libtool nasm libdrm-dev libltdl-dev \
             '^libxcb.*-dev' libx11-xcb-dev libglu1-mesa-dev libxrender-dev \
-            libxi-dev libxkbcommon-dev libxkbcommon-x11-dev libegl-dev xvfb openbox ffmpeg gdb
+            libxi-dev libxkbcommon-dev libxkbcommon-x11-dev libegl-dev xvfb openbox ffmpeg gdb valgrind
 
       - name: Configure on Windows
         if: runner.os == 'Windows'
@@ -147,7 +147,7 @@ jobs:
           'openbox & sleep 1;
           BIN=$(find build -type f -name "*drop-shadow*" -executable | head -n1);
           if [ -n "$BIN" ]; then
-            QT_QPA_PLATFORM=xcb gdb -batch -ex run -ex "bt 30" --args "$BIN";
+            QT_QPA_PLATFORM=xcb valgrind --num-callers=25 --error-exitcode=0 "$BIN" || true;
           fi'
 
       - name: Test on macOS

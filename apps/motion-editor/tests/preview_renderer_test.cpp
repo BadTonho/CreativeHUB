@@ -635,14 +635,19 @@ int main(int argc, char* argv[])
     require(left_text_bounds[2] >= left_text_bounds[0] &&
                 left_text_bounds[3] >= left_text_bounds[1],
             "text rasterization produces visible antialiased glyph pixels");
+    std::uint8_t max_text_alpha = 0;
     for (int y = 0; y < text_frame->height; ++y) {
         for (int x = 0; x < text_frame->width; ++x) {
             const auto offset = static_cast<std::size_t>(y) * text_frame->stride +
                 static_cast<std::size_t>(x) * 4;
-            require(text_frame->rgba_pixels[offset + 3] <= 128,
-                    "text rasterization preserves the selected alpha ceiling");
+            max_text_alpha = std::max(max_text_alpha, text_frame->rgba_pixels[offset + 3]);
         }
     }
+    if (max_text_alpha > 128) {
+        std::cerr << "text rasterization max_alpha=" << int(max_text_alpha) << '\n';
+    }
+    require(max_text_alpha <= 128,
+            "text rasterization preserves the selected alpha ceiling");
     text.alignment = TextAlignment::Right;
     const auto right_text_frame = motion::ui::rasterizeLayerContent(text);
     require(right_text_frame.has_value() &&

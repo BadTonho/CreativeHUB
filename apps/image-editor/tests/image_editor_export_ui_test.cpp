@@ -15,6 +15,7 @@
 #include <QImage>
 #include <QLabel>
 #include <QLayout>
+#include <QLineEdit>
 #include <QListWidget>
 #include <QMenu>
 #include <QMenuBar>
@@ -25,6 +26,7 @@
 #include <QSpinBox>
 #include <QStandardPaths>
 #include <QTemporaryDir>
+#include <QTest>
 #include <QTreeWidget>
 #include <QTimer>
 #include <QSignalSpy>
@@ -74,6 +76,11 @@ bool driveExportAction(
                 const QFileInfo target_info(output_path);
                 file_dialog->setDirectory(target_info.absolutePath());
                 file_dialog->selectFile(target_info.fileName());
+                if (auto* edit = file_dialog->findChild<QLineEdit*>(QStringLiteral("fileNameEdit"))) {
+                    edit->setText(output_path);
+                    QTest::keyClick(edit, Qt::Key_Return);
+                    return;
+                }
             }
             auto* buttons = file_dialog->findChild<QDialogButtonBox*>();
             auto* save_button = buttons == nullptr
