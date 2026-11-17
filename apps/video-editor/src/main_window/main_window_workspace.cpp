@@ -2584,20 +2584,12 @@ void MainWindow::applyExpandedDockLayout(
             preview_dock_->show();
             inspector_dock_->show();
             timeline_dock_->show();
-            bins_dock_->setMinimumWidth(media_pool_width);
-            bins_dock_->setMaximumWidth(media_pool_width);
-            media_dock_->setMinimumWidth(media_pool_width);
-            media_dock_->setMaximumWidth(media_pool_width);
             resizeDocks({bins_dock_, media_dock_},
                         {normal_bins_height, normal_media_height}, Qt::Vertical);
             resizeDocks({bins_dock_, preview_dock_, inspector_dock_},
-                        {media_pool_width, std::max(280, preview_geometry.width()),
+                        {media_pool_width,
+                         std::max(280, width() - media_pool_width - inspector_width),
                          inspector_width}, Qt::Horizontal);
-            layout()->activate();
-            bins_dock_->setMinimumWidth(0);
-            bins_dock_->setMaximumWidth(QWIDGETSIZE_MAX);
-            media_dock_->setMinimumWidth(0);
-            media_dock_->setMaximumWidth(QWIDGETSIZE_MAX);
         } else if (inspector_expanded) {
             addDockWidget(Qt::RightDockWidgetArea, inspector_dock_);
             addDockWidget(Qt::RightDockWidgetArea, preview_dock_);

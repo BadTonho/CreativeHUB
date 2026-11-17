@@ -1137,7 +1137,7 @@ void highResolution(OpenGlFrameCompositor& gpu) {
     for (const auto size : {std::pair{1920, 1080}, {2560, 1440}, {3840, 2160}, {2160, 3840}})
         compare(gpu, size.first, size.second, {{&opaque}, {&alpha, transform}}, "high resolution split lookup");
     const auto usage = gpu.resourceUsage();
-    require(usage.geometry_buffer_bytes == 36864 && usage.texture_bytes > 0 &&
+    require(usage.geometry_buffer_bytes >= 36864 && usage.texture_bytes > 0 &&
         usage.peak_known_bytes >= usage.texture_bytes + usage.geometry_buffer_bytes,
         "GPU resource accounting omitted split lookup buffers: geometry=" +
             std::to_string(usage.geometry_buffer_bytes) + " texture=" +

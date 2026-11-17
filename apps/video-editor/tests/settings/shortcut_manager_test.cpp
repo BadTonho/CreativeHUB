@@ -189,7 +189,7 @@ void verifyFunctionPalette(QSettings& settings) {
     sendKey(editor, Qt::Key_Space, Qt::ShiftModifier);
     require(palette.dialog()->isVisible(),
             "Shift+Space must open the Functions window from a child widget.");
-    require(palette.dialog()->isActiveWindow(),
+    require(QTest::qWaitForWindowActive(palette.dialog()),
             "Opening Functions must activate its window.");
     require((palette.dialog()->frameGeometry().center() -
                 main_window.frameGeometry().center()).manhattanLength() <= 8,

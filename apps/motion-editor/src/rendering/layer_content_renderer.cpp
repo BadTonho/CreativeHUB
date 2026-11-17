@@ -89,10 +89,21 @@ std::optional<QImage> rasterizeText(const model::TextLayerContent& content)
     QPainter painter(&image);
     painter.setRenderHint(QPainter::TextAntialiasing, true);
     painter.setFont(font);
-    painter.setPen(toColor(content.color));
+    painter.setPen(QColor(content.color[0], content.color[1], content.color[2], 255));
     painter.drawText(image.rect(), flags, text);
     painter.end();
-    return image.convertToFormat(QImage::Format_RGBA8888);
+    QImage converted = image.convertToFormat(QImage::Format_RGBA8888);
+    if (content.color[3] < 255) {
+        for (int y = 0; y < converted.height(); ++y) {
+            auto* row = converted.scanLine(y);
+            for (int x = 0; x < converted.width(); ++x) {
+                auto& alpha = row[x * 4 + 3];
+                alpha = static_cast<std::uint8_t>(
+                    (static_cast<unsigned>(alpha) * content.color[3] + 127U) / 255U);
+            }
+        }
+    }
+    return converted;
 }
 
 std::optional<QImage> rasterizeShape(const model::ShapeLayerContent& content)

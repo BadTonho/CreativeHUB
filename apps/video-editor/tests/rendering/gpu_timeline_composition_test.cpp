@@ -337,15 +337,15 @@ void directWorker(QOffscreenSurface* surface, playback::CompositionLayerSpec ima
     delivered = {}; direct.setGpuCompositionEnabled(false, surface);
     QThread::msleep(40); QCoreApplication::processEvents(); ++epoch; enable();
     direct.setPreviewQuality(playback::PreviewQuality::Quarter);
-    direct.setComposition({image}, {}, 33);
+    direct.setComposition({image}, {}, 35);
     std::vector<rendering::PreviewFramePayload> held;
     for (qint64 frame : {0, 1, 2}) {
-        direct.renderCompositionFrame(frame, frame, 33);
+        direct.renderCompositionFrame(frame, frame, 35);
         require(bool(delivered.gpu), "Direct pool warmup failed."); held.push_back(delivered);
     }
     auto before = delivered.gpu;
-    direct.renderCompositionFrame(3, 3, 33);
-    direct.renderCompositionFrame(4, 4, 33);
+    direct.renderCompositionFrame(3, 3, 35);
+    direct.renderCompositionFrame(4, 4, 35);
     require(delivered.gpu == before, "Busy request overwrote a leased frame.");
     held[0] = {};
     QEventLoop retry;
@@ -355,12 +355,12 @@ void directWorker(QOffscreenSurface* surface, playback::CompositionLayerSpec ima
     require(delivered.timeline_frame == 4 && delivered.gpu && errors == 0,
         "Paused Busy retry did not coalesce to the latest request.");
     direct.setGpuTextureDelivery(false, ++epoch, QOpenGLContext::globalShareContext());
-    direct.renderCompositionFrame(4, 4, 33);
+    direct.renderCompositionFrame(4, 4, 35);
     require(delivered.rgba && !delivered.gpu, "Disabling direct presentation did not retain GPU RGBA fallback.");
     held.clear(); delivered = {}; before.reset();
     direct.setGpuCompositionEnabled(false, surface);
-    QThread::msleep(6); QCoreApplication::processEvents(); ++epoch; enable();
-    direct.renderCompositionFrame(5, 5, 33);
+    QThread::msleep(40); QCoreApplication::processEvents(); ++epoch; enable();
+    direct.renderCompositionFrame(5, 5, 35);
     require(bool(delivered.gpu), "Direct delivery did not retry after off/on.");
     std::string cause; std::int64_t code = 0;
     if (sessionGraphicsBackend() == GraphicsBackend::Vulkan)

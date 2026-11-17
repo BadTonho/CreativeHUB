@@ -96,6 +96,14 @@ std::pair<creative_suite::media::VideoContainerOption,
     }
     for (const auto& container : containers) {
         for (const auto& encoder : container.video_encoders) {
+            if (encoder.name == "ffv1" &&
+                creative_suite::media::supportsVideoEncoder(container, encoder.name)) {
+                return {container, encoder};
+            }
+        }
+    }
+    for (const auto& container : containers) {
+        for (const auto& encoder : container.video_encoders) {
             if (softwareEncoder(encoder.name) &&
                 creative_suite::media::supportsVideoEncoder(container, encoder.name)) {
                 return {container, encoder};

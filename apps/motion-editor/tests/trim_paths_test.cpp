@@ -245,7 +245,7 @@ void modelAndPersistence(const QString &root) {
         else if (code == 7)
             layer.insert("kind", "null");
         else
-            bad.insert("version", 18);
+            bad.insert("version", Store::current_format_version + 1);
         content.insert("trim_paths", trim);
         layer.insert("shape_content", content);
         layers[0] = layer;
