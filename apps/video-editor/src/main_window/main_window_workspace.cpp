@@ -2529,20 +2529,20 @@ void MainWindow::applyExpandedDockLayout(
     }
 
     if (!will_be_expanded) {
+        const int restored_media_width = media_dock_->width();
         const int restored_preview_width = preview_dock_->width();
+        const int restored_inspector_width = inspector_dock_->width();
+        const int target_restored_preview_width = std::max(
+            280, restored_preview_width + restored_media_width -
+                     media_pool_width + restored_inspector_width -
+                     inspector_width);
         resizeDocks(
             {bins_dock_, preview_dock_},
-            {media_pool_width,
-             std::max(280, restored_preview_width + current_media_width -
-                               media_pool_width + current_inspector_width -
-                               inspector_width)},
+            {media_pool_width, target_restored_preview_width},
             Qt::Horizontal);
         resizeDocks(
             {preview_dock_, inspector_dock_},
-            {std::max(280, restored_preview_width + current_media_width -
-                               media_pool_width + current_inspector_width -
-                               inspector_width),
-             inspector_width},
+            {target_restored_preview_width, inspector_width},
             Qt::Horizontal);
         workspace_expansion_restore_layout_state_.clear();
         settings.remove("workspace/dock_expansion_restore_layout_state");
