@@ -161,7 +161,9 @@ void verifyFunctionPalette(QSettings& settings) {
         require(!fusion_add->isEnabled(),
                 "Filtering must remain available while Add is disabled.");
         fusion_search->clear();
+        delete fusion_palette.dialog();
         main_window.removeAction(fusion_palette.toggleAction());
+        delete fusion_palette.toggleAction();
     }
     require(palette.toggleAction()->shortcut() ==
                 QKeySequence(QStringLiteral("Shift+Space")),
