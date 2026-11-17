@@ -319,7 +319,7 @@ void verifyFunctionPalette(QSettings& settings) {
     require(drag_dialog.isNull() && palette.dialog() == nullptr,
             "A successful drop must close and destroy Functions.");
 
-    palette.setEffectTargetAvailable(true);
+    palette.setContext(effects::Workspace::Fusion, true);
     main_window.activateWindow();
     editor->setFocus();
     QApplication::processEvents();

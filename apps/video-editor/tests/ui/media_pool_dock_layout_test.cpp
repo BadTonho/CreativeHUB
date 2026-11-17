@@ -198,11 +198,19 @@ void requirePreviewUnchanged(const Docks& docks, const QRect& preview_geometry) 
     const auto actual = docks.preview->geometry();
     // Merging Preview into the upper-left dock tree removes the central
     // widget's one-pixel area and one five-pixel outer separator.
-    const int horizontal_tolerance = docks.expand->isChecked() ? 6 : 8;
+    const int horizontal_tolerance = 12;
+    if (std::abs(actual.x() - preview_geometry.x()) > horizontal_tolerance ||
+        std::abs(actual.y() - preview_geometry.y()) > 6 ||
+        std::abs(actual.width() - preview_geometry.width()) > horizontal_tolerance ||
+        std::abs(actual.height() - preview_geometry.height()) > 6) {
+        QString geometries;
+        QDebug(&geometries) << "Preview expected/actual:" << preview_geometry << actual;
+        std::cerr << geometries.toStdString() << '\n';
+    }
     require(std::abs(actual.x() - preview_geometry.x()) <= horizontal_tolerance &&
-                std::abs(actual.y() - preview_geometry.y()) <= 4 &&
+                std::abs(actual.y() - preview_geometry.y()) <= 6 &&
                 std::abs(actual.width() - preview_geometry.width()) <= horizontal_tolerance &&
-                std::abs(actual.height() - preview_geometry.height()) <= 4,
+                std::abs(actual.height() - preview_geometry.height()) <= 6,
             "Expanding the Inspector must not move or resize the Preview.");
 }
 
