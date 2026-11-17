@@ -23,6 +23,7 @@
 #include <QOffscreenSurface>
 #include <QPushButton>
 #include <QStatusBar>
+#include <QTabBar>
 #include <QTimer>
 #include <QUrl>
 #include <QVBoxLayout>
@@ -416,6 +417,9 @@ MainWindow::~MainWindow()
     inspector_dock_ = nullptr;
     timeline_dock_ = nullptr;
     graph_editor_dock_ = nullptr;
+    for (auto* child : findChildren<QTabBar*>(QString(), Qt::FindDirectChildrenOnly)) {
+        delete child;
+    }
 }
 const model::CompositionDocument* MainWindow::compositionDocument() const noexcept
 {
