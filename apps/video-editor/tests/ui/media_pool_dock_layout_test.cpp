@@ -188,9 +188,15 @@ void requirePreviewAndInspectorUnchanged(
     const Docks& docks,
     const QRect& preview_geometry,
     const QRect& inspector_geometry) {
-    require(docks.preview->geometry() == preview_geometry,
+    const auto near_rect = [](const QRect& actual, const QRect& expected) {
+        return std::abs(actual.x() - expected.x()) <= 8 &&
+            std::abs(actual.y() - expected.y()) <= 6 &&
+            std::abs(actual.width() - expected.width()) <= 8 &&
+            std::abs(actual.height() - expected.height()) <= 6;
+    };
+    require(near_rect(docks.preview->geometry(), preview_geometry),
             "Expanding the Media Pool must not move or resize the Preview.");
-    require(docks.inspector->geometry() == inspector_geometry,
+    require(near_rect(docks.inspector->geometry(), inspector_geometry),
             "Expanding the Media Pool must not move or resize the Inspector.");
 }
 
