@@ -271,11 +271,6 @@ void asynchronousReadbackParity(OpenGlFrameCompositor& gpu) {
     require(alpha_collected.status == OpenGlCompositionStatus::Complete && alpha_collected.frame &&
         alpha_collected.frame->rgba_pixels == alpha_sync.frame->rgba_pixels,
         "asynchronous OpenGL readback changed transparent straight-alpha pixels");
-    const auto alpha_empty = gpu.compose(13, 9, {}, {}, nullptr,
-        CompositionOutputAlpha::Preserve);
-    require(alpha_empty.frame && std::all_of(alpha_empty.frame->rgba_pixels.begin(),
-            alpha_empty.frame->rgba_pixels.end(), [](std::uint8_t value) { return value == 0; }),
-        "empty OpenGL alpha output must be transparent");
     const auto reused = gpu.submitAsyncReadback(73, 51, second_layers);
     require(reused.status == OpenGlCompositionStatus::Complete,
         "a collected PBO slot could not be reused (" + reused.operation + ": " + reused.cause + ")");
@@ -292,6 +287,11 @@ void asynchronousReadbackParity(OpenGlFrameCompositor& gpu) {
         "discarded PBO ticket remained usable after failure recovery");
     require(gpu.asyncReadbackSlotCount() == 2,
         "collection failure recovery unexpectedly destroyed the reusable PBO pool");
+    const auto alpha_empty = gpu.compose(13, 9, {}, {}, nullptr,
+        CompositionOutputAlpha::Preserve);
+    require(alpha_empty.frame && std::all_of(alpha_empty.frame->rgba_pixels.begin(),
+            alpha_empty.frame->rgba_pixels.end(), [](std::uint8_t value) { return value == 0; }),
+        "empty OpenGL alpha output must be transparent");
     unsigned reduced_slots = 0;
     const auto reduced = gpu.prepareAsyncReadback(73, 51, frame_bytes, 2, &reduced_slots);
     require(reduced.status == OpenGlCompositionStatus::Complete && reduced_slots == 1,

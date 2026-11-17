@@ -123,9 +123,14 @@ void verifyFunctionPalette(QSettings& settings) {
             "Functions effects must support copy-only dragging.");
     ui::FunctionPalette fusion_palette(&main_window, shortcut_manager);
     fusion_palette.setContext(effects::Workspace::Fusion, true);
+    auto* fusion_search = fusion_palette.dialog()->findChild<QLineEdit*>(
+        QStringLiteral("functionsEffectSearch"));
     auto* fusion_list = fusion_palette.dialog()->findChild<QListWidget*>(
         QStringLiteral("functionsEffectList"));
-    require(fusion_list != nullptr, "Fusion Functions list is missing.");
+    auto* fusion_add = fusion_palette.dialog()->findChild<QPushButton*>(
+        QStringLiteral("functionsAddButton"));
+    require(fusion_search != nullptr && fusion_list != nullptr && fusion_add != nullptr,
+            "Fusion Functions controls are missing.");
     const QStringList fusion_effect_ids{
         QStringLiteral("video.grayscale"),
         QStringLiteral("video.brightness"),
@@ -143,18 +148,18 @@ void verifyFunctionPalette(QSettings& settings) {
                 "Functions effect drag must use the shared Effects MIME payload.");
         delete mime;
     }
-    require(!functions_add->isEnabled(),
+    require(!fusion_add->isEnabled(),
             "Add must be disabled without a compatible selected clip.");
-    functions_search->setText(QStringLiteral("contrast"));
-    require(functions_list->count() == effects::definitions().size() &&
-                functions_list->item(0)->isHidden() &&
-                functions_list->item(1)->isHidden() &&
-                !functions_list->item(2)->isHidden() &&
-                functions_list->item(3)->isHidden(),
+    fusion_search->setText(QStringLiteral("contrast"));
+    require(fusion_list->count() == effects::definitions().size() &&
+                fusion_list->item(0)->isHidden() &&
+                fusion_list->item(1)->isHidden() &&
+                !fusion_list->item(2)->isHidden() &&
+                fusion_list->item(3)->isHidden(),
             "Functions search did not filter the visual filter list.");
-    require(!functions_add->isEnabled(),
+    require(!fusion_add->isEnabled(),
             "Filtering must remain available while Add is disabled.");
-    functions_search->clear();
+    fusion_search->clear();
     require(palette.toggleAction()->shortcut() ==
                 QKeySequence(QStringLiteral("Shift+Space")),
             "Functions window shortcut default is incorrect.");

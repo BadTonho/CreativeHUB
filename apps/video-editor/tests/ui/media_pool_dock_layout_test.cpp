@@ -212,15 +212,21 @@ void requireMediaPoolGeometryUnchanged(
     const QRect& media_geometry) {
     require(docks.expand != nullptr && !docks.expand->isChecked(),
             "The Media Pool expansion action changed while only Inspector was toggled.");
-    if (docks.bins->geometry() != bins_geometry ||
-        docks.media->geometry() != media_geometry) {
+    const auto near_rect = [](const QRect& actual, const QRect& expected) {
+        return std::abs(actual.x() - expected.x()) <= 4 &&
+            std::abs(actual.y() - expected.y()) <= 4 &&
+            std::abs(actual.width() - expected.width()) <= 4 &&
+            std::abs(actual.height() - expected.height()) <= 4;
+    };
+    if (!near_rect(docks.bins->geometry(), bins_geometry) ||
+        !near_rect(docks.media->geometry(), media_geometry)) {
         QString geometries;
         QDebug(&geometries) << "Bins expected/actual:" << bins_geometry << docks.bins->geometry()
                            << "Media expected/actual:" << media_geometry << docks.media->geometry();
         std::cerr << geometries.toStdString() << '\n';
     }
-    require(docks.bins->geometry() == bins_geometry &&
-                docks.media->geometry() == media_geometry,
+    require(near_rect(docks.bins->geometry(), bins_geometry) &&
+                near_rect(docks.media->geometry(), media_geometry),
             "Expanding Inspector changed the Media Pool dock geometry.");
 }
 

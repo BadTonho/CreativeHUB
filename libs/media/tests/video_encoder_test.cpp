@@ -297,9 +297,15 @@ int main(int argc, char** argv)
         bool rejected_invalid_alpha_adapter = false;
         try {
             creative_suite::media::VideoEncodingSettings invalid_alpha;
+            invalid_alpha.container_name = container.name;
+            invalid_alpha.video_encoder_name = software_encoder;
+            const auto mp4_container = std::find_if(containers.begin(), containers.end(),
+                [](const auto& option) { return option.name == "mp4" && !option.video_encoders.empty(); });
+            if (mp4_container != containers.end()) {
+                invalid_alpha.container_name = mp4_container->name;
+                invalid_alpha.video_encoder_name = mp4_container->video_encoders.front().name;
+            }
             invalid_alpha.output_path = temporary_directory.path() / "invalid-alpha.mp4";
-            invalid_alpha.container_name = "mp4";
-            invalid_alpha.video_encoder_name = "libx264";
             invalid_alpha.profile = creative_suite::media::VideoOutputProfile::Ffv1LosslessAlpha;
             invalid_alpha.alpha_pixel_format_name = "gbrap";
             invalid_alpha.width = 32; invalid_alpha.height = 32;
