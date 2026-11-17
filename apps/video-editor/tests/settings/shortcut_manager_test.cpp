@@ -121,18 +121,22 @@ void verifyFunctionPalette(QSettings& settings) {
     require(functions_list->dragEnabled() &&
                 functions_list->dragDropMode() == QAbstractItemView::DragOnly,
             "Functions effects must support copy-only dragging.");
-    palette.setContext(effects::Workspace::Fusion, true);
+    ui::FunctionPalette fusion_palette(&main_window, shortcut_manager);
+    fusion_palette.setContext(effects::Workspace::Fusion, true);
+    auto* fusion_list = fusion_palette.dialog()->findChild<QListWidget*>(
+        QStringLiteral("functionsEffectList"));
+    require(fusion_list != nullptr, "Fusion Functions list is missing.");
     const QStringList fusion_effect_ids{
         QStringLiteral("video.grayscale"),
         QStringLiteral("video.brightness"),
         QStringLiteral("video.contrast"),
         QStringLiteral("video.saturation")};
     for (int index = 0; index < fusion_effect_ids.size(); ++index) {
-        auto* item = functions_list->item(index);
+        auto* item = fusion_list->item(index);
         require(item->data(Qt::UserRole).toString() == fusion_effect_ids[index] &&
                     item->flags().testFlag(Qt::ItemIsDragEnabled),
                 "Functions must expose the four draggable Fusion visual effects.");
-        auto* mime = functions_list->model()->mimeData({functions_list->indexFromItem(item)});
+        auto* mime = fusion_list->model()->mimeData({fusion_list->indexFromItem(item)});
         require(mime->hasFormat(ui::kEffectIdMimeType) &&
                     mime->data(ui::kEffectIdMimeType) ==
                         fusion_effect_ids[index].toUtf8(),
@@ -151,7 +155,6 @@ void verifyFunctionPalette(QSettings& settings) {
     require(!functions_add->isEnabled(),
             "Filtering must remain available while Add is disabled.");
     functions_search->clear();
-    palette.setContext(effects::Workspace::Edit, false);
     require(palette.toggleAction()->shortcut() ==
                 QKeySequence(QStringLiteral("Shift+Space")),
             "Functions window shortcut default is incorrect.");

@@ -278,7 +278,7 @@ void asynchronousReadbackParity(OpenGlFrameCompositor& gpu) {
         "empty OpenGL alpha output must be transparent");
     const auto reused = gpu.submitAsyncReadback(73, 51, second_layers);
     require(reused.status == OpenGlCompositionStatus::Complete,
-        "a collected PBO slot could not be reused");
+        "a collected PBO slot could not be reused (" + reused.operation + ": " + reused.cause + ")");
     const auto collection_failure = gpu.collectAsyncReadback(reused.ticket, {}, true);
     require(collection_failure.status == OpenGlCompositionStatus::Failed &&
         collection_failure.operation == "map-pbo",

@@ -271,6 +271,7 @@ int main(int argc, char** argv)
                     {
                         creative_suite::media::VideoEncoder writer(alpha_settings);
                         writer.writeVideo(alpha_source, 0);
+                        writer.writeVideo(alpha_source, 1);
                         writer.finish();
                     }
                     auto alpha_reader = creative_suite::media::VideoPlaybackSession::open(alpha_path);
