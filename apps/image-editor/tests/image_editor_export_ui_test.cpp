@@ -83,6 +83,8 @@ bool driveExportAction(
                 file_dialog->reject();
             } else if (save_button->isEnabled()) {
                 save_button->click();
+            } else {
+                QMetaObject::invokeMethod(file_dialog, "accept", Qt::QueuedConnection);
             }
             return;
         }

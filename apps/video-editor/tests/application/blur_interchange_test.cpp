@@ -73,8 +73,8 @@ void nativeAndEditing(x::Document d,const std::filesystem::path& dir) {
     std::atomic_bool cancel{false};check(application::ProjectOpenService{}.prepare(path,path,{},cancel).prepared.has_value(),"prepare Blur recovery/open");
     project::AutosaveManager autosave(dir/"autosave","blur");autosave.saveSnapshot(document,5);
     check(project::load(autosave.unsavedSnapshots()[0].path)==document,"Blur autosave");
-    QFile file(QString::fromStdU16String(path.u16string()));check(file.open(QIODevice::ReadOnly),"open native fixture");auto root=QJsonDocument::fromJson(file.readAll()).object();file.close();check(root["version"]==36,"native version");
-    for(int version:{30,37}) {root["version"]=version;check(file.open(QIODevice::WriteOnly|QIODevice::Truncate),"write old/future fixture");file.write(QJsonDocument(root).toJson());file.close();rejected([&]{(void)project::load(path);},"CSP legacy/future Blur refusal");}
+    QFile file(QString::fromStdU16String(path.u16string()));check(file.open(QIODevice::ReadOnly),"open native fixture");auto root=QJsonDocument::fromJson(file.readAll()).object();file.close();check(root["version"]==project::current_format_version,"native version");
+    for(int version:{30,project::current_format_version+1}) {root["version"]=version;check(file.open(QIODevice::WriteOnly|QIODevice::Truncate),"write old/future fixture");file.write(QJsonDocument(root).toJson());file.close();rejected([&]{(void)project::load(path);},"CSP legacy/future Blur refusal");}
     ui::FusionWorkspace workspace;QWidget host;workspace.createPanels(&host);
     timeline::TimelineClip clip;clip.clip_id=101;clip.kind=timeline::ClipKind::FusionComposition;clip.timeline_duration_frames=30;clip.node_graph=fusion::nodes::makeCompositionGraph();
     workspace.setSelection(&clip,{});workspace.setActive(true);int edits=0;
