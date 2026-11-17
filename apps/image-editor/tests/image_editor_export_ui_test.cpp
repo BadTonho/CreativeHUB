@@ -68,7 +68,7 @@ bool driveExportAction(
         if (auto* file_dialog = qobject_cast<QFileDialog*>(modal)) {
             file_dialog_was_seen = true;
             file_dialog->selectFile(output_path);
-            file_dialog->accept();
+            static_cast<QDialog*>(file_dialog)->accept();
             return;
         }
         if (auto* options_dialog =
