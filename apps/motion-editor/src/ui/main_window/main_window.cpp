@@ -14,6 +14,7 @@
 #include <QAction>
 #include <QCoreApplication>
 #include <QDesktopServices>
+#include <QDockWidget>
 #include <QKeySequence>
 #include <QLabel>
 #include <QMenu>

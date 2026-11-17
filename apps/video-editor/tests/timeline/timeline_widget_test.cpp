@@ -495,7 +495,9 @@ void testTimelineMultiSelection() {
 } // namespace
 
 int main(int argc, char* argv[]) {
-    qputenv("QT_QPA_PLATFORM", "offscreen");
+    if (qEnvironmentVariableIsEmpty("QT_QPA_PLATFORM")) {
+        qputenv("QT_QPA_PLATFORM", "offscreen");
+    }
     QApplication application(argc, argv);
 
     try {

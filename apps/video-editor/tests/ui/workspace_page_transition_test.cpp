@@ -45,6 +45,9 @@ int main(int argc, char* argv[]) {
 
     try {
         QMainWindow window;
+#if defined(Q_OS_UNIX) && !defined(Q_OS_MACOS)
+        window.setWindowFlags(window.windowFlags() | Qt::BypassWindowManagerHint);
+#endif
         window.resize(420, 260);
         window.move(140, 110);
         window.show();
