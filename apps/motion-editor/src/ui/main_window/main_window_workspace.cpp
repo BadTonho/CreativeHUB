@@ -412,6 +412,7 @@ void MainWindow::createWorkspace()
     timeline_->setPathKeyframeHandlers([this](model::LayerId layer,model::PathTarget target,std::int64_t frame){selectLayer(layer);pen_tool_->selectCurve(target,frame);},
         [this](model::LayerId layer,model::PathTarget target,std::int64_t from,std::int64_t to){finishPendingTransformEdit();if(!document_)return false;try{auto before=captureEditState();if(!document_->movePathKeyframe(target,from,to))return false;(void)recordCompositionEdit(std::move(before));selectLayer(layer);pen_tool_->selectCurve(target,to);updateDocumentState();refreshTimeline();syncTransformInspector();requestPreview();return true;}catch(const std::exception& e){reportDocumentError("move_path_keyframe",document_path_.value_or(std::filesystem::path{}),e);return false;}});
     auto* viewer_container=new QWidget(this);auto* viewer_layout=new QVBoxLayout(viewer_container);viewer_layout->setContentsMargins(0,0,0,0);viewer_layout->addWidget(pen_tool_->controls());viewer_layout->addWidget(viewer_,1);
+    delete std::exchange(workspace_, nullptr);
     workspace_ = new MotionWorkspace(
         this, viewer_container, media_pool_, inspector_, timeline_, curve_editor_panel_, timeline_);
     media_pool_dock_ = workspace_->mediaPoolDock();

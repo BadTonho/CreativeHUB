@@ -98,6 +98,23 @@ MotionWorkspace::MotionWorkspace(QMainWindow* window,
     });
 }
 
+MotionWorkspace::~MotionWorkspace()
+{
+    if (graph_editor_dock_ != nullptr) {
+        QObject::disconnect(graph_editor_dock_, nullptr, this, nullptr);
+    }
+    if (navigator_ != nullptr) {
+        QObject::disconnect(navigator_, nullptr, this, nullptr);
+    }
+    if (window_ != nullptr) {
+        QObject::disconnect(window_, nullptr, this, nullptr);
+    }
+    timeline_dock_ = nullptr;
+    graph_editor_dock_ = nullptr;
+    navigator_ = nullptr;
+    window_ = nullptr;
+}
+
 void MotionWorkspace::setGraphEditorRefreshHandler(std::function<void()> handler)
 {
     graph_editor_refresh_handler_ = std::move(handler);

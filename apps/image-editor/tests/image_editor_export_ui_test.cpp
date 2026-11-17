@@ -68,15 +68,7 @@ bool driveExportAction(
         if (auto* file_dialog = qobject_cast<QFileDialog*>(modal)) {
             file_dialog_was_seen = true;
             file_dialog->selectFile(output_path);
-            auto* buttons = file_dialog->findChild<QDialogButtonBox*>();
-            auto* save_button = buttons == nullptr
-                ? nullptr : buttons->button(QDialogButtonBox::Save);
-            if (save_button == nullptr) {
-                interaction_failed = true;
-                file_dialog->reject();
-            } else if (save_button->isEnabled()) {
-                save_button->click();
-            }
+            file_dialog->accept();
             return;
         }
         if (auto* options_dialog =

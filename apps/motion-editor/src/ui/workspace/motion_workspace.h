@@ -21,6 +21,7 @@ public:
                     QWidget* timeline,
                     QWidget* graph_editor,
                     TimelineNavigator* navigator);
+    ~MotionWorkspace() override;
 
     [[nodiscard]] QDockWidget* mediaPoolDock() const noexcept { return media_pool_dock_; }
     [[nodiscard]] QDockWidget* inspectorDock() const noexcept { return inspector_dock_; }

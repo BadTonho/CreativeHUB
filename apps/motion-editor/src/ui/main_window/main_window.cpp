@@ -379,6 +379,7 @@ MainWindow::MainWindow(QWidget* parent,
 }
 MainWindow::~MainWindow()
 {
+    delete std::exchange(workspace_, nullptr);
     delete std::exchange(pen_tool_,nullptr);
     cancelScaleDrag();
     if (viewer_) viewer_->setScaleDragHandlers({});
