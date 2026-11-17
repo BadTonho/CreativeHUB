@@ -589,6 +589,13 @@ void verifyEffectsPreviewSideLayout() {
             const int persisted_side_width =
                 QSettings().value("workspace/preview_side_toolbox_width").toInt() +
                 QSettings().value("workspace/preview_side_effects_width").toInt();
+            if (!(reopened_effects_width > reopened_initial_target + 20 &&
+                  persisted_side_width > reopened_initial_target + 20)) {
+                std::cerr << "Effects side-layout reopened_effects_width=" << reopened_effects_width
+                          << " persisted_side_width=" << persisted_side_width
+                          << " reopened_initial_target=" << reopened_initial_target
+                          << " reopened_width=" << reopened.width() << "\n";
+            }
             require(reopened_effects_width > reopened_initial_target + 20 &&
                         persisted_side_width > reopened_initial_target + 20,
                     "The custom Effects width must persist when reopening the side Preview layout.");
