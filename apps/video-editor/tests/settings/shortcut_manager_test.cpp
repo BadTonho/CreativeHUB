@@ -412,7 +412,13 @@ void verifyFunctionCatalog() {
         std::unique_ptr<QMimeData> mime(list->model()->mimeData({list->indexFromItem(item)}));
         return mime && mime->data(ui::kEffectIdMimeType) == item->data(Qt::UserRole).toString().toUtf8();
     };
-    require(visibleCount() == 11, "Functions must initially show the complete Edit catalog.");
+    const auto expected_edit_count = std::count_if(
+        effects::definitions().cbegin(), effects::definitions().cend(),
+        [](const auto& definition) {
+            return effects::isAvailable(definition.id, effects::Workspace::Edit);
+        });
+    require(visibleCount() == expected_edit_count,
+            "Functions must initially show the complete Edit catalog.");
     palette.setContext(effects::Workspace::Edit, true);
     for (const auto* id : {"video.background", "video.adjustment_clip", "video.fusion_composition", "text.text",
                            "transitions.cross_dissolve", "transitions.fade_to_black"}) {

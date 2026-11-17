@@ -2490,9 +2490,12 @@ void MainWindow::applyExpandedDockLayout(
     const int media_pool_width = std::clamp(
         media_pool_width_override.value_or(current_media_width),
         280, std::max(280, width() / 2));
+    const int minimum_inspector_width = inspector_width_override.has_value()
+        ? std::min(280, *inspector_width_override)
+        : 280;
     const int inspector_width = std::clamp(
         inspector_width_override.value_or(current_inspector_width),
-        280, std::max(280, width() / 2));
+        minimum_inspector_width, std::max(minimum_inspector_width, width() / 2));
 
     if (media_pool_width_save_timer_ != nullptr) {
         media_pool_width_save_timer_->stop();
