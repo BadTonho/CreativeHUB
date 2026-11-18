@@ -56,9 +56,9 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: vcpkg-binary-cache
-          key: vcpkg-${{ runner.os }}-${{ env.VCPKG_TRIPLET }}-${{ env.VCPKG_BASELINE }}-${{ hashFiles('vcpkg.json', 'cmake/vcpkg-triplets/*.cmake') }}
+          key: vcpkg-v2-${{ runner.os }}-${{ env.VCPKG_TRIPLET }}-${{ env.VCPKG_BASELINE }}-${{ hashFiles('vcpkg.json', 'cmake/vcpkg-triplets/*.cmake') }}
           restore-keys: |
-            vcpkg-${{ runner.os }}-${{ env.VCPKG_TRIPLET }}-${{ env.VCPKG_BASELINE }}-
+            vcpkg-v2-${{ runner.os }}-${{ env.VCPKG_TRIPLET }}-${{ env.VCPKG_BASELINE }}-
 
       - name: Ensure vcpkg binary cache directory exists
         shell: bash
@@ -111,9 +111,9 @@ jobs:
           -DVCPKG_HOST_TRIPLET="$VCPKG_TRIPLET"
           -DVCPKG_MANIFEST_FEATURES=vulkan
 
-      # Saved even when the project build below fails, so a later run reuses the dependencies.
+      # Saved only after configure succeeds, so an aborted configure never poisons the cache key.
       - name: Save the vcpkg binary cache
-        if: always() && steps.vcpkg-cache.outputs.cache-hit != 'true' && hashFiles('vcpkg-binary-cache/**') != ''
+        if: steps.vcpkg-cache.outputs.cache-hit != 'true' && hashFiles('vcpkg-binary-cache/**') != ''
         uses: actions/cache/save@v4
         with:
           path: vcpkg-binary-cache
