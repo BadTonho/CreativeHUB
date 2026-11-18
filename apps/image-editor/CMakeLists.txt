@@ -264,13 +264,21 @@ if(WIN32)
 
     if(NOT CREATIVE_SUITE_QT_IMAGEFORMATS_PLUGIN_DIR)
         set(_qt_imageformats_candidates
+            "${QT_IMAGE_BIN_DIR}/../Qt6/plugins/imageformats"
             "${QT_IMAGE_BIN_DIR}/../plugins/imageformats")
         if(VCPKG_INSTALLED_DIR)
+            if(VCPKG_TARGET_TRIPLET)
+                list(APPEND _qt_imageformats_candidates
+                    "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/Qt6/plugins/imageformats"
+                    "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/plugins/imageformats")
+            endif()
             list(APPEND _qt_imageformats_candidates
+                "${VCPKG_INSTALLED_DIR}/Qt6/plugins/imageformats"
                 "${VCPKG_INSTALLED_DIR}/plugins/imageformats")
         endif()
         foreach(_prefix IN LISTS CMAKE_PREFIX_PATH)
             list(APPEND _qt_imageformats_candidates
+                "${_prefix}/Qt6/plugins/imageformats"
                 "${_prefix}/plugins/imageformats")
         endforeach()
         foreach(_candidate IN LISTS _qt_imageformats_candidates)
