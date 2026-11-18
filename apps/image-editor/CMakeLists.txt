@@ -275,16 +275,14 @@ if(WIN32)
         endforeach()
         foreach(_candidate IN LISTS _qt_imageformats_candidates)
             if(EXISTS "${_candidate}/qwebp.dll"
-                    AND EXISTS "${_candidate}/qtiff.dll"
-                    AND EXISTS "${_candidate}/qwebpd.dll"
-                    AND EXISTS "${_candidate}/qtiffd.dll")
+                    AND EXISTS "${_candidate}/qtiff.dll")
                 set(CREATIVE_SUITE_QT_IMAGEFORMATS_PLUGIN_DIR "${_candidate}")
                 break()
             endif()
         endforeach()
     endif()
 
-    foreach(_plugin IN ITEMS qwebp.dll qtiff.dll qwebpd.dll qtiffd.dll)
+    foreach(_plugin IN ITEMS qwebp.dll qtiff.dll)
         if(NOT EXISTS "${CREATIVE_SUITE_QT_IMAGEFORMATS_PLUGIN_DIR}/${_plugin}")
             message(FATAL_ERROR
                 "Required Qt image format plugin '${_plugin}' was not found in "
@@ -294,13 +292,19 @@ if(WIN32)
         endif()
     endforeach()
 
+    set(_creative_suite_has_debug_qt_imageformats OFF)
+    if(EXISTS "${CREATIVE_SUITE_QT_IMAGEFORMATS_PLUGIN_DIR}/qwebpd.dll"
+            AND EXISTS "${CREATIVE_SUITE_QT_IMAGEFORMATS_PLUGIN_DIR}/qtiffd.dll")
+        set(_creative_suite_has_debug_qt_imageformats ON)
+    endif()
+
     function(creative_suite_deploy_qt_imageformat_plugins target_name)
         add_custom_command(TARGET "${target_name}" POST_BUILD
             COMMAND "${CMAKE_COMMAND}" -E make_directory
                 "$<TARGET_FILE_DIR:${target_name}>/imageformats"
             COMMAND "${CMAKE_COMMAND}" -E copy_if_different
-                "$<IF:$<CONFIG:Debug>,${CREATIVE_SUITE_QT_IMAGEFORMATS_PLUGIN_DIR}/qwebpd.dll,${CREATIVE_SUITE_QT_IMAGEFORMATS_PLUGIN_DIR}/qwebp.dll>"
-                "$<IF:$<CONFIG:Debug>,${CREATIVE_SUITE_QT_IMAGEFORMATS_PLUGIN_DIR}/qtiffd.dll,${CREATIVE_SUITE_QT_IMAGEFORMATS_PLUGIN_DIR}/qtiff.dll>"
+                "$<IF:$<AND:$<CONFIG:Debug>,$<BOOL:${_creative_suite_has_debug_qt_imageformats}>>,${CREATIVE_SUITE_QT_IMAGEFORMATS_PLUGIN_DIR}/qwebpd.dll,${CREATIVE_SUITE_QT_IMAGEFORMATS_PLUGIN_DIR}/qwebp.dll>"
+                "$<IF:$<AND:$<CONFIG:Debug>,$<BOOL:${_creative_suite_has_debug_qt_imageformats}>>,${CREATIVE_SUITE_QT_IMAGEFORMATS_PLUGIN_DIR}/qtiffd.dll,${CREATIVE_SUITE_QT_IMAGEFORMATS_PLUGIN_DIR}/qtiff.dll>"
                 "$<TARGET_FILE_DIR:${target_name}>/imageformats"
             VERBATIM
         )
