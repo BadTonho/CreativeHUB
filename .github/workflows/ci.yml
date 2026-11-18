@@ -97,6 +97,7 @@ jobs:
           "-DCMAKE_TOOLCHAIN_FILE=$env:VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake"
           "-DVCPKG_OVERLAY_TRIPLETS=$env:GITHUB_WORKSPACE/cmake/vcpkg-triplets"
           "-DVCPKG_TARGET_TRIPLET=$env:VCPKG_TRIPLET"
+          "-DVCPKG_HOST_TRIPLET=$env:VCPKG_TRIPLET"
           -DVCPKG_MANIFEST_FEATURES=vulkan
 
       - name: Configure on macOS and Linux
@@ -107,6 +108,7 @@ jobs:
           -DCMAKE_TOOLCHAIN_FILE="$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake"
           -DVCPKG_OVERLAY_TRIPLETS="$GITHUB_WORKSPACE/cmake/vcpkg-triplets"
           -DVCPKG_TARGET_TRIPLET="$VCPKG_TRIPLET"
+          -DVCPKG_HOST_TRIPLET="$VCPKG_TRIPLET"
           -DVCPKG_MANIFEST_FEATURES=vulkan
 
       # Saved even when the project build below fails, so a later run reuses the dependencies.
