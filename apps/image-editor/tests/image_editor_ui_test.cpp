@@ -4455,6 +4455,7 @@ int main(int argc, char* argv[]) {
                 return;
             }
             clear->click();
+            processImageEditorEvents();
             const bool is_empty = editor->keySequence().isEmpty();
             buttons->button(QDialogButtonBox::Ok)->click();
             if (is_empty) processImageEditorEvents();
