@@ -134,9 +134,13 @@ void verifyInspectorScrollArea(QScrollArea* scroll_area, const char* name) {
     const auto original_minimum_height = content->minimumHeight();
     content->setMinimumHeight(std::max(
         original_minimum_height, scroll_area->viewport()->height() + 300));
-    QApplication::processEvents();
-
+    content->updateGeometry();
     auto* vertical_bar = scroll_area->verticalScrollBar();
+    for (int i = 0; i < 20; ++i) {
+        QApplication::processEvents();
+        if (vertical_bar->maximum() > 0) break;
+        QThread::msleep(10);
+    }
     require(vertical_bar->maximum() > 0,
             std::string(name) + " did not expose overflow through its scrollbar.");
     vertical_bar->setValue(0);
