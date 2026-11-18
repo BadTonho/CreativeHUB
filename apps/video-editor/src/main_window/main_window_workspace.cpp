@@ -2537,12 +2537,8 @@ void MainWindow::applyExpandedDockLayout(
                      media_pool_width + restored_inspector_width -
                      inspector_width);
         resizeDocks(
-            {bins_dock_, preview_dock_},
-            {media_pool_width, target_restored_preview_width},
-            Qt::Horizontal);
-        resizeDocks(
-            {preview_dock_, inspector_dock_},
-            {target_restored_preview_width, inspector_width},
+            {bins_dock_, preview_dock_, inspector_dock_},
+            {media_pool_width, target_restored_preview_width, inspector_width},
             Qt::Horizontal);
         workspace_expansion_restore_layout_state_.clear();
         settings.remove("workspace/dock_expansion_restore_layout_state");
