@@ -95,8 +95,17 @@ which triggers the duplicate-designated-initializer diagnostic. A local vcpkg
 overlay that extends `generate-errno-list.sh` to filter those two aliases
 (like the existing parisc aliases) let the `libsystemd` port build, but the
 full four-application build from that overlay is **not validated yet**.
-Treat this as a provisional workaround, not a supported build configuration;
-bumping the pinned baseline or fixing the port upstream remains undecided.
+Treat this as a provisional workaround, not a supported build configuration.
+The upstream fix is known: systemd PR
+[#40806](https://github.com/systemd/systemd/pull/40806) added those two aliases
+to the `generate-errno-list.sh` filter and landed in systemd 260.0. In vcpkg,
+PR [#51570](https://github.com/microsoft/vcpkg/pull/51570) removed the
+`-Werror=override-init` flag for `libsystemd` 257.8#2, and the current port is
+260.2#1; vcpkg issue [#52642](https://github.com/microsoft/vcpkg/issues/52642)
+tracks the older-baseline reports and recommends updating the baseline. Moving
+this repository's pinned baseline to a fixed `libsystemd` version is therefore
+the likely durable resolution, but that decision belongs to the maintainers
+and is not made here.
 
 The macOS job is paused because no macOS environment is available to reproduce
 its failures (the vcpkg `qtbase` build fails on `__yield`). macOS build and test validation
