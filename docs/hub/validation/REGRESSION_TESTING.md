@@ -1,5 +1,25 @@
 # Hub Regression Testing
 
+## Hub test configuration without the shared video media library
+
+`creative_suite_deploy_media_runtime` is defined in `libs/media/CMakeLists.txt`,
+which is added only when `BUILD_VIDEO_MEDIA_LIBRARY` is enabled. The Hub backup
+format test must still configure when the Hub is built with an editor but
+without the media library. Reproduce the check on Linux with:
+
+```bash
+cmake -S . -B build-check -DBUILD_CREATIVE_HUB=ON -DBUILD_IMAGE_EDITOR=ON \
+  -DBUILD_VIDEO_EDITOR=OFF -DBUILD_MOTION_EDITOR=OFF \
+  -DBUILD_VIDEO_MEDIA_LIBRARY=OFF -DBUILD_TESTING=ON
+QT_QPA_PLATFORM=offscreen ctest --test-dir build-check \
+  -R hub-backup-format-test --output-on-failure
+```
+
+The configure step previously failed with `Unknown CMake command
+"creative_suite_deploy_media_runtime"`. Verify the same test passes in the full
+build where `BUILD_VIDEO_MEDIA_LIBRARY=ON`; the runtime deployment must still
+run there, including the Windows FFmpeg DLL copy.
+
 ## Video Editor CSP v44 clip and track audio processing backup
 
 `hub-backup-format-test` saves a real CSP v44 document containing a clip EQ,
