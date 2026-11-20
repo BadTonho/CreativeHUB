@@ -133,7 +133,12 @@ if(BUILD_IMAGE_EDITOR OR BUILD_VIDEO_EDITOR OR BUILD_MOTION_EDITOR)
             ${HUB_VIDEO_SOURCE_DIR}/timeline/timeline_transform.cpp)
         target_link_libraries(hub-backup-format-test PRIVATE creative-suite::effects)
     endif()
-    creative_suite_deploy_media_runtime(hub-backup-format-test)
+    if(COMMAND creative_suite_deploy_media_runtime)
+        # The runtime-deployment helper is defined in libs/media, which is only
+        # added when BUILD_VIDEO_MEDIA_LIBRARY is enabled. Image-only or
+        # Hub-only test trees have no media runtime to deploy.
+        creative_suite_deploy_media_runtime(hub-backup-format-test)
+    endif()
     add_creative_suite_test(NAME hub-backup-format-test COMMAND hub-backup-format-test)
 endif()
 
