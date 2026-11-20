@@ -57,7 +57,7 @@ the left and the current Viewer on the right; Wipe uses a normalized vertical
 divider with a slider and drag interaction. Off remains the default. Leaving
 Color hides the comparison visually and returning restores the page's temporary
 mode and reference. Selection and comparison do not change the clip, Viewer
-source, Timeline, project dirty state, or saved project data. The separate Grade Versions panel saves, applies, renames,
+source, Timeline, project dirty state, or saved project data. The separate Grade Versions panel (temporarily hidden in the page, to be shown again, together with the Gallery) saves, applies, renames,
 and removes named graph snapshots for the active clip. The clip context menu
 copies the current graph and applies it to another clip; this clipboard is
 temporary and clears when a project is opened or created. Applying a grade does

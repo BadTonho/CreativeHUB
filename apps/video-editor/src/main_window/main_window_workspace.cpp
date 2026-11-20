@@ -964,6 +964,13 @@ void MainWindow::refreshColorSelection() {
     };
     std::vector<OrderedClip> ordered;
     const auto& tracks = timeline_model_.tracks();
+    // 1-based video track numbers (V1, V2, ...) for the clip strip and timeline.
+    std::vector<int> video_track_numbers(tracks.size(), 0);
+    int next_video_track_number = 0;
+    for (std::size_t index = 0; index < tracks.size(); ++index) {
+        if (tracks[index].kind == timeline::TrackKind::Video)
+            video_track_numbers[index] = ++next_video_track_number;
+    }
     for (std::size_t track_index = 0; track_index < tracks.size(); ++track_index) {
         for (const auto& clip : tracks[track_index].clips) {
             if (!timeline::supportsClipEffects(clip.kind)) continue;
@@ -988,7 +995,8 @@ void MainWindow::refreshColorSelection() {
             ordered.push_back({clip.timeline_start_frame, track_index,
                 {clip.clip_id, std::move(name), std::move(thumbnail),
                     clip.color_grade_versions, clip.timeline_start_frame,
-                    clip.timeline_duration_frames}});
+                    clip.timeline_duration_frames,
+                    std::max(1, video_track_numbers[track_index])}});
         }
     }
     std::sort(ordered.begin(), ordered.end(), [](const OrderedClip& a, const OrderedClip& b) {
@@ -1009,7 +1017,12 @@ void MainWindow::refreshColorSelection() {
         }
     }
     color_workspace_->setCanApplyCopiedGrade(copied_color_grade_.has_value());
+    const auto timeline_rate = timeline_model_.frameRate();
+    color_workspace_->setTimelineFrameRate(
+        static_cast<int>(timeline_rate.numerator), static_cast<int>(timeline_rate.denominator));
     color_workspace_->setClips(std::move(clips), selected_id, std::move(graph));
+    if (editUi().timeline != nullptr)
+        color_workspace_->setPlayheadFrame(static_cast<qint64>(editUi().timeline->playheadFrame()));
 
     std::vector<ui::ColorWorkspace::StillItem> stills;
     stills.reserve(editor_session_.colorGalleryStills().size());

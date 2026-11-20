@@ -1,5 +1,6 @@
 #include "workspaces/color/ui/color_workspace.h"
 #include "workspaces/color/ui/color_node_canvas.h"
+#include "workspaces/color/ui/color_timeline_view.h"
 #include "workspaces/color/ui/info_page.h"
 #include "workspaces/color/evaluation/color_graph_evaluator.h"
 #include "ui/media_browser/media_drag_mime.h"
@@ -15,13 +16,14 @@
 #include <QDragEnterEvent>
 #include <QDragMoveEvent>
 #include <QDropEvent>
-#include <QElapsedTimer>
 #include <QInputDialog>
 #include <QKeyEvent>
 #include <QLabel>
+#include <QLayout>
 #include <QDockWidget>
 #include <QListWidget>
 #include <QMainWindow>
+#include <QScrollArea>
 #include <QSpinBox>
 #include <QStackedWidget>
 #include <QMenu>
@@ -797,8 +799,8 @@ int main(int argc, char** argv) {
             workspace.findChild<QPushButton*>("colorToolButton2")->click();
             auto* match_page = workspace.findChild<QWidget*>("colorColorMatchPage");
             auto* motion_pages = workspace.findChild<QStackedWidget*>("colorMotionEffectsPages");
-            require(match_page && motion_pages && motion_pages->currentWidget() == match_page &&
-                        motion_pages->currentWidget() != raw_page,
+            require(match_page && motion_pages && motion_pages->currentWidget()->isAncestorOf(match_page) &&
+                        !motion_pages->currentWidget()->isAncestorOf(raw_page),
                     "Motion Effects button 2 must select the Color Match page.");
             for (int i = 1; i <= 24; ++i)
                 require(match_page->findChild<QWidget*>(
@@ -1763,6 +1765,95 @@ int main(int argc, char** argv) {
             info_widget->restoreDefaults();
             require(info_text("ClipFrameRate") == QString::fromUtf8("–"),
                     "InfoPage::restoreDefaults must restore the placeholders.");
+            // Middle section: clip strip, real timeline and hidden Grade Versions.
+            {
+                require(ui::formatFrameTimecode(0, 60, 1) == "00:00:00:00" &&
+                            ui::formatFrameTimecode((3723LL * 60) + 4, 60, 1) == "01:02:03:04" &&
+                            ui::formatFrameTimecode(45, 30000, 1001) == "00:00:01:15" &&
+                            ui::formatFrameTimecode(45, 0, 0) == "00:00:01:15" &&
+                            ui::formatFrameTimecode(-5, 60, 1) == "00:00:00:00",
+                        "Frame timecodes must be HH:MM:SS:FF at the rounded frame rate, with a 30 fps fallback.");
+                ui::ColorWorkspace middle;
+                middle.setTimelineFrameRate(60, 1);
+                ui::ColorWorkspace::ClipItem clip_a;
+                clip_a.id = 11;
+                clip_a.name = QStringLiteral("Clip A");
+                clip_a.timeline_start_frame = 0;
+                clip_a.duration_frames = 120;
+                clip_a.track_number = 1;
+                ui::ColorWorkspace::ClipItem clip_b;
+                clip_b.id = 12;
+                clip_b.name = QStringLiteral("Clip B");
+                clip_b.timeline_start_frame = 300;
+                clip_b.duration_frames = 180;
+                clip_b.track_number = 2;
+                timeline::ClipId clicked_clip = 0;
+                middle.setClipSelectedHandler([&](timeline::ClipId id) { clicked_clip = id; });
+                middle.setClips({clip_a, clip_b}, 12, color::makePassthroughGraph());
+                middle.setPlayheadFrame(90);
+
+                auto* middle_strip = middle.findChild<QListWidget*>("colorClipStrip");
+                require(middle_strip && middle_strip->count() == 2 && middle_strip->currentRow() == 1 &&
+                            middle_strip->item(0)->data(Qt::UserRole + 1).toString() == "00:00:00:00" &&
+                            middle_strip->item(1)->data(Qt::UserRole + 1).toString() == "00:00:05:00" &&
+                            middle_strip->item(0)->data(Qt::UserRole + 2).toString() == "V1" &&
+                            middle_strip->item(1)->data(Qt::UserRole + 2).toString() == "V2",
+                        "The clip strip must show each clip's start timecode and track and select the active clip.");
+                auto* middle_timeline = middle.findChild<QWidget*>("colorTimelineView");
+                require(middle_timeline && middle_timeline->property("clipCount").toInt() == 2 &&
+                            middle_timeline->property("trackCount").toInt() == 2 &&
+                            middle_timeline->property("selectedClip").toULongLong() == 12 &&
+                            middle_timeline->property("playheadFrame").toLongLong() == 90,
+                        "The Color timeline must show the project's clips, tracks, selection and playhead.");
+                // The strip, the Gallery and the timeline form one dock, in that order.
+                auto* timeline_dock = middle.findChild<QDockWidget*>("colorTimelineDock");
+                require(timeline_dock && timeline_dock->windowTitle() == "Timeline" &&
+                            timeline_dock->features().testFlag(QDockWidget::DockWidgetClosable) &&
+                            timeline_dock->features().testFlag(QDockWidget::DockWidgetMovable) &&
+                            timeline_dock->features().testFlag(QDockWidget::DockWidgetFloatable),
+                        "The Color page must have a movable, closable, floatable Timeline dock.");
+                auto* gallery_panel_widget = middle.findChild<QWidget*>("colorGalleryPanel");
+                require(timeline_dock->isAncestorOf(middle_strip) && timeline_dock->isAncestorOf(middle_timeline) &&
+                            gallery_panel_widget && !timeline_dock->isAncestorOf(gallery_panel_widget) &&
+                            !gallery_panel_widget->isVisible() &&
+                            middle.findChild<QPushButton*>("colorCaptureStillButton"),
+                        "The Timeline dock must hold only the clip strip and the timeline; the Gallery is hidden but intact.");
+                auto* dock_content = timeline_dock->findChild<QWidget*>("colorTimelineDockContent");
+                require(dock_content, "The Timeline dock must wrap its content in a scroll area.");
+                auto* dock_layout = dock_content->layout();
+                require(dock_layout && dock_layout->count() == 2 &&
+                            dock_layout->itemAt(0)->widget() == middle_strip &&
+                            dock_layout->itemAt(1)->widget() == middle_timeline,
+                        "Inside the Timeline dock the clip strip must sit directly above the timeline.");
+                auto* dock_scroll = timeline_dock->findChild<QScrollArea*>("colorTimelineDockScroll");
+                require(dock_scroll && dock_scroll->horizontalScrollBarPolicy() == Qt::ScrollBarAlwaysOff,
+                        "The Timeline dock must not scroll sideways.");
+
+                // Clicking a clip block selects it: geometry mirrors ColorTimelineView.
+                middle_timeline->resize(608, middle_timeline->height());
+                const double plot_width = middle_timeline->width() - 30.0 - 8.0;
+                const double pixels_per_frame = plot_width / 480.0;  // total = end of clip B
+                const QPointF on_clip_a(30.0 + 60.0 * pixels_per_frame, 24.0 + 14.0);
+                QMouseEvent timeline_press(QEvent::MouseButtonPress, on_clip_a, on_clip_a, Qt::LeftButton,
+                    Qt::LeftButton, Qt::NoModifier);
+                QApplication::sendEvent(middle_timeline, &timeline_press);
+                require(clicked_clip == 11, "Clicking a clip on the Color timeline must select that clip.");
+                clicked_clip = 0;
+                const QPointF empty_space(30.0 + 200.0 * pixels_per_frame, 24.0 + 14.0);
+                QMouseEvent empty_press(QEvent::MouseButtonPress, empty_space, empty_space, Qt::LeftButton,
+                    Qt::LeftButton, Qt::NoModifier);
+                QApplication::sendEvent(middle_timeline, &empty_press);
+                require(clicked_clip == 0, "Clicking empty timeline space must not select a clip.");
+
+                middle.setClips({}, 0, color::makePassthroughGraph());
+                require(middle_timeline->property("clipCount").toInt() == 0 &&
+                            middle_timeline->property("trackCount").toInt() == 1,
+                        "An empty project must show an empty timeline with one track row.");
+                auto* versions_panel = middle.findChild<QWidget*>("colorGradeVersionsPanel");
+                require(versions_panel && versions_panel->isHidden() &&
+                            middle.findChild<QPushButton*>("colorSaveGradeVersionButton"),
+                        "Grade Versions must be hidden but still present.");
+            }
             workspace.findChild<QPushButton*>("colorToolButton1")->click();
         }
         auto* capture_button = workspace.findChild<QPushButton*>("colorCaptureStillButton");

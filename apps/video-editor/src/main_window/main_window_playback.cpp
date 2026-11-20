@@ -1110,6 +1110,11 @@ void MainWindow::commitTimelineClipActivation(
         fusion_workspace_->setTimelinePlayheadFrame(
             clip.timeline_start_frame + frame_index);
     }
+    if (color_workspace_ != nullptr && frame_index >= 0 &&
+        clip.timeline_start_frame <= std::numeric_limits<std::int64_t>::max() - frame_index) {
+        color_workspace_->setPlayheadFrame(
+            static_cast<qint64>(clip.timeline_start_frame + frame_index));
+    }
     if (!preserve_timeline_playhead) {
         preserved_timeline_playhead_frame_.reset();
     }
@@ -1375,6 +1380,8 @@ void MainWindow::handlePlaybackPosition(
         fusion_workspace_->setTimelinePlayheadFrame(
             static_cast<std::int64_t>(event.timeline_frame));
     }
+    if (color_workspace_ != nullptr)
+        color_workspace_->setPlayheadFrame(static_cast<qint64>(event.timeline_frame));
     updatePlaybackStatus();
 }
 

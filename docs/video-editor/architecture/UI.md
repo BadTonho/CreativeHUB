@@ -3,7 +3,8 @@
 ## Color workspace
 
 The Color selector opens a central page on demand and moves the shared Viewer
-there. Its clip strip selects visual Timeline clips; the node canvas shows the
+there. Its clip strip selects visual Timeline clips; under it a compact timeline
+shows the same clips on their video tracks; the node canvas shows the
 per-clip correction graph. Drag nodes to arrange them, connect ports to change
 processing, middle-drag to pan, and edit mixer weights. The effect-type selector
 and Add Effect, Add Branch, On/Off, and Remove controls are temporarily hidden
@@ -34,7 +35,8 @@ Color restores the previous dock arrangement. See the
 [Color roadmap](../COLOR_WORKSPACE_ROADMAP.md).
 
 A bottom dock area sits above the lower controls and scopes area of the Color
-page: an embedded `QMainWindow` (`colorBottomDockHost`) with three child docks.
+page: an embedded `QMainWindow` (`colorBottomDockHost`) with a **Timeline** dock
+(`colorTimelineDock`, described below) spanning the full width above three child docks.
 Each dock owns its row of buttons (`colorToolButton1` to `colorToolButton19`), so
 the buttons travel with the dock: Motion Effects (6 buttons, left), Sizing - Input
 Sizing (10, centered) and Keyframes (3, right). The docks are movable, closable
@@ -65,6 +67,36 @@ list with its source clip and Timeline frame. Rename and Remove affect the
 project-owned list; selecting a still does not replace the Viewer. GPU
 readback and reduced-quality full-canvas capture run through the playback
 worker. Missing sidecar PNGs display as unavailable items.
+
+The page holds the transport buttons above the dock area. The Timeline dock
+(`colorTimelineDock`) contains only the clip strip and, directly under it, the
+timeline, as in the reference layout; it never scrolls sideways. The Gallery (stills)
+and Grade Versions panels are temporarily out of the dock, in a hidden host
+(`colorHiddenGalleryHost`) with all their controls and wiring intact, until the
+maintainer decides where they go. Like the other docks it is
+movable, closable and floatable; right-clicking a dock title bar reopens it. The content
+of every dock in this area scrolls when the dock is smaller than its content, so no
+dock sets a minimum height for the page and docks cannot overlap each other. The dock
+area takes three fifths of the page height beside the Viewer and node canvas (two
+fifths); the Timeline dock starts at about 360 px and the three docks below it at
+about 200 px, and the three start with equal widths. The pages of the three child docks
+are built when their button is first clicked (the first page of each dock at once), so
+opening the Color page does not construct every page. Each clip-strip tile has a header with the clip
+number, its start timecode (`HH:MM:SS:FF` at the project frame rate) and its video
+track (V1, V2, ...), the thumbnail with a red frame on the selected clip, and the clip
+name underneath; the strip has no frame of its own. The timeline under it
+(`colorTimelineView`) is read-only: a timecode ruler with tick lines across the whole
+width (a 10-second ruler while the project has no clips), one row per video track
+labeled V1, V2, ..., the clips as thin full-length bars with the selected one outlined
+in red, and a red playhead that follows the timeline playhead
+and playback position. Clicking a clip block selects that clip, like the strip; it
+does not seek, and the shared Edit timeline stays hidden on this page. Only the first
+six track rows are drawn. The Previous frame, Play / Pause and Next frame buttons are
+kept as they are and are planned to move elsewhere.
+
+The Grade Versions panel is temporarily hidden at the maintainer's request; its
+controls and wiring are intact and it is to be shown again. Until then, the
+description below applies once it is visible.
 
 Grade Versions is a separate panel for the selected clip. Save Version stores
 the current graph snapshot; Apply Version, Rename Version, and Remove Version

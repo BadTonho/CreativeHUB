@@ -3,6 +3,7 @@
 #include "ui/effects/effects_catalog.h"
 #include "workspaces/color/ui/blur_page.h"
 #include "workspaces/color/ui/camera_raw_page.h"
+#include "workspaces/color/ui/color_timeline_view.h"
 #include "workspaces/color/ui/chroma_warp_page.h"
 #include "workspaces/color/ui/color_match_page.h"
 #include "workspaces/color/ui/color_slice_page.h"
@@ -60,6 +61,7 @@
 #include <QSignalBlocker>
 #include <QSplitter>
 #include <QSlider>
+#include <QStyledItemDelegate>
 #include <QStackedWidget>
 #include <QThreadPool>
 #include <QTimer>
@@ -69,6 +71,8 @@
 
 #include <algorithm>
 #include <array>
+#include <map>
+#include <memory>
 #include <cmath>
 #include <cstdint>
 #include <cstring>
@@ -1113,6 +1117,76 @@ private:
 
 }  // namespace
 
+namespace {
+
+constexpr int kClipTimecodeRole = Qt::UserRole + 1;
+constexpr int kClipTrackRole = Qt::UserRole + 2;
+constexpr int kClipTileWidth = 132;
+constexpr int kClipTileHeight = 122;
+
+// Paints each clip tile like a color-grading strip: a header with the clip
+// number, start timecode and track, the thumbnail (red frame when selected) and
+// the clip name underneath.
+class ClipStripDelegate final : public QStyledItemDelegate {
+public:
+    using QStyledItemDelegate::QStyledItemDelegate;
+
+    void paint(QPainter* painter, const QStyleOptionViewItem& option,
+        const QModelIndex& index) const override {
+        painter->save();
+        painter->setRenderHint(QPainter::Antialiasing);
+        const QRect tile = option.rect.adjusted(2, 2, -2, -2);
+        const bool selected = option.state & QStyle::State_Selected;
+
+        // Header: number box, start timecode and track label.
+        const QRect number_box(tile.left(), tile.top(), 24, 16);
+        painter->setPen(QPen(QColor("#6b7684"), 1.0));
+        painter->setBrush(QColor("#14181e"));
+        painter->drawRoundedRect(number_box, 3, 3);
+        QFont bold = painter->font();
+        bold.setBold(true);
+        painter->setFont(bold);
+        painter->setPen(QColor("#e6ebf0"));
+        painter->drawText(number_box, Qt::AlignCenter,
+            QStringLiteral("%1").arg(index.row() + 1, 2, 10, QLatin1Char('0')));
+        painter->drawText(QRect(number_box.right() + 5, tile.top(), 86, 16),
+            Qt::AlignLeft | Qt::AlignVCenter, index.data(kClipTimecodeRole).toString());
+        QFont regular = painter->font();
+        regular.setBold(false);
+        painter->setFont(regular);
+        painter->setPen(QColor("#8a93a0"));
+        painter->drawText(QRect(tile.right() - 24, tile.top(), 24, 16),
+            Qt::AlignRight | Qt::AlignVCenter, index.data(kClipTrackRole).toString());
+
+        // Thumbnail with a red frame around the selected clip.
+        const QRect thumb(tile.left(), tile.top() + 20, tile.width(), 66);
+        painter->setPen(QPen(selected ? QColor("#e0403a") : QColor("#2b323c"), selected ? 2.0 : 1.0));
+        painter->setBrush(QColor("#101318"));
+        painter->drawRoundedRect(thumb, 3, 3);
+        const QIcon icon = index.data(Qt::DecorationRole).value<QIcon>();
+        if (!icon.isNull()) {
+            const QPixmap pixmap = icon.pixmap(thumb.size() - QSize(6, 6));
+            const QRect target = QStyle::alignedRect(Qt::LeftToRight, Qt::AlignCenter,
+                pixmap.size() / pixmap.devicePixelRatio(), thumb);
+            painter->drawPixmap(target, pixmap);
+        }
+
+        // Clip name.
+        painter->setPen(QColor("#e6ebf0"));
+        const QRect label(tile.left(), thumb.bottom() + 4, tile.width(), 16);
+        painter->drawText(label, Qt::AlignLeft | Qt::AlignVCenter,
+            painter->fontMetrics().elidedText(index.data(Qt::DisplayRole).toString(),
+                Qt::ElideRight, label.width()));
+        painter->restore();
+    }
+
+    QSize sizeHint(const QStyleOptionViewItem&, const QModelIndex&) const override {
+        return QSize(kClipTileWidth, kClipTileHeight);
+    }
+};
+
+}  // namespace
+
 ColorWorkspace::ColorWorkspace(QWidget* parent) : QWidget(parent) {
     setObjectName("colorWorkspacePage");
     setStyleSheet(QStringLiteral(R"(
@@ -1130,6 +1204,9 @@ ColorWorkspace::ColorWorkspace(QWidget* parent) : QWidget(parent) {
         QWidget#colorWorkspacePage QListWidget {
             background: #202630; color: #d7e0ea; border: 1px solid #39424e;
             padding: 3px; outline: 0;
+        }
+        QWidget#colorWorkspacePage QListWidget#colorClipStrip {
+            background: transparent; border: none; padding: 0;
         }
         QWidget#colorWorkspacePage QPushButton,
         QWidget#colorWorkspacePage QComboBox,
@@ -1237,7 +1314,7 @@ ColorWorkspace::ColorWorkspace(QWidget* parent) : QWidget(parent) {
     upper_splitter_->setStretchFactor(1, 3);
     upper_splitter_->setStretchFactor(2, 2);
     effects_panel_->hide();
-    root->addWidget(upper_splitter_, 3);
+    root->addWidget(upper_splitter_, 2);
 
     auto* transport = new QHBoxLayout;
     transport->addStretch();
@@ -1269,8 +1346,22 @@ ColorWorkspace::ColorWorkspace(QWidget* parent) : QWidget(parent) {
     clips_->setWrapping(false);
     clips_->setMovement(QListView::Static);
     clips_->setIconSize(QSize(112, 63));
-    clips_->setFixedHeight(110);
-    root->addWidget(clips_);
+    clips_->setFrameShape(QFrame::NoFrame);
+    clips_->setItemDelegate(new ClipStripDelegate(clips_));
+    clips_->setFixedHeight(kClipTileHeight + 8);
+    // The clip strip and the timeline share one content widget that becomes the
+    // "Timeline" dock below, so they move together.
+    auto* middle_content = new QWidget(this);
+    middle_content->setObjectName("colorTimelineDockContent");
+    auto* middle_layout = new QVBoxLayout(middle_content);
+    middle_layout->setContentsMargins(0, 0, 0, 0);
+    middle_layout->setSpacing(0);  // the timeline sits directly under the strip
+    middle_layout->addWidget(clips_);
+    // Real timeline, fed from the project's clips; it sits under the Gallery.
+    timeline_view_ = new ColorTimelineView(this);
+    timeline_view_->setClipClickedHandler([this](timeline::ClipId id) {
+        if (clip_selected_handler_) clip_selected_handler_(id);
+    });
 
     auto* gallery_panel = new QWidget(this);
     gallery_panel->setObjectName("colorGalleryPanel");
@@ -1296,7 +1387,7 @@ ColorWorkspace::ColorWorkspace(QWidget* parent) : QWidget(parent) {
     stills_->setWrapping(false);
     stills_->setMovement(QListView::Static);
     stills_->setIconSize(QSize(112, 63));
-    stills_->setFixedHeight(106);
+    stills_->setFixedHeight(94);
     gallery_layout->addWidget(stills_);
     auto* gallery_versions_row = new QHBoxLayout;
     gallery_versions_row->addWidget(gallery_panel, 3);
@@ -1343,7 +1434,17 @@ ColorWorkspace::ColorWorkspace(QWidget* parent) : QWidget(parent) {
     grade_version_actions->addWidget(remove_grade_version_button_);
     grade_versions_layout->addLayout(grade_version_actions);
     gallery_versions_row->addWidget(grade_versions_panel_, 2);
-    root->addLayout(gallery_versions_row);
+    // Hidden for now at the maintainer's request; the panel, its buttons and
+    // their wiring stay alive so it can be shown again later.
+    grade_versions_panel_->hide();
+    // The Gallery (stills) and Grade Versions are out of the dock for now: they
+    // live in a hidden host with all their controls and wiring intact. To show
+    // them again, put `hidden_gallery_host` in a layout and show it.
+    auto* hidden_gallery_host = new QWidget(this);
+    hidden_gallery_host->setObjectName("colorHiddenGalleryHost");
+    hidden_gallery_host->setLayout(gallery_versions_row);
+    hidden_gallery_host->hide();
+    middle_layout->addWidget(timeline_view_);
     connect(save_grade_version_button_, &QPushButton::clicked,
         this, [this] { saveGradeVersion(); });
     connect(apply_grade_version_button_, &QPushButton::clicked,
@@ -1379,7 +1480,8 @@ ColorWorkspace::ColorWorkspace(QWidget* parent) : QWidget(parent) {
     connect(comparison_wipe_slider_, &QSlider::valueChanged, this,
         [this](int) { applyPreviewComparison(); });
 
-    // Bottom dock area: an embedded QMainWindow hosting three child docks.
+    // Bottom dock area: an embedded QMainWindow hosting the Timeline dock (clip
+    // strip, Gallery and timeline) above three child docks.
     // Each dock carries its own row of unlabeled placeholder buttons (6, 11
     // and 3; no behavior yet) so the buttons travel with their dock.
     auto* dock_host = new QMainWindow(this);
@@ -1387,11 +1489,32 @@ ColorWorkspace::ColorWorkspace(QWidget* parent) : QWidget(parent) {
     dock_host->setWindowFlags(Qt::Widget);
     dock_host->setObjectName("colorBottomDockHost");
     dock_host->setDockNestingEnabled(true);
-    dock_host->setMinimumHeight(180);
+    // No explicit minimum height: the dock layout derives it from its docks, so
+    // they can never be squeezed into overlapping each other.
     // The empty central widget collapses so the child docks fill the host.
     auto* dock_central = new QWidget(dock_host);
     dock_central->setMaximumSize(0, 0);
     dock_host->setCentralWidget(dock_central);
+    auto* timeline_dock = new QDockWidget(
+        QCoreApplication::translate("ColorWorkspace", "Timeline"), dock_host);
+    timeline_dock->setObjectName("colorTimelineDock");
+    timeline_dock->setFeatures(QDockWidget::DockWidgetClosable |
+                               QDockWidget::DockWidgetMovable |
+                               QDockWidget::DockWidgetFloatable);
+    // The content scrolls when the dock is smaller than the strip, Gallery and
+    // timeline need, so the dock never forces the page taller.
+    auto* middle_scroll = new QScrollArea(timeline_dock);
+    middle_scroll->setObjectName("colorTimelineDockScroll");
+    middle_scroll->setFrameShape(QFrame::NoFrame);
+    middle_scroll->setWidgetResizable(true);
+    middle_scroll->setMinimumSize(200, 80);
+    // Never scroll sideways: the strip and timeline always fit the dock width.
+    middle_scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    middle_scroll->setWidget(middle_content);
+    timeline_dock->setWidget(middle_scroll);
+    dock_host->addDockWidget(Qt::TopDockWidgetArea, timeline_dock);
+    QDockWidget* first_child_dock = nullptr;
+    std::vector<QDockWidget*> child_dock_list;
     QDockWidget* previous_dock = nullptr;
     int tool_index = 0;
     enum class ButtonAlign { Left, Center, Right };
@@ -1429,6 +1552,9 @@ ColorWorkspace::ColorWorkspace(QWidget* parent) : QWidget(parent) {
             QLatin1String(entry.object_name) == QLatin1String("colorSizingDock");
         QStackedWidget* pages = has_pages ? new QStackedWidget(content) : nullptr;
         auto* page_buttons = has_pages ? new QButtonGroup(content) : nullptr;
+        // Pages other than the first are built when their button is first
+        // clicked, so opening Color does not construct every page of every dock.
+        auto lazy_pages = std::make_shared<std::map<int, std::function<QWidget*()>>>();
         for (int i = 0; i < entry.button_count; ++i) {
             auto* button = new QPushButton(content);
             button->setObjectName(QStringLiteral("colorToolButton%1").arg(++tool_index));
@@ -1438,6 +1564,7 @@ ColorWorkspace::ColorWorkspace(QWidget* parent) : QWidget(parent) {
             if (has_pages) {
                 button->setCheckable(true);
                 page_buttons->addButton(button, i);
+                auto build_page = [pages, i, motion_dock, keyframes_dock]() -> QWidget* {
                 QWidget* page = nullptr;
                 if (!motion_dock) {
                     // Sizing dock: pages 1 to 10 are Curves - Custom, Color
@@ -1544,8 +1671,17 @@ ColorWorkspace::ColorWorkspace(QWidget* parent) : QWidget(parent) {
                         page = new QWidget(pages);
                     }
                 }
-                else if (i == 0) page = new CameraRawPage(pages);
-                else if (i == 1) page = new ColorMatchPage(pages);
+                else if (i == 0 || i == 1) {
+                    // These pages are fixed-size forms: scroll them like the
+                    // others so the dock can shrink without clipping controls.
+                    auto* scroll = new QScrollArea(pages);
+                    scroll->setObjectName(i == 0 ? "colorCameraRawScroll" : "colorColorMatchScroll");
+                    scroll->setFrameShape(QFrame::NoFrame);
+                    scroll->setWidgetResizable(true);
+                    scroll->setWidget(i == 0 ? static_cast<QWidget*>(new CameraRawPage(scroll))
+                                             : static_cast<QWidget*>(new ColorMatchPage(scroll)));
+                    page = scroll;
+                }
                 else if (i == 2) {
                     // Tall page: scrolls when the dock is short or narrow.
                     auto* scroll = new QScrollArea(pages);
@@ -1580,31 +1716,59 @@ ColorWorkspace::ColorWorkspace(QWidget* parent) : QWidget(parent) {
                     page = scroll;
                 }
                 else page = new QWidget(pages);
-                pages->addWidget(page);
+                return page;
+                };
+                if (i == 0) {
+                    pages->addWidget(build_page());
+                } else {
+                    // Cheap placeholder until the page's button is first clicked.
+                    pages->addWidget(new QWidget(pages));
+                    (*lazy_pages)[i] = std::move(build_page);
+                }
             }
         }
         if (entry.align != ButtonAlign::Right) button_row->addStretch();
         content_layout->addLayout(button_row);
         if (has_pages) {
+            // The pages scroll, so the stack may be much smaller than its pages;
+            // without this the docks would demand the tallest page's height.
+            pages->setMinimumSize(120, 80);
             pages->setObjectName(motion_dock ? "colorMotionEffectsPages"
                                  : keyframes_dock ? "colorKeyframesPages" : "colorSizingPages");
             page_buttons->setExclusive(true);
             page_buttons->button(0)->setChecked(true);
-            connect(page_buttons, &QButtonGroup::idClicked, pages,
-                &QStackedWidget::setCurrentIndex);
+            connect(page_buttons, &QButtonGroup::idClicked, pages, [pages, lazy_pages](int id) {
+                const auto pending = lazy_pages->find(id);
+                if (pending != lazy_pages->end()) {
+                    QWidget* real = pending->second();
+                    lazy_pages->erase(pending);
+                    QWidget* placeholder = pages->widget(id);
+                    pages->insertWidget(id, real);
+                    pages->removeWidget(placeholder);
+                    delete placeholder;
+                }
+                pages->setCurrentIndex(id);
+            });
             content_layout->addWidget(pages, 1);
         } else {
             content_layout->addStretch(1);
         }
         dock->setWidget(content);
         if (previous_dock == nullptr) {
-            dock_host->addDockWidget(Qt::TopDockWidgetArea, dock);
+            // The first child dock goes under the Timeline dock.
+            dock_host->splitDockWidget(timeline_dock, dock, Qt::Vertical);
+            first_child_dock = dock;
         } else {
             dock_host->splitDockWidget(previous_dock, dock, Qt::Horizontal);
         }
+        child_dock_list.push_back(dock);
         previous_dock = dock;
     }
-    root->addWidget(dock_host, 2);
+    dock_host->resizeDocks({timeline_dock, first_child_dock}, {240, 330}, Qt::Vertical);
+    // The three child docks start with equal widths.
+    dock_host->resizeDocks({child_dock_list[0], child_dock_list[1], child_dock_list[2]},
+        {100, 100, 100}, Qt::Horizontal);
+    root->addWidget(dock_host, 3);
     auto* lower = new QHBoxLayout;
     controls_ = new QWidget(this);
     controls_->setObjectName("colorPrimaryControls");
@@ -1912,6 +2076,16 @@ void ColorWorkspace::setActive(bool active) {
     refreshPowerWindowOverlay();
 }
 
+void ColorWorkspace::setTimelineFrameRate(int numerator, int denominator) {
+    frame_rate_numerator_ = numerator;
+    frame_rate_denominator_ = denominator;
+    if (timeline_view_ != nullptr) timeline_view_->setFrameRate(numerator, denominator);
+}
+
+void ColorWorkspace::setPlayheadFrame(qint64 frame) {
+    if (timeline_view_ != nullptr) timeline_view_->setPlayheadFrame(frame);
+}
+
 void ColorWorkspace::setClips(std::vector<ClipItem> clips, timeline::ClipId selected,
     color::Graph graph) {
     const auto previous_selected_clip = selected_clip_;
@@ -1949,7 +2123,10 @@ void ColorWorkspace::setClips(std::vector<ClipItem> clips, timeline::ClipId sele
         for (const auto& clip : clips) {
             auto* item = new QListWidgetItem(clip.name, clips_);
             if (!clip.thumbnail.isNull()) item->setIcon(QIcon(QPixmap::fromImage(clip.thumbnail)));
-            item->setSizeHint(QSize(128, 96));
+            item->setSizeHint(QSize(kClipTileWidth, kClipTileHeight));
+            item->setData(kClipTimecodeRole, formatFrameTimecode(clip.timeline_start_frame,
+                frame_rate_numerator_, frame_rate_denominator_));
+            item->setData(kClipTrackRole, QStringLiteral("V%1").arg(clip.track_number));
             item->setData(Qt::UserRole, QVariant::fromValue<qulonglong>(clip.id));
             if (clip.id == selected) {
                 selected_row = clips_->count() - 1;
@@ -1957,6 +2134,16 @@ void ColorWorkspace::setClips(std::vector<ClipItem> clips, timeline::ClipId sele
             }
         }
         clips_->setCurrentRow(selected_row);
+    }
+    {
+        std::vector<ColorTimelineView::Clip> timeline_clips;
+        timeline_clips.reserve(clips.size());
+        for (const auto& clip : clips) {
+            timeline_clips.push_back({clip.id, clip.name, clip.track_number,
+                clip.timeline_start_frame, clip.duration_frames});
+        }
+        timeline_view_->setFrameRate(frame_rate_numerator_, frame_rate_denominator_);
+        timeline_view_->setClips(std::move(timeline_clips), selected);
     }
     {
         const QSignalBlocker blocker(grade_versions_);

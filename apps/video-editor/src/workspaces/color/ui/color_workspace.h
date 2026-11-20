@@ -30,6 +30,8 @@ class PreviewWidget;
 
 namespace ui {
 
+class ColorTimelineView;
+
 class ColorWorkspace final : public QWidget {
 public:
     struct ClipItem {
@@ -39,6 +41,7 @@ public:
         std::vector<timeline::ColorGradeVersion> grade_versions;
         qint64 timeline_start_frame = 0;
         qint64 duration_frames = 0;
+        int track_number = 1;  // 1-based video track (V1, V2, ...)
     };
     struct StillItem {
         QString id;
@@ -79,6 +82,11 @@ public:
         quint64, quint64, quint64, color::Graph,
         std::shared_ptr<std::atomic_bool>)> handler);
     void setProjectGeneration(quint64 generation) noexcept;
+    // Timeline frame rate used for the clip strip and timeline timecodes. Call
+    // before setClips so the clip start timecodes use it.
+    void setTimelineFrameRate(int numerator, int denominator);
+    // Current timeline playhead frame, drawn on the Color timeline.
+    void setPlayheadFrame(qint64 frame);
     void setGradeComparisonRequestHandler(
         std::function<void(std::optional<playback::PlaybackColorGradeComparisonRequest>)> handler);
     void acceptScopeFrame(quint64 request_id, playback::VideoFramePtr frame,
@@ -147,6 +155,9 @@ private:
     QComboBox* comparison_mode_ = nullptr;
     QSlider* comparison_wipe_slider_ = nullptr;
     QListWidget* clips_ = nullptr;
+    ColorTimelineView* timeline_view_ = nullptr;
+    int frame_rate_numerator_ = 30;
+    int frame_rate_denominator_ = 1;
     QListWidget* stills_ = nullptr;
     QPushButton* capture_still_button_ = nullptr;
     QWidget* grade_versions_panel_ = nullptr;
