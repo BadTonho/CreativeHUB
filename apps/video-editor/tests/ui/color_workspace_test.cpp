@@ -924,6 +924,45 @@ int main(int argc, char** argv) {
             hdr_page->findChild<QPushButton*>("colorHdrWheelsResetButton")->click();
             require(hdr_page->findChild<QPushButton*>("colorHdrWheelsZoneDot1")->isChecked(),
                     "The HDR page reset must restore the first zone set.");
+            // RGB Mixer page (visual stage): identity mix, linked bars and resets.
+            workspace.findChild<QPushButton*>("colorToolButton5")->click();
+            auto* mixer_page = workspace.findChild<QWidget*>("colorRgbMixerPage");
+            require(mixer_page && motion_pages->currentWidget()->isAncestorOf(mixer_page),
+                    "Motion Effects button 5 must select the RGB Mixer page.");
+            for (const char* output : {"Red", "Green", "Blue"}) {
+                for (const char* input : {"R", "G", "B"}) {
+                    const QString suffix = QLatin1String(output) + "Output" + QLatin1String(input);
+                    auto* box = mixer_page->findChild<QDoubleSpinBox*>("colorRgbMixer" + suffix + "Value");
+                    require(box && mixer_page->findChild<QSlider*>("colorRgbMixer" + suffix + "Slider"),
+                            "Each RGB Mixer output must have a bar and value per input channel.");
+                    const bool identity = QLatin1String(output).startsWith(QLatin1String(input));
+                    require(qFuzzyCompare(box->value() + 1.0, (identity ? 1.0 : 0.0) + 1.0),
+                            "RGB Mixer must start as an identity mix.");
+                }
+            }
+            for (const char* route : {"colorRgbMixerRouteRedGreenButton",
+                     "colorRgbMixerRouteGreenBlueButton", "colorRgbMixerRouteBlueRedButton"})
+                require(mixer_page->findChild<QPushButton*>(route),
+                        "RGB Mixer must show its three route shortcut buttons.");
+            auto* mixer_mono = mixer_page->findChild<QCheckBox*>("colorRgbMixerMonochrome");
+            auto* mixer_preserve = mixer_page->findChild<QCheckBox*>("colorRgbMixerPreserveLuminance");
+            require(mixer_mono && mixer_preserve && !mixer_mono->isChecked() && mixer_preserve->isChecked(),
+                    "RGB Mixer must start with Monochrome off and Preserve Luminance on.");
+            auto* red_green = mixer_page->findChild<QDoubleSpinBox*>("colorRgbMixerRedOutputGValue");
+            auto* red_green_bar = mixer_page->findChild<QSlider*>("colorRgbMixerRedOutputGSlider");
+            auto* green_red = mixer_page->findChild<QDoubleSpinBox*>("colorRgbMixerGreenOutputRValue");
+            red_green_bar->setValue(150);
+            require(qFuzzyCompare(red_green->value(), 1.5), "Moving a mixer bar must update its value.");
+            red_green->setValue(-2.0);
+            require(red_green_bar->value() == -200, "Typing a mixer value must move its bar.");
+            green_red->setValue(0.7);
+            mixer_mono->setChecked(true);
+            mixer_page->findChild<QPushButton*>("colorRgbMixerRedResetButton")->click();
+            require(qFuzzyIsNull(red_green->value()) && qFuzzyCompare(green_red->value(), 0.7),
+                    "An output reset must restore only that output.");
+            mixer_page->findChild<QPushButton*>("colorRgbMixerResetButton")->click();
+            require(qFuzzyIsNull(green_red->value()) && !mixer_mono->isChecked() && mixer_preserve->isChecked(),
+                    "The page reset must restore every output and the options.");
             workspace.findChild<QPushButton*>("colorToolButton1")->click();
         }
         auto* capture_button = workspace.findChild<QPushButton*>("colorCaptureStillButton");
@@ -947,7 +986,7 @@ int main(int argc, char** argv) {
         rename_button->click();
         require(renamed_id == QStringLiteral("still-a") &&
                     renamed_value == QStringLiteral("Warm Look"),
-                "Color Gallery rename did not preserve the selected still identity.");
+                "Color Gallery rename did not mixer_preserve the selected still identity.");
         remove_button->click();
         require(removed_id == QStringLiteral("still-a"),
                 "Color Gallery removal did not target the selected still.");
@@ -1145,7 +1184,7 @@ int main(int argc, char** argv) {
                     wipe_position->value() == 37 &&
                     grade_comparison_requests.back().has_value() &&
                     grade_comparison_requests.back()->request_id != first_grade_request,
-                "Compare Version must preserve Wipe position and reject responses from the prior request.");
+                "Compare Version must mixer_preserve Wipe position and reject responses from the prior request.");
         const auto grade_request_before_gallery =
             grade_comparison_requests.back()->request_id;
         workspace.setGalleryStills({still_a}, 2);
@@ -1158,7 +1197,7 @@ int main(int argc, char** argv) {
             QStringLiteral("still-a"), reference);
         require(comparison_mode->currentData().toInt() == 2 &&
                     wipe_position->value() == 37,
-                "Switching reference sources must preserve the selected Wipe mode and divider.");
+                "Switching reference sources must mixer_preserve the selected Wipe mode and divider.");
         versions_list->setCurrentRow(0);
         compare_version->click();
         require(comparison_mode->currentData().toInt() == 2 &&

@@ -1,8 +1,8 @@
 # Color Panels Dock
 
 Status: **Stage 1 (visual only) is implemented for pages 1 (Camera Raw), 2 (Color Match),
-3 (Primaries - Color Bars) and 4 (High Dynamic Range - Color Wheels). Pages 5 and 6 are
-planned; their buttons select empty placeholder pages.**
+3 (Primaries - Color Bars), 4 (High Dynamic Range - Color Wheels) and 5 (RGB Mixer).
+Page 6 is planned; its button selects an empty placeholder page.**
 The pages described below are not implemented. Control names, ranges and
 defaults are taken from the maintainer's layout reference screenshots and are
 proposals until implemented and recorded as decisions. Behavior marked
@@ -256,9 +256,21 @@ channels.
 | Per output | Reset | Button | n/a | n/a |
 | Footer | Swap shortcuts (R to G, G to B, B to R) | Buttons | n/a | n/a |
 | Footer | Monochrome | Checkbox | On/Off | Off |
-| Footer | Preserve Luminance | Checkbox | On/Off | Off |
+| Footer | Preserve Luminance | Checkbox | On/Off | On |
 
-**Behavior.** *Pending.* Intended: output = 3 x 3 matrix applied to linear or
+**Implemented (stage 1, visual only).** Button 5 shows the page
+(`colorRgbMixerPage`, controls named `colorRgbMixer*`, inside a scroll area).
+Each output column (Red, Green, Blue) has three vertical bars with value fields
+and colored hint bars for the R, G and B input weights, a zero line behind the
+bars, an auto button (no function yet) and a reset that restores only that
+output. Defaults are the identity mix (the diagonal is 1.00, all others 0.00)
+and the bars and fields mirror each other over the proposed range -2 to 2. The
+three route pills (Red to Green, Green to Blue, Blue to Red) are drawn but do
+nothing yet, as does the auto button. Monochrome starts off and Preserve
+Luminance starts on, and neither has any effect. The header reset restores all
+outputs and both options. No effect or grade is edited.
+
+**Behavior (stage 2).** *Pending.* Intended: output = 3 x 3 matrix applied to linear or
 display RGB (*Pending*). Monochrome mixes the three input weights into one
 gray channel. Preserve Luminance rescales the result to the input luminance.
 Needs a new effect and a CSP schema bump; a simple per-pixel matrix is

@@ -5,6 +5,7 @@
 #include "workspaces/color/ui/color_match_page.h"
 #include "workspaces/color/ui/hdr_wheels_page.h"
 #include "workspaces/color/ui/primaries_bars_page.h"
+#include "workspaces/color/ui/rgb_mixer_page.h"
 #include "ui/preview/preview_widget.h"
 #include "workspaces/color/evaluation/color_graph_evaluator.h"
 
@@ -1405,7 +1406,7 @@ ColorWorkspace::ColorWorkspace(QWidget* parent) : QWidget(parent) {
         button_row->setSpacing(4);
         if (entry.align != ButtonAlign::Left) button_row->addStretch();
         // The Motion Effects dock's buttons select its pages; its first page
-        // are Camera Raw, Color Match, Primaries - Color Bars and HDR Color Wheels; the others are still
+        // are Camera Raw, Color Match, Primaries - Color Bars, HDR Color Wheels and RGB Mixer; the others are still
         // empty placeholders.
         const bool has_pages = QLatin1String(entry.object_name) == QLatin1String("colorMotionEffectsDock");
         QStackedWidget* pages = has_pages ? new QStackedWidget(content) : nullptr;
@@ -1437,6 +1438,14 @@ ColorWorkspace::ColorWorkspace(QWidget* parent) : QWidget(parent) {
                     scroll->setFrameShape(QFrame::NoFrame);
                     scroll->setWidgetResizable(true);
                     scroll->setWidget(new HdrWheelsPage(scroll));
+                    page = scroll;
+                }
+                else if (i == 4) {
+                    auto* scroll = new QScrollArea(pages);
+                    scroll->setObjectName("colorRgbMixerScroll");
+                    scroll->setFrameShape(QFrame::NoFrame);
+                    scroll->setWidgetResizable(true);
+                    scroll->setWidget(new RgbMixerPage(scroll));
                     page = scroll;
                 }
                 else page = new QWidget(pages);
