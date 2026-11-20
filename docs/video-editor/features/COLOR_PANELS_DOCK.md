@@ -1,7 +1,8 @@
 # Color Panels Dock
 
-Status: **Stage 1 (visual only) is implemented for pages 1 (Camera Raw) and 2 (Color
-Match). Pages 3 to 6 are planned; their buttons select empty placeholder pages.**
+Status: **Stage 1 (visual only) is implemented for pages 1 (Camera Raw), 2 (Color Match)
+and 3 (Primaries - Color Bars). Pages 4 to 6 are planned; their buttons select empty
+placeholder pages.**
 The pages described below are not implemented. Control names, ranges and
 defaults are taken from the maintainer's layout reference screenshots and are
 proposals until implemented and recorded as decisions. Behavior marked
@@ -171,7 +172,21 @@ creates one if none is selected and the user edits a control).
 | Per group | Reset | Restores that group's defaults | n/a |
 | Title bar | Mode switch | Wheels, Bars, Log, matching the existing modes | Bars |
 
-**Behavior.** Controls bound to an existing parameter edit it directly and are
+**Implemented (stage 1, visual only).** Button 3 shows the page
+(`colorPrimariesBarsPage`, controls named `colorPrimariesBars*`, inside a
+scroll area so it stays usable in a short or narrow dock). Defaults follow the
+reference layout, not the engine scale: Temp 0.0, Tint 0.00, Contrast 1.000,
+Pivot 0.435, Mid/Detail 0.00; Lift and Gamma 0.00 and Gain 1.00 for Y/R/G/B;
+Offset 25.00 for R/G/B; Col Boost, Shad and Hi/Light 0.00; Sat 50.00, Hue 50.00,
+L. Mix 100.00. Proposed bar ranges: Lift and Gamma -1 to 1, Gain 0 to 4,
+Offset 0 to 50. Each bar and its value field mirror each other; each group has
+a reset that restores only that group, and the header reset restores the page.
+The Wheels/Bars/Log header buttons only change which one is highlighted (Bars
+by default); Auto, the pick buttons, the group sample buttons and the master
+strips do nothing yet. Bars show no fill under the handle. Nothing edits a
+Primary Grade node.
+
+**Behavior (stage 2).** Controls bound to an existing parameter edit it directly and are
 covered by the existing Primary Grade evaluation on CPU, OpenGL and Vulkan.
 Controls marked *Pending* need new engine parameters (and a CSP schema bump)
 and stay disabled in stage 2 until decided. The displayed default values

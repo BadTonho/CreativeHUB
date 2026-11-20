@@ -43,8 +43,8 @@ right-clicking a dock title bar reopens closed ones. Buttons and docks have no
 behavior or content yet; they will be assigned individually. Dock arrangement
 is not persisted yet. The primary-grade controls and the scope panel are
 currently hidden; they are planned to move into these docks. The Motion Effects dock selects its pages with its six buttons (pages 1,
-Camera Raw, and 2, Color Match, are implemented visually; pages 3 to 6 are
-empty). The six
+Camera Raw, 2, Color Match, and 3, Primaries - Color Bars, are implemented
+visually; pages 4 to 6 are empty). The six
 pages are specified in
 [Color Panels Dock](../features/COLOR_PANELS_DOCK.md).
 

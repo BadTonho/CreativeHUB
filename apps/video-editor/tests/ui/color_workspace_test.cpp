@@ -832,6 +832,50 @@ int main(int argc, char** argv) {
             require(match_preset->currentIndex() == 0 && match_temp->value() == 6500 &&
                         !match_white_on->isChecked() && !match_white->isEnabled(),
                     "Color Match reset must restore the documented defaults.");
+            // Primaries - Color Bars page (visual stage): defaults and linked controls.
+            workspace.findChild<QPushButton*>("colorToolButton3")->click();
+            auto* bars_page = workspace.findChild<QWidget*>("colorPrimariesBarsPage");
+            require(bars_page && motion_pages->currentWidget()->isAncestorOf(bars_page),
+                    "Motion Effects button 3 must select the Primaries - Color Bars page.");
+            const std::pair<const char*, double> bars_defaults[] = {
+                {"colorPrimariesBarsTemp", 0.0}, {"colorPrimariesBarsTint", 0.0},
+                {"colorPrimariesBarsContrast", 1.0}, {"colorPrimariesBarsPivot", 0.435},
+                {"colorPrimariesBarsMidDetail", 0.0}, {"colorPrimariesBarsLiftY", 0.0},
+                {"colorPrimariesBarsGammaB", 0.0}, {"colorPrimariesBarsGainY", 1.0},
+                {"colorPrimariesBarsGainB", 1.0}, {"colorPrimariesBarsOffsetR", 25.0},
+                {"colorPrimariesBarsOffsetB", 25.0}, {"colorPrimariesBarsColBoost", 0.0},
+                {"colorPrimariesBarsShad", 0.0}, {"colorPrimariesBarsHiLight", 0.0},
+                {"colorPrimariesBarsSat", 50.0}, {"colorPrimariesBarsHue", 50.0},
+                {"colorPrimariesBarsLMix", 100.0},
+            };
+            for (const auto& [name, value] : bars_defaults) {
+                auto* box = bars_page->findChild<QDoubleSpinBox*>(
+                    QString::fromLatin1(name).replace("Value", QString()));
+                if (box == nullptr)
+                    box = bars_page->findChild<QDoubleSpinBox*>(QString::fromLatin1(name) + "Value");
+                require(box && qFuzzyCompare(box->value() + 1.0, value + 1.0),
+                        "Primaries - Color Bars controls must start at their documented defaults.");
+            }
+            require(!bars_page->findChild<QWidget*>("colorPrimariesBarsOffsetYSlider") &&
+                        bars_page->findChild<QWidget*>("colorPrimariesBarsLiftYSlider"),
+                    "Offset has three bars; Lift, Gamma and Gain have four.");
+            auto* gain_slider = bars_page->findChild<QSlider*>("colorPrimariesBarsGainRSlider");
+            auto* gain_value = bars_page->findChild<QDoubleSpinBox*>("colorPrimariesBarsGainRValue");
+            auto* lift_value = bars_page->findChild<QDoubleSpinBox*>("colorPrimariesBarsLiftRValue");
+            require(gain_slider && gain_value && lift_value,
+                    "Primaries - Color Bars must expose slider and value controls per channel.");
+            gain_slider->setValue(250);
+            require(qFuzzyCompare(gain_value->value(), 2.5),
+                    "Moving a bar must update its value field.");
+            gain_value->setValue(3.0);
+            require(gain_slider->value() == 300, "Typing a value must move its bar.");
+            lift_value->setValue(0.4);
+            bars_page->findChild<QPushButton*>("colorPrimariesBarsGainResetButton")->click();
+            require(qFuzzyCompare(gain_value->value(), 1.0) && qFuzzyCompare(lift_value->value(), 0.4),
+                    "A group reset must restore only that group's defaults.");
+            bars_page->findChild<QPushButton*>("colorPrimariesBarsResetButton")->click();
+            require(qFuzzyIsNull(lift_value->value()),
+                    "The page reset must restore every group's defaults.");
             workspace.findChild<QPushButton*>("colorToolButton1")->click();
         }
         auto* capture_button = workspace.findChild<QPushButton*>("colorCaptureStillButton");

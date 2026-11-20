@@ -3,6 +3,7 @@
 #include "ui/effects/effects_catalog.h"
 #include "workspaces/color/ui/camera_raw_page.h"
 #include "workspaces/color/ui/color_match_page.h"
+#include "workspaces/color/ui/primaries_bars_page.h"
 #include "ui/preview/preview_widget.h"
 #include "workspaces/color/evaluation/color_graph_evaluator.h"
 
@@ -1403,7 +1404,8 @@ ColorWorkspace::ColorWorkspace(QWidget* parent) : QWidget(parent) {
         button_row->setSpacing(4);
         if (entry.align != ButtonAlign::Left) button_row->addStretch();
         // The Motion Effects dock's buttons select its pages; its first page
-        // are Camera Raw and Color Match; the others are still empty placeholders.
+        // are Camera Raw, Color Match and Primaries - Color Bars; the others are still
+        // empty placeholders.
         const bool has_pages = QLatin1String(entry.object_name) == QLatin1String("colorMotionEffectsDock");
         QStackedWidget* pages = has_pages ? new QStackedWidget(content) : nullptr;
         auto* page_buttons = has_pages ? new QButtonGroup(content) : nullptr;
@@ -1419,6 +1421,15 @@ ColorWorkspace::ColorWorkspace(QWidget* parent) : QWidget(parent) {
                 QWidget* page = nullptr;
                 if (i == 0) page = new CameraRawPage(pages);
                 else if (i == 1) page = new ColorMatchPage(pages);
+                else if (i == 2) {
+                    // Tall page: scrolls when the dock is short or narrow.
+                    auto* scroll = new QScrollArea(pages);
+                    scroll->setObjectName("colorPrimariesBarsScroll");
+                    scroll->setFrameShape(QFrame::NoFrame);
+                    scroll->setWidgetResizable(true);
+                    scroll->setWidget(new PrimariesBarsPage(scroll));
+                    page = scroll;
+                }
                 else page = new QWidget(pages);
                 pages->addWidget(page);
             }
