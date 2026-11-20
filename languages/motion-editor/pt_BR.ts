@@ -477,6 +477,14 @@
         <translation>Ativar métricas de desempenho da prévia</translation>
     </message>
     <message>
+        <source>Use GPU for preview and export</source>
+        <translation>Usar a GPU na prévia e na exportação</translation>
+    </message>
+    <message>
+        <source>Accelerates supported composition and effects. Uses the CPU automatically when needed. Changes take effect the next time you open this app.</source>
+        <translation>Acelera a composição e os efeitos compatíveis. Usa a CPU automaticamente quando necessário. As alterações valem na próxima vez que você abrir este aplicativo.</translation>
+    </message>
+    <message>
         <source>Output profile</source>
         <translation>Perfil de saída</translation>
     </message>

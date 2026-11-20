@@ -1,5 +1,6 @@
 #include "diagnostics/performance_metrics.h"
 #include "settings/autosave_preferences.h"
+#include "settings/gpu_composition_preferences.h"
 #include "ui/dialogs/general_settings_dialog.h"
 
 #include <QApplication>
@@ -53,6 +54,26 @@ int main(int argc, char* argv[])
     checkbox->setChecked(true);
     require(emitted_enabled && motion::settings::previewPerformanceMetricsEnabled(),
             "changing the General Settings checkbox is applied immediately");
+
+    auto* gpu_checkbox = dialog.findChild<QCheckBox*>(
+        QStringLiteral("motion-gpu-composition-checkbox"));
+    require(gpu_checkbox != nullptr && gpu_checkbox->isChecked() &&
+                !gpu_checkbox->accessibleDescription().isEmpty() &&
+                motion::settings::gpuCompositionPreference(),
+            "General Settings offers GPU composition enabled by default");
+    gpu_checkbox->setChecked(false);
+    require(!motion::settings::gpuCompositionPreference(),
+            "turning GPU composition off is persisted immediately");
+    {
+        motion::ui::GeneralSettingsDialog reopened(false);
+        auto* reopened_gpu = reopened.findChild<QCheckBox*>(
+            QStringLiteral("motion-gpu-composition-checkbox"));
+        require(reopened_gpu != nullptr && !reopened_gpu->isChecked(),
+                "a reopened General Settings keeps the GPU opt-out");
+    }
+    gpu_checkbox->setChecked(true);
+    require(motion::settings::gpuCompositionPreference(),
+            "turning GPU composition back on is persisted");
 
     auto& metrics = motion::diagnostics::PerformanceMetrics::instance();
     metrics.setEnabled(true);

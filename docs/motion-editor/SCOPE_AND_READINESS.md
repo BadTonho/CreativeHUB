@@ -43,8 +43,9 @@ Native text, rectangle, and ellipse layers have content
 inspectors and static content; their transforms and transform keyframes work
 through the same timeline and preview path. Motion Studio rasterizes that
 content with Qt painting on its preview or export worker before composition
-with the shared CPU compositor by default or the experimental OpenGL adapter
-when `CREATIVE_SUITE_MOTION_GPU_COMPOSITION=1`; failures fall back to CPU. The GPU
+with the experimental OpenGL adapter by default (since 2026-11-20; the shared CPU
+compositor with `CREATIVE_SUITE_MOTION_GPU_COMPOSITION=0` or the Settings opt-out);
+failures fall back to CPU. The GPU
 composition shader applies Color Adjustment-only stacks before blending;
 stacks containing enabled Gaussian Blur use the shared ordered GPU effect path
 when supported, and Glow uses its origin-aware OpenGL operation. Both retain

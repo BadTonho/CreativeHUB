@@ -5,9 +5,10 @@ Status: **experimental implementation; native Windows correctness verified on
 
 ## Activation and boundaries
 
-Start Motion Studio with `CREATIVE_SUITE_MOTION_GPU_COMPOSITION=1`. The setting
-is read at startup and controls both preview and existing GPU export. CPU remains
-the default. This delivery changes neither document formats nor application
+GPU composition is on by default since 2026-11-20. Settings > General >
+**Use GPU for preview and export** controls it at the next launch, and the process
+setting `CREATIVE_SUITE_MOTION_GPU_COMPOSITION=0|1` overrides it. It is read at
+startup and controls both preview and existing GPU export. This delivery changes neither document formats nor application
 versions, shortcuts, linked publication, media decoding, or encoder selection.
 
 Motion enables public Qt global OpenGL sharing and a 3.2 Core default format

@@ -4,6 +4,8 @@
 #include <creative_suite/diagnostics/logger.h>
 #include <creative_suite/translations/language_preference.h>
 
+#include "settings/gpu_composition_preferences.h"
+
 #include <QCheckBox>
 #include <QComboBox>
 #include <QDialogButtonBox>
@@ -85,6 +87,21 @@ GeneralSettingsDialog::GeneralSettingsDialog(
         QStringLiteral("motion-preview-performance-metrics-checkbox"));
     preview_metrics_checkbox_->setChecked(preview_metrics_enabled);
     layout->addWidget(preview_metrics_checkbox_);
+
+    gpu_composition_checkbox_ = new QCheckBox(
+        MotionUiTranslation::tr("Use GPU for preview and export"), this);
+    gpu_composition_checkbox_->setObjectName(
+        QStringLiteral("motion-gpu-composition-checkbox"));
+    gpu_composition_checkbox_->setToolTip(MotionUiTranslation::tr(
+        "Accelerates supported composition and effects. Uses the CPU automatically when "
+        "needed. Changes take effect the next time you open this app."));
+    gpu_composition_checkbox_->setAccessibleDescription(
+        gpu_composition_checkbox_->toolTip());
+    gpu_composition_checkbox_->setChecked(settings::gpuCompositionPreference());
+    layout->addWidget(gpu_composition_checkbox_);
+    connect(gpu_composition_checkbox_, &QCheckBox::toggled, this, [](bool enabled) {
+        settings::setGpuCompositionPreference(enabled);
+    });
 
     auto* buttons = new QDialogButtonBox(QDialogButtonBox::Close, this);
     buttons->setObjectName(QStringLiteral("motion-general-settings-buttons"));

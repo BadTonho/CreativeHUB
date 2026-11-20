@@ -28,9 +28,10 @@ and direct paths use two 16 KiB axis lookup buffers for UHD/portrait 4K. Its
 evidence; Motion Studio GPU effects and export remain experimental, with GPU
 effects and export limited to opt-in operation.
 
-The preview worker rasterizes text/shapes and processes effects. By default,
-effects and composition use the CPU. With
-`CREATIVE_SUITE_MOTION_GPU_COMPOSITION=1`, Color Adjustment-only stacks are
+The preview worker rasterizes text/shapes and processes effects. Since
+2026-11-20 effects and composition use the GPU by default (see the decision
+below); `CREATIVE_SUITE_MOTION_GPU_COMPOSITION=0` forces the CPU. When GPU
+composition is active, Color Adjustment-only stacks are
 applied in the shared OpenGL composition shader. Stacks with Gaussian Blur use
 an ordered shared effect sequence before layer blending; one reusable RGBA8
 scratch texture is bounded to 64 MiB per worker. Blur matches Motion's three
@@ -89,9 +90,12 @@ does not contain GPU counters and cannot establish GPU-path performance.
 - Create the offscreen surface on the GUI thread; create, use, and release the
   context and its resources on the preview worker. Keep rendering off the UI
   thread and retain cancellation and generation checks.
-- Opt-in: `CREATIVE_SUITE_MOTION_GPU_COMPOSITION=1`. The setting is read once
-  when the application starts; all other values leave preview and offline
-  export on the CPU compositor.
+- Enabled by default (2026-11-20). Settings > General > **Use GPU for preview and
+  export** stores the choice (`MotionStudio/Performance/gpu_composition_enabled`,
+  default on) and applies it at the next launch. The process setting
+  `CREATIVE_SUITE_MOTION_GPU_COMPOSITION` overrides it: exactly `0` forces the
+  CPU compositor and exactly `1` forces the GPU; other values are ignored. The
+  setting is read once when the application starts.
   On GPU initialization or rendering failure, log the cause and compose the
   same request on the CPU. Hardware limits must also allow a CPU fallback.
 - Reuse bounded GPU allocations. Document source uploads and output readback
@@ -327,3 +331,16 @@ Video Editor remains the first consumer. Its experimental backend now supports
 global sharing, a three-target/64 MiB reservation budget including retired targets,
 producer/consumer fences and asynchronous RGBA recovery. Motion adoption is now implemented experimentally through its own viewer and
 worker contracts; native platform and performance acceptance remain separate. See [native evidence and remaining platform gates](../../video-editor/gpu/GPU_COMPOSITION_RESULTS.md).
+
+
+## Default-on decision (2026-11-20, provisional)
+
+Maintainer decision: Motion Studio uses GPU preview and export composition by
+default, matching Video Editor. Evidence: the [profile measurements](../performance/GPU_PREVIEW_PROFILES_WINDOWS_2026-11-20.md)
+(heavy, medium and light fixtures, 30 and 60 fps, three trials each) show GPU
+composition never regressing on the reference PC and sustaining the target rate
+where the CPU cannot. CPU recovery is unchanged, so missing OpenGL contexts,
+limits and driver failures fall back with a logged cause. **Pending:** native
+acceptance on AMD/Intel GPUs, Linux and macOS, the 3,405-frame export
+acceptance run, and ProRes encoded parity. Revisit the default if field reports
+show regressions. A stored opt-out is preserved.

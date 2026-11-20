@@ -21,6 +21,7 @@ signals:
 
 private:
     QCheckBox* preview_metrics_checkbox_ = nullptr;
+    QCheckBox* gpu_composition_checkbox_ = nullptr;
     QComboBox* language_combo_ = nullptr;
 };
 

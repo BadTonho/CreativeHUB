@@ -15,6 +15,7 @@
 #include <cmath>
 #include <iostream>
 #include <stdexcept>
+#include <string>
 
 namespace {
 using namespace motion::ui;
@@ -31,11 +32,20 @@ auto pattern(int w, int h, bool alpha = false) {
     }
     return f;
 }
-PreviewRequest fixture(const std::filesystem::path& video, int fps) {
-    PreviewRequest r{{1920,1080}, {fps,1}, {}};
+// Workload profiles. "heavy" is the original reference fixture; "medium" drops the
+// full-frame blur; "light" is a 720p composition without effects.
+struct Profile { const char* name; int width; int height; bool blur; bool color; };
+constexpr Profile kProfiles[] = {
+    {"heavy", 1920, 1080, true, true},
+    {"medium", 1920, 1080, false, true},
+    {"light", 1280, 720, false, false},
+};
+PreviewRequest fixture(const std::filesystem::path& video, int fps, const Profile& profile) {
+    PreviewRequest r{{profile.width,profile.height}, {fps,1}, {}};
     PreviewLayerSnapshot bg; bg.id=1; bg.kind=LayerKind::Image;
-    bg.still_frame=pattern(1920,1080);
-    bg.effects={GaussianBlurEffect{true,10},ColorAdjustmentEffect{true,3,105,95}};
+    bg.still_frame=pattern(profile.width,profile.height);
+    if (profile.blur) bg.effects.push_back(GaussianBlurEffect{true,10});
+    if (profile.color) bg.effects.push_back(ColorAdjustmentEffect{true,3,105,95});
     r.layers.push_back(bg);
     PreviewLayerSnapshot clip; clip.id=2; clip.kind=LayerKind::Video;
     clip.source_path=video; clip.source_frame_count=300; clip.source_frame_rate=30;
@@ -45,11 +55,11 @@ PreviewRequest fixture(const std::filesystem::path& video, int fps) {
     still.still_frame=pattern(480,320,true); still.transform.scale=.3;
     still.transform.position_x=.25; r.layers.push_back(still);
     PreviewLayerSnapshot text; text.id=4; text.kind=LayerKind::Text;
-    auto words=defaultTextLayerContent({1920,1080}); words.text="Motion GPU reference";
+    auto words=defaultTextLayerContent({profile.width,profile.height}); words.text="Motion GPU reference";
     words.font_size_pixels=48; words.box_width=700; words.box_height=100;
     text.content=words; text.transform.position_y=.2; r.layers.push_back(text);
     PreviewLayerSnapshot shape; shape.id=5; shape.kind=LayerKind::Shape;
-    auto ellipse=defaultShapeLayerContent({1920,1080},ShapeKind::Ellipse);
+    auto ellipse=defaultShapeLayerContent({profile.width,profile.height},ShapeKind::Ellipse);
     ellipse.width=180; ellipse.height=180; ellipse.fill_color={220,40,80,160};
     shape.content=ellipse; shape.transform.position_y=.75; r.layers.push_back(shape);
     return r;
@@ -75,13 +85,13 @@ bool waitFor(const std::function<bool()>& test) {
     while (!test() && t.elapsed()<10000) { QApplication::processEvents(); QThread::msleep(1); }
     return test();
 }
-void run(const std::filesystem::path& video,int fps,int mode,int trial) {
+void run(const std::filesystem::path& video,const Profile& profile,int fps,int mode,int trial) {
     auto& metrics=motion::diagnostics::PerformanceMetrics::instance();
     metrics.setEnabled(true); metrics.reset();
-    auto request=fixture(video,fps);
+    auto request=fixture(video,fps,profile);
     QObject receiver;
     auto surface=mode ? creative_suite::composition::OpenGlFrameCompositor::createSurface() : nullptr;
-    CompositionViewer viewer; viewer.resize(1008,606); viewer.setComposition({1920,1080},std::nullopt);
+    CompositionViewer viewer; viewer.resize(1008,606); viewer.setComposition({profile.width,profile.height},std::nullopt);
     bool failed=false;
     if (mode==2) viewer.enableTexturePresentation([&](bool){failed=true;});
     viewer.show();
@@ -103,7 +113,7 @@ void run(const std::filesystem::path& video,int fps,int mode,int trial) {
         if(frame!=last) {
             last=frame;
             for(auto& layer:request.layers) layer.local_frame=frame%(fps*10);
-            request.layers[4].transform.position_x=.5+.15*std::sin(frame/double(fps));
+            for(auto& layer:request.layers) if(layer.id==5) layer.transform.position_x=.5+.15*std::sin(frame/double(fps));
             (void)worker.submit(request,PreviewRequestMode::Playback);
         }
         QApplication::processEvents(); QThread::msleep(1);
@@ -116,7 +126,7 @@ void run(const std::filesystem::path& video,int fps,int mode,int trial) {
         throw std::runtime_error("Measurement did not use its requested GPU route.");
     const auto& lat=s->timings[std::size_t(motion::diagnostics::PreviewTimingStage::RequestToViewerPaint)];
     const auto& render=s->timings[std::size_t(motion::diagnostics::PreviewTimingStage::FrameRender)];
-    std::cout<<fps<<','<<(mode==0?"cpu":mode==1?"gpu_rgba":"gpu_texture")<<','<<trial<<','
+    std::cout<<profile.name<<','<<fps<<','<<(mode==0?"cpu":mode==1?"gpu_rgba":"gpu_texture")<<','<<trial<<','
         <<(s->delivery.texture_presented+s->delivery.rgba_presented)/10.0<<','
         <<(lat.count?lat.total_nanoseconds/double(lat.count)/1e6:0)<<','<<lat.p95_nanoseconds/1e6<<','
         <<(render.count?render.total_nanoseconds/double(render.count)/1e6:0)<<','
@@ -135,8 +145,13 @@ int main(int argc,char** argv) {
     try {
         const auto video=std::filesystem::path(temp.path().toStdString())/"synthetic.mkv";
         makeVideo(video);
-        std::cout<<"fps,backend,trial,presented_fps,latency_avg_ms,latency_p95_ms,render_avg_ms,coalesced,stale,cpu_percent,working_set_bytes,upload_bytes,readback_bytes,pool_peak_bytes,pool_peak_targets,busy_drops,failures\n";
-        for(int fps:{30,60}) for(int trial=1;trial<=3;++trial) for(int mode=0;mode<3;++mode) run(video,fps,mode,trial);
+        std::cout<<"profile,fps,backend,trial,presented_fps,latency_avg_ms,latency_p95_ms,render_avg_ms,coalesced,stale,cpu_percent,working_set_bytes,upload_bytes,readback_bytes,pool_peak_bytes,pool_peak_targets,busy_drops,failures\n";
+        // Optional first argument selects one profile: heavy, medium or light.
+        const std::string only = argc > 1 ? argv[1] : "";
+        for(const auto& profile:kProfiles) {
+            if(!only.empty() && only!=profile.name) continue;
+            for(int fps:{30,60}) for(int trial=1;trial<=3;++trial) for(int mode=0;mode<3;++mode) run(video,profile,fps,mode,trial);
+        }
         return 0;
     } catch(const std::exception& e) {std::cerr<<"FAIL: "<<e.what()<<'\n';return 1;}
 }

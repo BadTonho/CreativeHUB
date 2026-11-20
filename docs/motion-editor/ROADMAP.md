@@ -71,8 +71,9 @@ offline export integration, and direct texture preview implemented; Windows
 reference preview measurements verified, broader acceptance pending.** Color Adjustment-only stacks run in the composition
 shader, while stacks containing Gaussian Blur or Glow use their shared ordered
 GPU image paths when supported. Glow falls back to CPU when OpenGL or Vulkan
-cannot process it. `CREATIVE_SUITE_MOTION_GPU_COMPOSITION=1` opts both preview
-and export into the backend; both remain CPU-only by default. Export reads the
+cannot process it. Preview and export use the backend by default
+(Settings > General, applied at the next launch; `CREATIVE_SUITE_MOTION_GPU_COMPOSITION=0`
+forces CPU), with automatic CPU fallback. Export reads the
 composed result back to RGBA for the existing CPU encoder.
 [Controlled Windows reference measurements](performance/GPU_PREVIEW_RESULTS_WINDOWS_2026-10-10.md)
 record direct-preview improvements; cross-platform driver acceptance remains

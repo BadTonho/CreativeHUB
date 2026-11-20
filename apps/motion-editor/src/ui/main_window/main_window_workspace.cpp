@@ -458,7 +458,7 @@ void MainWindow::createWorkspace()
                 creative_suite::diagnostics::Level::Error,
                 "motion_preview", "create_gpu_surface",
                 "Could not create the OpenGL offscreen surface; using CPU composition",
-                {{"setting", "CREATIVE_SUITE_MOTION_GPU_COMPOSITION=1"}});
+                {{"setting", "MotionStudio/Performance/gpu_composition_enabled"}});
         }
     }
     auto* share = gpu_composition_enabled ? QOpenGLContext::globalShareContext() : nullptr;

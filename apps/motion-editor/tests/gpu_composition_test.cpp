@@ -12,6 +12,7 @@
 #include <QEventLoop>
 #include <QGuiApplication>
 #include <QOffscreenSurface>
+#include <QSettings>
 #include <QTemporaryDir>
 #include <QThread>
 
@@ -113,15 +114,30 @@ motion::ui::PreviewRequest request()
 int main(int argc, char* argv[])
 {
     QGuiApplication application(argc, argv);
+    QTemporaryDir preference_directory;
+    require(preference_directory.isValid(), "a temporary preference directory is available");
+    QSettings::setDefaultFormat(QSettings::IniFormat);
+    QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, preference_directory.path());
+    QCoreApplication::setOrganizationName(QStringLiteral("Creative Suite"));
+    QCoreApplication::setApplicationName(QStringLiteral("Motion Studio"));
     qunsetenv("CREATIVE_SUITE_MOTION_GPU_COMPOSITION");
-    require(!motion::settings::gpuCompositionEnabled(),
-            "GPU composition is disabled by default when the setting is absent");
-    require(!motion::settings::resolveGpuCompositionEnabled(nullptr) &&
-                !motion::settings::resolveGpuCompositionEnabled("") &&
-                !motion::settings::resolveGpuCompositionEnabled("0") &&
-                !motion::settings::resolveGpuCompositionEnabled("true") &&
-                motion::settings::resolveGpuCompositionEnabled("1"),
-            "GPU preview requires the exact environment opt-in");
+    require(motion::settings::gpuCompositionPreference() &&
+                motion::settings::gpuCompositionEnabled(),
+            "GPU composition is enabled by default when nothing is stored");
+    motion::settings::setGpuCompositionPreference(false);
+    require(!motion::settings::gpuCompositionPreference(),
+            "a stored opt-out is preserved and read back");
+    motion::settings::setGpuCompositionPreference(true);
+    // Environment "0"/"1" override the stored preference; other values are ignored.
+    require(motion::settings::resolveGpuCompositionEnabled(nullptr, true) &&
+                !motion::settings::resolveGpuCompositionEnabled(nullptr, false) &&
+                motion::settings::resolveGpuCompositionEnabled("", true) &&
+                !motion::settings::resolveGpuCompositionEnabled("", false) &&
+                motion::settings::resolveGpuCompositionEnabled("true", true) &&
+                !motion::settings::resolveGpuCompositionEnabled("true", false) &&
+                !motion::settings::resolveGpuCompositionEnabled("0", true) &&
+                motion::settings::resolveGpuCompositionEnabled("1", false),
+            "the environment forces GPU only with an exact 0 or 1");
 
     QTemporaryDir log_directory;
     require(log_directory.isValid(), "a temporary diagnostic directory is available");
