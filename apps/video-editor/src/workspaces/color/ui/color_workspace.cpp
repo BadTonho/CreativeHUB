@@ -9,6 +9,7 @@
 #include "workspaces/color/ui/hdr_wheels_page.h"
 #include "workspaces/color/ui/motion_effects_page.h"
 #include "workspaces/color/ui/primaries_bars_page.h"
+#include "workspaces/color/ui/qualifier_page.h"
 #include "workspaces/color/ui/rgb_mixer_page.h"
 #include "ui/preview/preview_widget.h"
 #include "workspaces/color/evaluation/color_graph_evaluator.h"
@@ -1429,8 +1430,15 @@ ColorWorkspace::ColorWorkspace(QWidget* parent) : QWidget(parent) {
                 QWidget* page = nullptr;
                 if (!motion_dock) {
                     // Sizing dock: page 1 is Curves - Custom, page 2 is
-                    // Color Slice and page 3 is Chroma Warp; the others are still empty placeholders.
-                    if (i == 2) {
+                    // Color Slice and page 3 is Chroma Warp and page 4 is Qualifier; the others are still empty placeholders.
+                    if (i == 3) {
+                        auto* scroll = new QScrollArea(pages);
+                        scroll->setObjectName("colorQualifierScroll");
+                        scroll->setFrameShape(QFrame::NoFrame);
+                        scroll->setWidgetResizable(true);
+                        scroll->setWidget(new QualifierPage(scroll));
+                        page = scroll;
+                    } else if (i == 2) {
                         auto* scroll = new QScrollArea(pages);
                         scroll->setObjectName("colorChromaWarpScroll");
                         scroll->setFrameShape(QFrame::NoFrame);

@@ -1205,6 +1205,86 @@ int main(int argc, char** argv) {
                         warp_graph->property("selectedPin").toInt() == -1 &&
                         warp_page->findChild<QPushButton*>("colorChromaWarpTool1")->isChecked(),
                     "The Chroma Warp page reset must restore one unselected pin and the Add pin tool.");
+            // Sizing dock, page 4: Qualifier - HSL (visual stage).
+            workspace.findChild<QPushButton*>("colorToolButton10")->click();
+            auto* qual_page = workspace.findChild<QWidget*>("colorQualifierPage");
+            require(qual_page && sizing_pages->currentWidget()->isAncestorOf(qual_page) &&
+                        !sizing_pages->currentWidget()->isAncestorOf(warp_page),
+                    "Sizing dock button 4 must open the Qualifier - HSL page.");
+            for (const char* name : {"colorQualifierHslModeButton", "colorQualifierRgbModeButton",
+                     "colorQualifierLumModeButton", "colorQualifierThreeDModeButton",
+                     "colorQualifierResetButton", "colorQualifierTool1", "colorQualifierTool5",
+                     "colorQualifierInvertButton", "colorQualifierHueToggle",
+                     "colorQualifierSaturationToggle", "colorQualifierLuminanceToggle",
+                     "colorQualifierMatteTab1", "colorQualifierMatteTab2"})
+                require(qual_page->findChild<QPushButton*>(name),
+                        "Qualifier must expose its mode, tool, toggle and Matte Finesse buttons.");
+            const std::pair<const char*, double> qual_defaults[] = {
+                {"colorQualifierHueCenter", 50.0}, {"colorQualifierHueWidth", 100.0},
+                {"colorQualifierHueSoft", 0.0}, {"colorQualifierHueSym", 50.0},
+                {"colorQualifierSaturationLow", 0.0}, {"colorQualifierSaturationHigh", 100.0},
+                {"colorQualifierSaturationLSoft", 0.0}, {"colorQualifierSaturationHSoft", 0.0},
+                {"colorQualifierLuminanceLow", 0.0}, {"colorQualifierLuminanceHigh", 100.0},
+                {"colorQualifierPreFilter", 0.0}, {"colorQualifierCleanBlack", 0.0},
+                {"colorQualifierCleanWhite", 0.0}, {"colorQualifierBlackClip", 0.0},
+                {"colorQualifierWhiteClip", 100.0}, {"colorQualifierBlurRadius", 0.0},
+                {"colorQualifierInOutRatio", 0.0},
+            };
+            for (const auto& [name, value] : qual_defaults) {
+                auto* box = qual_page->findChild<QDoubleSpinBox*>(name);
+                require(box && qFuzzyCompare(box->value() + 1.0, value + 1.0),
+                        "Qualifier controls must start at their documented defaults.");
+            }
+            require(qual_page->findChild<QPushButton*>("colorQualifierHueToggle")->isChecked() &&
+                        qual_page->findChild<QPushButton*>("colorQualifierTool1")->isChecked() &&
+                        qual_page->findChild<QPushButton*>("colorQualifierMatteTab1")->isChecked() &&
+                        !qual_page->findChild<QPushButton*>("colorQualifierInvertButton")->isChecked(),
+                    "Qualifier must start with its ranges on, the Pick tool and tab 1 selected.");
+            // Hue bar shows Center +/- Width / 2.
+            auto* hue_bar = qual_page->findChild<QWidget*>("colorQualifierHueBar");
+            auto* hue_width = qual_page->findChild<QDoubleSpinBox*>("colorQualifierHueWidth");
+            require(hue_bar && qFuzzyCompare(hue_bar->property("rangeLow").toDouble() + 1.0, 1.0) &&
+                        qFuzzyCompare(hue_bar->property("rangeHigh").toDouble(), 100.0),
+                    "The Hue bar must start spanning the full range.");
+            hue_width->setValue(40.0);
+            require(qFuzzyCompare(hue_bar->property("rangeLow").toDouble(), 30.0) &&
+                        qFuzzyCompare(hue_bar->property("rangeHigh").toDouble(), 70.0),
+                    "Changing Hue Width must resize the bar about Center.");
+            // Saturation bar: dragging the high handle updates High.
+            auto* sat_bar = qual_page->findChild<QWidget*>("colorQualifierSaturationBar");
+            auto* sat_high = qual_page->findChild<QDoubleSpinBox*>("colorQualifierSaturationHigh");
+            sat_bar->resize(406, 26);
+            const auto sat_x = [&](double percent) { return 3.0 + (sat_bar->width() - 6.0) * percent / 100.0; };
+            QMouseEvent sat_press(QEvent::MouseButtonPress, QPointF(sat_x(100.0), 13.0),
+                QPointF(sat_x(100.0), 13.0), Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+            QApplication::sendEvent(sat_bar, &sat_press);
+            QMouseEvent sat_move(QEvent::MouseMove, QPointF(sat_x(60.0), 13.0),
+                QPointF(sat_x(60.0), 13.0), Qt::NoButton, Qt::LeftButton, Qt::NoModifier);
+            QApplication::sendEvent(sat_bar, &sat_move);
+            QMouseEvent sat_release(QEvent::MouseButtonRelease, QPointF(sat_x(60.0), 13.0),
+                QPointF(sat_x(60.0), 13.0), Qt::LeftButton, Qt::NoButton, Qt::NoModifier);
+            QApplication::sendEvent(sat_bar, &sat_release);
+            require(std::abs(sat_high->value() - 60.0) < 0.5 &&
+                        std::abs(sat_bar->property("rangeHigh").toDouble() - 60.0) < 0.5 &&
+                        qFuzzyIsNull(sat_bar->property("rangeLow").toDouble()),
+                    "Dragging the Saturation high handle must update High and keep Low.");
+            qual_page->findChild<QDoubleSpinBox*>("colorQualifierSaturationLow")->setValue(20.0);
+            require(qFuzzyCompare(sat_bar->property("rangeLow").toDouble(), 20.0),
+                    "Typing Saturation Low must move the bar's low handle.");
+            qual_page->findChild<QPushButton*>("colorQualifierSaturationResetButton")->click();
+            require(qFuzzyCompare(sat_high->value(), 100.0) && qFuzzyCompare(hue_width->value(), 40.0),
+                    "A range reset must restore only that range.");
+            auto* white_clip = qual_page->findChild<QDoubleSpinBox*>("colorQualifierWhiteClip");
+            auto* white_clip_slider = qual_page->findChild<QSlider*>("colorQualifierWhiteClipSlider");
+            white_clip->setValue(75.0);
+            require(white_clip_slider->value() == 750, "Typing a Matte Finesse value must move its slider.");
+            qual_page->findChild<QPushButton*>("colorQualifierMatteTab2")->click();
+            qual_page->findChild<QPushButton*>("colorQualifierInvertButton")->click();
+            qual_page->findChild<QPushButton*>("colorQualifierResetButton")->click();
+            require(qFuzzyCompare(hue_width->value(), 100.0) && qFuzzyCompare(white_clip->value(), 100.0) &&
+                        qual_page->findChild<QPushButton*>("colorQualifierMatteTab1")->isChecked() &&
+                        !qual_page->findChild<QPushButton*>("colorQualifierInvertButton")->isChecked(),
+                    "The Qualifier page reset must restore every control.");
             workspace.findChild<QPushButton*>("colorToolButton1")->click();
         }
         auto* capture_button = workspace.findChild<QPushButton*>("colorCaptureStillButton");

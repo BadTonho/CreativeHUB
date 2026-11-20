@@ -1,8 +1,8 @@
 # Color Sizing Dock
 
 Status: **Stage 1 (visual only) is implemented for pages 1 (Curves - Custom), 2 (Color
-Slice) and 3 (Color Warp - Chroma Warp). Pages 4 to 11 are not yet specified; their
-buttons select empty placeholder pages.** Control
+Slice), 3 (Color Warp - Chroma Warp) and 4 (Qualifier - HSL). Pages 5 to 11 are not
+yet specified; their buttons select empty placeholder pages.** Control
 names, ranges and defaults are taken from the maintainer's layout reference
 screenshots and are proposals until implemented and recorded as decisions.
 Behavior marked *Pending* has not been decided.
@@ -33,7 +33,8 @@ Delivery stages:
 | 1 | Curves - Custom | Visual stage implemented |
 | 2 | Color Slice | Visual stage implemented |
 | 3 | Color Warp - Chroma Warp | Visual stage implemented |
-| 4 to 11 | *To be specified by the maintainer* | Empty placeholder page |
+| 4 | Qualifier - HSL | Visual stage implemented |
+| 5 to 11 | *To be specified by the maintainer* | Empty placeholder page |
 
 ## 1. Curves - Custom
 
@@ -155,13 +156,61 @@ falloff; pins live per node and persist (CSP schema bump), with per-pin values.
 The plane must be drawn from a defined color space and the warp evaluated on
 CPU, OpenGL and Vulkan with measured cost.
 
+## 4. Qualifier - HSL
+
+**Purpose.** Select pixels by hue, saturation and luminance ranges and refine the
+resulting matte. This page is separate from the Color graph's existing qualifier
+matte refinement, which stays as it is; binding the two is stage 2.
+
+**Applies to.** A new HSL qualifier on the selected Color node. No engine support
+exists today for this page.
+
+**Implemented (stage 1, visual only).** Button 4 shows the page
+(`colorQualifierPage`, controls named `colorQualifier*`, inside a scroll area).
+
+- **Header.** Title; four exclusive selection-mode buttons (HSL, selected, RGB,
+  Luminance and 3D, which only change the highlight); a page reset and a "..."
+  button that does nothing yet.
+- **Tools.** Five exclusive tool buttons (Pick, Add to selection, Subtract from
+  selection, Soften less, Soften more; Pick selected) and an independent Invert
+  toggle. They only change appearance.
+- **Range sections.** Hue, Saturation and Luminance each have an enable switch
+  (on by default, no effect yet), a reset and a painted gradient bar with two
+  draggable range handles, with four fields below (range 0 to 100, one decimal,
+  proposed):
+  - Hue: Center 50.0, Width 100.0, Soft 0.0, Sym 50.0. The bar spans Center minus
+    and plus half of Width; dragging a handle resizes Width symmetrically about
+    Center. Soft and Sym are stored but do not move the bar.
+  - Saturation and Luminance: Low 0.0, High 100.0, L. Soft 0.0, H. Soft 0.0. The
+    bar spans Low to High; dragging a handle updates the matching field; the low
+    handle never passes the high handle. Outside the range the bar is dimmed.
+  The bars expose `rangeLow` and `rangeHigh` as properties. A section reset
+  restores only that section and turns its switch on.
+- **Matte Finesse.** Two set tabs (1 selected; the second only changes the
+  highlight) above seven rows, each with a field and a thin slider that mirror
+  each other: Pre-Filter, Clean Black, Clean White, Black Clip, Blur Radius (0 to
+  100, default 0.0), White Clip (0 to 100, default 100.0) and In/Out Ratio (-100
+  to 100, default 0.0). Ranges are proposed. The values are shared by both tabs.
+- **Page reset** restores every field, switch, tool, mode, the Invert toggle and
+  the first Matte Finesse tab.
+
+Nothing selects pixels, builds a matte, edits a grade or touches project data.
+
+**Behavior (stage 2).** *Pending.* Intended: the ranges drive an HSL matte with
+the given softness and symmetry, the finesse controls refine it, and the matte can
+feed the selected node as a qualifier. The relation to the existing qualifier
+matte refinement and its CSP persistence, the meaning of Sym and of the two
+finesse sets, and the evaluation on CPU, OpenGL and Vulkan are *Pending*.
+
 ## Verification
 
 - Stage 1: the Color workspace test checks that button 1 opens the page, the
   documented defaults, strength slider/field linking, resets, and graph point
   add/remove; button 2 opens Color Slice, whose seven columns, defaults, bar/field
   linking and resets are checked; button 3 opens Chroma Warp, where pin
-  adding, selecting, deleting, tool behavior, pin controls and resets are checked.
+  adding, selecting, deleting, tool behavior, pin controls and resets are checked;
+  button 4 opens Qualifier - HSL, where defaults, the Hue/Saturation range bars and
+  handle dragging, Matte Finesse sliders and resets are checked.
 - Stage 2: evaluator parity with the existing Curves node, persistence and
   older-version compatibility, and a manual visual check recorded in the
   [regression guide](../validation/REGRESSION_TESTING.md).
