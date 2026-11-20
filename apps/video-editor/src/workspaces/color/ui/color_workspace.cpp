@@ -3,6 +3,7 @@
 #include "ui/effects/effects_catalog.h"
 #include "workspaces/color/ui/camera_raw_page.h"
 #include "workspaces/color/ui/color_match_page.h"
+#include "workspaces/color/ui/curves_page.h"
 #include "workspaces/color/ui/hdr_wheels_page.h"
 #include "workspaces/color/ui/motion_effects_page.h"
 #include "workspaces/color/ui/primaries_bars_page.h"
@@ -1409,7 +1410,9 @@ ColorWorkspace::ColorWorkspace(QWidget* parent) : QWidget(parent) {
         // The Motion Effects dock's buttons select its six pages, in order:
         // Camera Raw, Color Match, Primaries - Color Bars, HDR Color Wheels,
         // RGB Mixer and Motion Effects (all visual only for now).
-        const bool has_pages = QLatin1String(entry.object_name) == QLatin1String("colorMotionEffectsDock");
+        const bool motion_dock = QLatin1String(entry.object_name) == QLatin1String("colorMotionEffectsDock");
+        const bool has_pages = motion_dock ||
+            QLatin1String(entry.object_name) == QLatin1String("colorSizingDock");
         QStackedWidget* pages = has_pages ? new QStackedWidget(content) : nullptr;
         auto* page_buttons = has_pages ? new QButtonGroup(content) : nullptr;
         for (int i = 0; i < entry.button_count; ++i) {
@@ -1422,7 +1425,21 @@ ColorWorkspace::ColorWorkspace(QWidget* parent) : QWidget(parent) {
                 button->setCheckable(true);
                 page_buttons->addButton(button, i);
                 QWidget* page = nullptr;
-                if (i == 0) page = new CameraRawPage(pages);
+                if (!motion_dock) {
+                    // Sizing dock: its first page is Curves - Custom; the
+                    // others are still empty placeholders.
+                    if (i == 0) {
+                        auto* scroll = new QScrollArea(pages);
+                        scroll->setObjectName("colorCurvesScroll");
+                        scroll->setFrameShape(QFrame::NoFrame);
+                        scroll->setWidgetResizable(true);
+                        scroll->setWidget(new CurvesPage(scroll));
+                        page = scroll;
+                    } else {
+                        page = new QWidget(pages);
+                    }
+                }
+                else if (i == 0) page = new CameraRawPage(pages);
                 else if (i == 1) page = new ColorMatchPage(pages);
                 else if (i == 2) {
                     // Tall page: scrolls when the dock is short or narrow.
@@ -1464,7 +1481,7 @@ ColorWorkspace::ColorWorkspace(QWidget* parent) : QWidget(parent) {
         if (entry.align != ButtonAlign::Right) button_row->addStretch();
         content_layout->addLayout(button_row);
         if (has_pages) {
-            pages->setObjectName("colorMotionEffectsPages");
+            pages->setObjectName(motion_dock ? "colorMotionEffectsPages" : "colorSizingPages");
             page_buttons->setExclusive(true);
             page_buttons->button(0)->setChecked(true);
             connect(page_buttons, &QButtonGroup::idClicked, pages,

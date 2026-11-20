@@ -1012,6 +1012,76 @@ int main(int argc, char** argv) {
             require(frames->currentIndex() == 0 && qFuzzyIsNull(blur_amount->value()) &&
                         spatial_link->isChecked() && !temporal_range->isEnabled(),
                     "The page reset must restore every section and re-link Luma and Chroma.");
+            // Sizing dock, page 1: Curves - Custom (visual stage).
+            auto* sizing_pages = workspace.findChild<QStackedWidget*>("colorSizingPages");
+            workspace.findChild<QPushButton*>("colorToolButton7")->click();
+            auto* curves_page = workspace.findChild<QWidget*>("colorCurvesPage");
+            require(sizing_pages && curves_page && sizing_pages->currentWidget()->isAncestorOf(curves_page),
+                    "Sizing dock button 1 must open the Curves - Custom page.");
+            for (const char* name : {"colorCurvesCustomModeButton", "colorCurvesHueVsHueModeButton",
+                     "colorCurvesSatVsLumModeButton", "colorCurvesExpandButton", "colorCurvesResetButton",
+                     "colorCurvesEditLink", "colorCurvesEditY", "colorCurvesEditR", "colorCurvesEditG",
+                     "colorCurvesEditB", "colorCurvesSoftClipLink", "colorCurvesSoftClipR",
+                     "colorCurvesSoftClipG", "colorCurvesSoftClipB"})
+                require(curves_page->findChild<QPushButton*>(name),
+                        "Curves page must expose its mode, channel and Soft Clip buttons.");
+            for (const char* name : {"colorCurvesEditY", "colorCurvesEditR", "colorCurvesEditG",
+                     "colorCurvesEditB", "colorCurvesSoftClipR", "colorCurvesSoftClipLink"})
+                require(curves_page->findChild<QPushButton*>(name)->isChecked(),
+                        "Curves channel toggles and links must start on.");
+            for (const char* channel : {"Y", "R", "G", "B"}) {
+                auto* value = curves_page->findChild<QSpinBox*>(
+                    QStringLiteral("colorCurvesStrength%1Value").arg(QLatin1String(channel)));
+                auto* slider = curves_page->findChild<QSlider*>(
+                    QStringLiteral("colorCurvesStrength%1Slider").arg(QLatin1String(channel)));
+                require(value && slider && value->value() == 100 && slider->value() == 100,
+                        "Curves strength controls must start at 100.");
+            }
+            auto* strength_r = curves_page->findChild<QSpinBox*>("colorCurvesStrengthRValue");
+            auto* strength_r_slider = curves_page->findChild<QSlider*>("colorCurvesStrengthRSlider");
+            strength_r->setValue(140);
+            require(strength_r_slider->value() == 140, "Typing a Curves strength must move its slider.");
+            strength_r_slider->setValue(30);
+            require(strength_r->value() == 30, "Moving a Curves slider must update its value.");
+            curves_page->findChild<QPushButton*>("colorCurvesStrengthRResetButton")->click();
+            require(strength_r->value() == 100, "A Curves strength reset must restore 100.");
+            require(qFuzzyCompare(curves_page->findChild<QDoubleSpinBox*>("colorCurvesSoftClipLow")->value(), 50.0) &&
+                        qFuzzyCompare(curves_page->findChild<QDoubleSpinBox*>("colorCurvesSoftClipHigh")->value(), 50.0) &&
+                        qFuzzyIsNull(curves_page->findChild<QDoubleSpinBox*>("colorCurvesSoftClipLS")->value()) &&
+                        qFuzzyIsNull(curves_page->findChild<QDoubleSpinBox*>("colorCurvesSoftClipHS")->value()),
+                    "Curves Soft Clip must start at Low 50, High 50, L.S. 0 and H.S. 0.");
+            // Graph: two end points; clicking adds a point, double-clicking removes it.
+            auto* curve_graph = curves_page->findChild<QWidget*>("colorCurvesGraph");
+            require(curve_graph && curve_graph->property("pointCount").toInt() == 2,
+                    "The Curves graph must start with its two end points.");
+            const double graph_left = 18.0;
+            const double graph_width = curve_graph->width() - 26.0;
+            const double graph_bottom = curve_graph->height() - 8.0;
+            const double graph_height = curve_graph->height() - 16.0;
+            // The default curve is the diagonal; click clearly above it at x = 0.5.
+            const QPointF add_at(graph_left + graph_width * 0.5, graph_bottom - graph_height * 0.8);
+            QMouseEvent add_press(QEvent::MouseButtonPress, add_at, add_at, Qt::LeftButton,
+                Qt::LeftButton, Qt::NoModifier);
+            QApplication::sendEvent(curve_graph, &add_press);
+            QMouseEvent add_release(QEvent::MouseButtonRelease, add_at, add_at, Qt::LeftButton,
+                Qt::NoButton, Qt::NoModifier);
+            QApplication::sendEvent(curve_graph, &add_release);
+            require(curve_graph->property("pointCount").toInt() == 3,
+                    "Clicking the Curves graph must add a point.");
+            QMouseEvent remove_click(QEvent::MouseButtonDblClick, add_at, add_at, Qt::LeftButton,
+                Qt::LeftButton, Qt::NoModifier);
+            QApplication::sendEvent(curve_graph, &remove_click);
+            require(curve_graph->property("pointCount").toInt() == 2,
+                    "Double-clicking an interior Curves point must remove it.");
+            QApplication::sendEvent(curve_graph, &add_press);
+            QApplication::sendEvent(curve_graph, &add_release);
+            curves_page->findChild<QPushButton*>("colorCurvesEditR")->setChecked(false);
+            curves_page->findChild<QDoubleSpinBox*>("colorCurvesSoftClipLow")->setValue(10.0);
+            curves_page->findChild<QPushButton*>("colorCurvesResetButton")->click();
+            require(curve_graph->property("pointCount").toInt() == 2 &&
+                        curves_page->findChild<QPushButton*>("colorCurvesEditR")->isChecked() &&
+                        qFuzzyCompare(curves_page->findChild<QDoubleSpinBox*>("colorCurvesSoftClipLow")->value(), 50.0),
+                    "The Curves page reset must restore the graph, toggles and fields.");
             workspace.findChild<QPushButton*>("colorToolButton1")->click();
         }
         auto* capture_button = workspace.findChild<QPushButton*>("colorCaptureStillButton");
