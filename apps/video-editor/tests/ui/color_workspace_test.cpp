@@ -1474,6 +1474,67 @@ int main(int argc, char** argv) {
                         mask_page->findChild<QComboBox*>("colorSmartMaskMode")->currentIndex() == 0 &&
                         qFuzzyIsNull(mask_timeline->property("playhead").toDouble()),
                     "The Smart Mask reset must restore the quality, fields, tool and playhead.");
+            // Sizing dock, page 8: Blur - Blur (visual stage).
+            workspace.findChild<QPushButton*>("colorToolButton14")->click();
+            auto* blur_page = workspace.findChild<QWidget*>("colorBlurPage");
+            require(blur_page && sizing_pages->currentWidget()->isAncestorOf(blur_page) &&
+                        !sizing_pages->currentWidget()->isAncestorOf(mask_page),
+                    "Sizing dock button 8 must open the Blur - Blur page.");
+            for (const char* name : {"colorBlurBlurModeButton", "colorBlurSharpenModeButton",
+                     "colorBlurMistModeButton", "colorBlurResetButton", "colorBlurRadiusLink",
+                     "colorBlurHVRatioLink", "colorBlurScalingLink", "colorBlurRadiusResetButton",
+                     "colorBlurHVRatioResetButton", "colorBlurScalingResetButton"})
+                require(blur_page->findChild<QPushButton*>(name),
+                        "Blur must expose its mode, link and reset buttons.");
+            require(blur_page->findChild<QPushButton*>("colorBlurBlurModeButton")->isChecked() &&
+                        blur_page->findChild<QPushButton*>("colorBlurRadiusLink")->isChecked() &&
+                        blur_page->findChild<QPushButton*>("colorBlurHVRatioLink")->isChecked() &&
+                        !blur_page->findChild<QPushButton*>("colorBlurScalingLink")->isChecked() &&
+                        !blur_page->findChild<QPushButton*>("colorBlurScalingLink")->isEnabled(),
+                    "Blur must start with Radius and H/V Ratio linked and Scaling's link disabled.");
+            for (const char* group : {"Radius", "HVRatio", "Scaling"}) {
+                const double expected = QLatin1String(group) == QLatin1String("Scaling") ? 0.25 : 0.5;
+                for (const char* channel : {"R", "G", "B"}) {
+                    const QString stem = QStringLiteral("colorBlur") + QLatin1String(group) + QLatin1String(channel);
+                    auto* box = blur_page->findChild<QDoubleSpinBox*>(stem + "Value");
+                    require(box && blur_page->findChild<QSlider*>(stem + "Slider") &&
+                                qFuzzyCompare(box->value(), expected),
+                            "Each Blur group must start with its documented value on every channel.");
+                }
+            }
+            require(!blur_page->findChild<QDoubleSpinBox*>("colorBlurCoringSoftness")->isEnabled() &&
+                        !blur_page->findChild<QDoubleSpinBox*>("colorBlurLevel")->isEnabled() &&
+                        !blur_page->findChild<QDoubleSpinBox*>("colorBlurMix")->isEnabled() &&
+                        qFuzzyIsNull(blur_page->findChild<QDoubleSpinBox*>("colorBlurCoringSoftness")->value()) &&
+                        qFuzzyCompare(blur_page->findChild<QDoubleSpinBox*>("colorBlurMix")->value(), 100.0),
+                    "The Blur footer fields must be disabled with their documented defaults.");
+            auto* blur_radius_r = blur_page->findChild<QDoubleSpinBox*>("colorBlurRadiusRValue");
+            auto* blur_radius_g = blur_page->findChild<QDoubleSpinBox*>("colorBlurRadiusGValue");
+            auto* blur_radius_b = blur_page->findChild<QDoubleSpinBox*>("colorBlurRadiusBValue");
+            auto* blur_radius_slider = blur_page->findChild<QSlider*>("colorBlurRadiusBSlider");
+            blur_radius_r->setValue(0.8);
+            require(qFuzzyCompare(blur_radius_g->value(), 0.8) && qFuzzyCompare(blur_radius_b->value(), 0.8) &&
+                        blur_radius_slider->value() == 80,
+                    "While linked, changing one Blur channel must move all three and their bars.");
+            auto* blur_scaling_r = blur_page->findChild<QDoubleSpinBox*>("colorBlurScalingRValue");
+            auto* blur_scaling_g = blur_page->findChild<QDoubleSpinBox*>("colorBlurScalingGValue");
+            blur_scaling_r->setValue(0.6);
+            require(qFuzzyCompare(blur_scaling_g->value(), 0.25),
+                    "An unlinked Blur group must keep its channels independent.");
+            blur_page->findChild<QPushButton*>("colorBlurRadiusLink")->click();
+            blur_radius_r->setValue(0.2);
+            require(qFuzzyCompare(blur_radius_g->value(), 0.8),
+                    "Turning a Blur link off must make its channels independent.");
+            blur_page->findChild<QPushButton*>("colorBlurRadiusResetButton")->click();
+            require(qFuzzyCompare(blur_radius_r->value(), 0.5) && qFuzzyCompare(blur_radius_b->value(), 0.5) &&
+                        blur_page->findChild<QPushButton*>("colorBlurRadiusLink")->isChecked() &&
+                        qFuzzyCompare(blur_scaling_r->value(), 0.6),
+                    "A Blur group reset must restore only that group and turn its link on.");
+            blur_page->findChild<QPushButton*>("colorBlurSharpenModeButton")->click();
+            blur_page->findChild<QPushButton*>("colorBlurResetButton")->click();
+            require(qFuzzyCompare(blur_scaling_r->value(), 0.25) &&
+                        blur_page->findChild<QPushButton*>("colorBlurBlurModeButton")->isChecked(),
+                    "The Blur page reset must restore every group and the Blur kind.");
             workspace.findChild<QPushButton*>("colorToolButton1")->click();
         }
         auto* capture_button = workspace.findChild<QPushButton*>("colorCaptureStillButton");

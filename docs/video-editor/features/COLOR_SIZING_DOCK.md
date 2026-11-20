@@ -1,8 +1,8 @@
 # Color Sizing Dock
 
 Status: **Stage 1 (visual only) is implemented for pages 1 (Curves - Custom), 2 (Color
-Slice), 3 (Color Warp - Chroma Warp), 4 (Qualifier - HSL), 5 (Window), 6 (Tracker - Window) and 7 (Smart Mask).
-Pages 8 to 11 are not yet specified; their buttons select empty placeholder pages.** Control
+Slice), 3 (Color Warp - Chroma Warp), 4 (Qualifier - HSL), 5 (Window), 6 (Tracker - Window), 7 (Smart Mask) and 8 (Blur - Blur).
+Pages 9 to 11 are not yet specified; their buttons select empty placeholder pages.** Control
 names, ranges and defaults are taken from the maintainer's layout reference
 screenshots and are proposals until implemented and recorded as decisions.
 Behavior marked *Pending* has not been decided.
@@ -37,7 +37,8 @@ Delivery stages:
 | 5 | Window | Visual stage implemented |
 | 6 | Tracker - Window | Visual stage implemented |
 | 7 | Smart Mask | Visual stage implemented |
-| 8 to 11 | *To be specified by the maintainer* | Empty placeholder page |
+| 8 | Blur - Blur | Visual stage implemented |
+| 9 to 11 | *To be specified by the maintainer* | Empty placeholder page |
 
 ## 1. Curves - Custom
 
@@ -335,6 +336,40 @@ matte, which can feed the selected node as a qualifier. See the decision above.
 Persistence (CSP schema bump), cancellation, error logging and CPU, OpenGL and Vulkan
 cost are *Pending*.
 
+## 8. Blur - Blur
+
+**Purpose.** Blur the image with a radius, an aspect ratio and a scaling factor
+settable per color channel. The Color workspace's Effects catalog already has a
+Gaussian Blur for Fusion; this page is separate from it and binding is stage 2.
+
+**Applies to.** A new blur effect on the selected Color node. No engine support
+exists for this page today.
+
+**Implemented (stage 1, visual only).** Button 8 shows the page
+(`colorBlurPage`, controls named `colorBlur*`, inside a scroll area).
+
+- **Header.** Title, three exclusive effect-kind buttons (Blur, selected, Sharpen and
+  Mist, which only change the highlight) and a page reset.
+- **Three groups** (Radius, H/V Ratio, Scaling), each with a link toggle, a group
+  reset, three vertical bars for Red, Green and Blue with a mid line behind them and
+  a value field with a colored hint bar under each bar. Bars and fields mirror each
+  other over a proposed range of 0 to 1. Defaults: Radius 0.50 on every channel, H/V
+  Ratio 0.50 on every channel and Scaling 0.25 on every channel.
+  - While a link is on, changing one channel sets the other two to the same value.
+    Radius and H/V Ratio start linked. Scaling's link is disabled and off, so its
+    channels are independent.
+  - A group reset restores that group's values and its link, and no other group.
+- **Footer.** Coring Softness 0.00, Level 0.00 and Mix 100.00 (0 to 100, proposed) are
+  disabled in the Blur kind; when they apply to the other kinds is *Pending*.
+- **Page reset** restores every group, every link and the Blur kind.
+
+Nothing blurs the image, edits a grade or touches project data. Bars show no fill
+under the handle.
+
+**Behavior (stage 2).** *Pending.* Intended: a blur effect with per-channel radius,
+H/V aspect and scaling, with Sharpen and Mist as further kinds, evaluated on CPU,
+OpenGL and Vulkan with measured cost, persisted in the Color graph (CSP schema bump).
+
 ## Verification
 
 - Stage 1: the Color workspace test checks that button 1 opens the page, the
@@ -348,7 +383,9 @@ cost are *Pending*.
   checked; button 6 opens Tracker - Window, where the channel toggles, Interactive Mode
   enabling of the tools, Clip/Frame, the clickable playhead and the reset are checked;
   button 7 opens Smart Mask, where the toolbar, disabled stroke tools, Smart Refine
-  enabling by quality, slider/field linking, the playhead and the reset are checked.
+  enabling by quality, slider/field linking, the playhead and the reset are checked;
+  button 8 opens Blur - Blur, where the defaults, channel linking, the disabled footer,
+  group resets and the page reset are checked.
 - Stage 2: evaluator parity with the existing Curves node, persistence and
   older-version compatibility, and a manual visual check recorded in the
   [regression guide](../validation/REGRESSION_TESTING.md).

@@ -1,6 +1,7 @@
 #include "workspaces/color/ui/color_workspace.h"
 
 #include "ui/effects/effects_catalog.h"
+#include "workspaces/color/ui/blur_page.h"
 #include "workspaces/color/ui/camera_raw_page.h"
 #include "workspaces/color/ui/chroma_warp_page.h"
 #include "workspaces/color/ui/color_match_page.h"
@@ -1432,10 +1433,17 @@ ColorWorkspace::ColorWorkspace(QWidget* parent) : QWidget(parent) {
                 page_buttons->addButton(button, i);
                 QWidget* page = nullptr;
                 if (!motion_dock) {
-                    // Sizing dock: pages 1 to 7 are Curves - Custom, Color
-                    // Slice, Chroma Warp, Qualifier, Window, Tracker and Smart
-                    // Mask; the others are still empty placeholders.
-                    if (i == 6) {
+                    // Sizing dock: pages 1 to 8 are Curves - Custom, Color
+                    // Slice, Chroma Warp, Qualifier, Window, Tracker, Smart
+                    // Mask and Blur; the others are still empty placeholders.
+                    if (i == 7) {
+                        auto* scroll = new QScrollArea(pages);
+                        scroll->setObjectName("colorBlurScroll");
+                        scroll->setFrameShape(QFrame::NoFrame);
+                        scroll->setWidgetResizable(true);
+                        scroll->setWidget(new BlurPage(scroll));
+                        page = scroll;
+                    } else if (i == 6) {
                         auto* scroll = new QScrollArea(pages);
                         scroll->setObjectName("colorSmartMaskScroll");
                         scroll->setFrameShape(QFrame::NoFrame);
