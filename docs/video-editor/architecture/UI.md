@@ -55,10 +55,10 @@ visually. The pages are specified in
 [Color Sizing Dock](../features/COLOR_SIZING_DOCK.md) and
 [Color Keyframes Dock](../features/COLOR_KEYFRAMES_DOCK.md).
 
-The upper Color area is a horizontal splitter with the shared Viewer, node
-canvas, and a right-side Effects catalog panel. The top Effects action toggles
-that panel; it occupies only the upper Color area and can be resized with the
-splitter. The shared Effects list returns to its dock before the previous dock
+The central area of the Color dock host is a horizontal splitter with the node
+canvas and a right-side Effects catalog panel; the Viewer is a dock on its left
+(see below). The top Effects action toggles the catalog panel; it occupies only
+the central area and can be resized with the splitter. The shared Effects list returns to its dock before the previous dock
 layout is restored on exit. The View menu hides the dock-specific Effects action
 while Color uses the embedded panel.
 
@@ -68,7 +68,21 @@ project-owned list; selecting a still does not replace the Viewer. GPU
 readback and reduced-quality full-canvas capture run through the playback
 worker. Missing sidecar PNGs display as unavailable items.
 
-The page holds the transport buttons above the dock area. The Timeline dock
+The shared Viewer lives in the **Viewer** dock (`colorViewerDock`), docked on the left of
+the node canvas; like the other docks it is movable, closable and floatable. Its content
+(`colorViewerPanel`) has, from top to bottom: a top bar with a zoom dropdown (Fit, 25%,
+50%, 100%, 200%), a view-mode button, the selected clip's name (or "No clip"), a
+timecode button and a "..." button; the shared Viewer; a position bar that follows the
+timeline playhead; and a bottom bar with Pick color (with options), Layers and Volume on
+the left, the transport buttons in the middle and a large timecode on the right. The
+timecodes use the project frame rate (`HH:MM:SS:FF`). The position bar is read-only
+because the Color page has no seek command. The transport buttons are Go to start,
+Previous frame, Stop, Play / Pause, Next frame and Loop: Previous frame, Stop (which
+sends Pause), Play / Pause and Next frame send the same playback commands as the
+buttons that used to sit under the Viewer; Go to start, Loop, the zoom, view-mode,
+timecode, "..." , Pick color, Layers and Volume controls only change appearance for now.
+The Gallery comparison bar (Compare Off / Split-screen / Wipe) is hidden together with the
+Gallery and Grade Versions. The Timeline dock
 (`colorTimelineDock`) contains only the clip strip and, directly under it, the
 timeline, as in the reference layout; it never scrolls sideways. The Gallery (stills)
 and Grade Versions panels are temporarily out of the dock, in a hidden host
@@ -91,8 +105,7 @@ labeled V1, V2, ..., the clips as thin full-length bars with the selected one ou
 in red, and a red playhead that follows the timeline playhead
 and playback position. Clicking a clip block selects that clip, like the strip; it
 does not seek, and the shared Edit timeline stays hidden on this page. Only the first
-six track rows are drawn. The Previous frame, Play / Pause and Next frame buttons are
-kept as they are and are planned to move elsewhere.
+six track rows are drawn.
 
 The Grade Versions panel is temporarily hidden at the maintainer's request; its
 controls and wiring are intact and it is to be shown again. Until then, the

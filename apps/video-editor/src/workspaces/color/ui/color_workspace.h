@@ -26,6 +26,9 @@ class QSlider;
 class QSplitter;
 class QVBoxLayout;
 class QProgressDialog;
+class QMainWindow;
+class QDockWidget;
+class QShowEvent;
 class PreviewWidget;
 
 namespace ui {
@@ -119,7 +122,18 @@ public:
     void setRenameStillHandler(std::function<void(const QString&, const QString&)> handler);
     void setRemoveStillHandler(std::function<void(const QString&)> handler);
 
+protected:
+    void showEvent(QShowEvent* event) override;
+
 private:
+    // Sizes the docks once the page has its real size (their construction-time
+    // sizes are ignored while the page is still hidden).
+    void applyInitialDockSizes();
+    QMainWindow* dock_host_ = nullptr;
+    QDockWidget* viewer_dock_ = nullptr;
+    QDockWidget* timeline_dock_ = nullptr;
+    QDockWidget* first_child_dock_ = nullptr;
+    bool dock_sizes_applied_ = false;
     void refreshNodes(std::optional<color::NodeId> selected = {});
     void refreshControls();
     void submit(color::Graph graph, std::optional<color::NodeId> selected = {},
@@ -156,6 +170,14 @@ private:
     QSlider* comparison_wipe_slider_ = nullptr;
     QListWidget* clips_ = nullptr;
     ColorTimelineView* timeline_view_ = nullptr;
+    // Viewer dock: title, timecodes and the read-only position bar.
+    QLabel* viewer_title_ = nullptr;
+    QPushButton* viewer_top_timecode_ = nullptr;
+    QLabel* viewer_big_timecode_ = nullptr;
+    QSlider* viewer_scrub_ = nullptr;
+    qint64 timeline_total_frames_ = 0;
+    qint64 playhead_frame_ = 0;
+    void updateViewerTimecodes();
     int frame_rate_numerator_ = 30;
     int frame_rate_denominator_ = 1;
     QListWidget* stills_ = nullptr;

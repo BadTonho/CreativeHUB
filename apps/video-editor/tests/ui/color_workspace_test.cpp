@@ -1829,6 +1829,64 @@ int main(int argc, char** argv) {
                 require(dock_scroll && dock_scroll->horizontalScrollBarPolicy() == Qt::ScrollBarAlwaysOff,
                         "The Timeline dock must not scroll sideways.");
 
+                // Viewer dock: top bar, position bar, tools, transport and timecodes.
+                auto* viewer_dock = middle.findChild<QDockWidget*>("colorViewerDock");
+                require(viewer_dock && viewer_dock->windowTitle() == "Viewer" &&
+                            viewer_dock->features().testFlag(QDockWidget::DockWidgetClosable) &&
+                            viewer_dock->features().testFlag(QDockWidget::DockWidgetMovable) &&
+                            viewer_dock->features().testFlag(QDockWidget::DockWidgetFloatable) &&
+                            viewer_dock->findChild<QWidget*>("colorViewerPanel"),
+                        "The Color page must have a movable, closable, floatable Viewer dock.");
+                auto* dock_host_widget = middle.findChild<QMainWindow*>("colorBottomDockHost");
+                require(dock_host_widget && dock_host_widget->centralWidget() &&
+                            dock_host_widget->centralWidget()->objectName() == "colorWorkspaceUpperSplitter" &&
+                            dock_host_widget->dockWidgetArea(viewer_dock) == Qt::LeftDockWidgetArea &&
+                            dock_host_widget->dockWidgetArea(timeline_dock) == Qt::BottomDockWidgetArea,
+                        "The node canvas must be the central area with the Viewer on the left and the Timeline below.");
+                auto* viewer_zoom_box = viewer_dock->findChild<QComboBox*>("colorViewerZoom");
+                require(viewer_zoom_box && viewer_zoom_box->currentText() == "Fit" &&
+                            viewer_dock->findChild<QPushButton*>("colorViewerModeButton") &&
+                            viewer_dock->findChild<QPushButton*>("colorViewerMoreButton") &&
+                            viewer_dock->findChild<QPushButton*>("colorViewerTimecodeButton"),
+                        "The Viewer top bar must have zoom, view mode, timecode and more controls.");
+                for (const char* name : {"colorViewerPickerButton", "colorViewerPickerMenuButton",
+                         "colorViewerLayersButton", "colorViewerVolumeButton", "colorViewerToStartButton",
+                         "colorPreviousFrameButton", "colorViewerStopButton", "colorPlayPauseButton",
+                         "colorNextFrameButton", "colorViewerLoopButton"})
+                    require(viewer_dock->findChild<QPushButton*>(name),
+                            "The Viewer bottom bar must have its tool and transport buttons.");
+                require(viewer_dock->findChild<QPushButton*>("colorViewerVolumeButton")->isCheckable() &&
+                            viewer_dock->findChild<QPushButton*>("colorViewerLoopButton")->isCheckable(),
+                        "Volume and Loop must be toggles.");
+                // Title, timecodes and position bar follow the clips and the playhead.
+                require(viewer_dock->findChild<QLabel*>("colorViewerTitle")->text() == "Clip B" &&
+                            viewer_dock->findChild<QLabel*>("colorViewerTimecode")->text() == "00:00:01:30" &&
+                            viewer_dock->findChild<QPushButton*>("colorViewerTimecodeButton")->text().startsWith("00:00:01:30"),
+                        "The Viewer title and timecodes must follow the selected clip and the playhead.");
+                auto* viewer_scrub_bar = viewer_dock->findChild<QSlider*>("colorViewerScrub");
+                require(viewer_scrub_bar && !viewer_scrub_bar->isEnabled() &&
+                            viewer_scrub_bar->value() == 90 * 1000 / 480,
+                        "The Viewer position bar must be read-only and track the playhead over the clips' length.");
+                std::vector<playback::PlaybackCommand> viewer_commands;
+                middle.setPlaybackHandler([&](playback::PlaybackCommand command) { viewer_commands.push_back(command); });
+                viewer_dock->findChild<QPushButton*>("colorPreviousFrameButton")->click();
+                viewer_dock->findChild<QPushButton*>("colorViewerStopButton")->click();
+                viewer_dock->findChild<QPushButton*>("colorPlayPauseButton")->click();
+                viewer_dock->findChild<QPushButton*>("colorNextFrameButton")->click();
+                viewer_dock->findChild<QPushButton*>("colorViewerToStartButton")->click();
+                viewer_dock->findChild<QPushButton*>("colorViewerLoopButton")->click();
+                require(viewer_commands.size() == 4 &&
+                            viewer_commands[0] == playback::PlaybackCommand::StepBackward &&
+                            viewer_commands[1] == playback::PlaybackCommand::Pause &&
+                            viewer_commands[2] == playback::PlaybackCommand::Play &&
+                            viewer_commands[3] == playback::PlaybackCommand::StepForward,
+                        "The Viewer transport must send Previous frame, Stop (Pause), Play and Next frame.");
+                middle.setPlayheadFrame(0);
+                require(viewer_dock->findChild<QLabel*>("colorViewerTimecode")->text() == "00:00:00:00" &&
+                            viewer_scrub_bar->value() == 0,
+                        "Moving the playhead to the start must reset the timecode and position bar.");
+                middle.setPlayheadFrame(90);
+
                 // Clicking a clip block selects it: geometry mirrors ColorTimelineView.
                 middle_timeline->resize(608, middle_timeline->height());
                 const double plot_width = middle_timeline->width() - 30.0 - 8.0;

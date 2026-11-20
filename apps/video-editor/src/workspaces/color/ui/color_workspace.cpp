@@ -1264,7 +1264,123 @@ ColorWorkspace::ColorWorkspace(QWidget* parent) : QWidget(parent) {
     comparison_reference_label_->setMinimumWidth(80);
     comparison_layout->addWidget(comparison_reference_label_, 1);
     preview_layout->addWidget(comparison_bar);
-    upper_splitter_->addWidget(preview_container_);
+    // The comparison bar works with the Gallery stills and Grade Versions, which
+    // are hidden for now, so it is hidden with them.
+    comparison_bar->hide();
+
+    // Viewer dock content, laid out like a color-grading viewer: a top bar, the
+    // shared Viewer, a position bar and a bottom bar with tools and transport.
+    auto* viewer_panel = new QWidget(this);
+    viewer_panel->setObjectName("colorViewerPanel");
+    auto* viewer_layout = new QVBoxLayout(viewer_panel);
+    viewer_layout->setContentsMargins(0, 0, 0, 0);
+    viewer_layout->setSpacing(4);
+    const auto flatButton = [viewer_panel](const QString& text, const char* object_name,
+                                const QString& accessible_name, int width) {
+        auto* button = new QPushButton(text, viewer_panel);
+        button->setObjectName(QLatin1String(object_name));
+        button->setAccessibleName(accessible_name);
+        button->setToolTip(accessible_name);
+        button->setFixedSize(width, 26);
+        button->setFocusPolicy(Qt::NoFocus);
+        return button;
+    };
+
+    // Top bar: zoom, view mode, clip title, timecode and more.
+    auto* viewer_top = new QHBoxLayout;
+    viewer_top->setContentsMargins(4, 4, 4, 0);
+    auto* viewer_zoom = new QComboBox(viewer_panel);
+    viewer_zoom->setObjectName("colorViewerZoom");
+    for (const char* zoom : {"Fit", "25%", "50%", "100%", "200%"})
+        viewer_zoom->addItem(QCoreApplication::translate("ColorWorkspace", zoom));
+    viewer_top->addWidget(viewer_zoom);
+    viewer_top->addWidget(flatButton(QStringLiteral("\u25A3\u2304"), "colorViewerModeButton",
+        QCoreApplication::translate("ColorWorkspace", "View mode"), 44));
+    viewer_top->addStretch();
+    viewer_title_ = new QLabel(QCoreApplication::translate("ColorWorkspace", "No clip"), viewer_panel);
+    viewer_title_->setObjectName("colorViewerTitle");
+    QFont title_font = viewer_title_->font();
+    title_font.setBold(true);
+    viewer_title_->setFont(title_font);
+    viewer_top->addWidget(viewer_title_);
+    viewer_top->addStretch();
+    viewer_top_timecode_ = flatButton(QString(), "colorViewerTimecodeButton",
+        QCoreApplication::translate("ColorWorkspace", "Timecode display"), 112);
+    viewer_top->addWidget(viewer_top_timecode_);
+    viewer_top->addWidget(flatButton(QStringLiteral("\u2026"), "colorViewerMoreButton",
+        QCoreApplication::translate("ColorWorkspace", "More viewer actions"), 30));
+    viewer_layout->addLayout(viewer_top);
+    viewer_layout->addWidget(preview_container_, 1);
+
+    // Position bar: follows the timeline playhead; it is read-only because the
+    // Color page has no seek command yet.
+    viewer_scrub_ = new QSlider(Qt::Horizontal, viewer_panel);
+    viewer_scrub_->setObjectName("colorViewerScrub");
+    viewer_scrub_->setAccessibleName(QCoreApplication::translate("ColorWorkspace", "Playhead position"));
+    viewer_scrub_->setRange(0, 1000);
+    viewer_scrub_->setEnabled(false);
+    viewer_layout->addWidget(viewer_scrub_);
+
+    // Bottom bar: picker, layers and volume on the left; transport in the
+    // middle; large timecode on the right.
+    auto* viewer_bottom = new QHBoxLayout;
+    viewer_bottom->setContentsMargins(4, 0, 4, 4);
+    viewer_bottom->addWidget(flatButton(QStringLiteral("\u2316"), "colorViewerPickerButton",
+        QCoreApplication::translate("ColorWorkspace", "Pick color"), 32));
+    viewer_bottom->addWidget(flatButton(QStringLiteral("\u2304"), "colorViewerPickerMenuButton",
+        QCoreApplication::translate("ColorWorkspace", "Picker options"), 20));
+    viewer_bottom->addWidget(flatButton(QStringLiteral("\u2263"), "colorViewerLayersButton",
+        QCoreApplication::translate("ColorWorkspace", "Layers"), 32));
+    auto* volume = flatButton(QStringLiteral("\u266A"), "colorViewerVolumeButton",
+        QCoreApplication::translate("ColorWorkspace", "Volume"), 32);
+    volume->setCheckable(true);
+    viewer_bottom->addWidget(volume);
+    viewer_bottom->addStretch();
+    // Transport. Previous frame, Play / Pause and Next frame keep the object
+    // names and commands of the buttons that used to sit under the Viewer; the
+    // other buttons only change appearance until the Color page can seek.
+    const struct { const char* glyph; const char* object; const char* label; bool toggle; } transport[] = {
+        {"\u23EE", "colorViewerToStartButton", "Go to start", false},
+        {"\u25C0", "colorPreviousFrameButton", "Previous frame", false},
+        {"\u25A0", "colorViewerStopButton", "Stop", false},
+        {"\u25B6", "colorPlayPauseButton", "Play / Pause", false},
+        {"\u23ED", "colorNextFrameButton", "Next frame", false},
+        {"\u21BB", "colorViewerLoopButton", "Loop", true},
+    };
+    for (const auto& spec : transport) {
+        auto* button = flatButton(QString::fromUtf8(spec.glyph), spec.object,
+            QCoreApplication::translate("ColorWorkspace", spec.label), 34);
+        button->setCheckable(spec.toggle);
+        viewer_bottom->addWidget(button);
+        const QLatin1String name(spec.object);
+        if (name == QLatin1String("colorPreviousFrameButton")) {
+            connect(button, &QPushButton::clicked, this, [this] {
+                if (playback_handler_) playback_handler_(playback::PlaybackCommand::StepBackward);
+            });
+        } else if (name == QLatin1String("colorViewerStopButton")) {
+            connect(button, &QPushButton::clicked, this, [this] {
+                if (playback_handler_) playback_handler_(playback::PlaybackCommand::Pause);
+            });
+        } else if (name == QLatin1String("colorPlayPauseButton")) {
+            connect(button, &QPushButton::clicked, this, [this] {
+                if (playback_handler_) playback_handler_(playback::PlaybackCommand::Play);
+            });
+        } else if (name == QLatin1String("colorNextFrameButton")) {
+            connect(button, &QPushButton::clicked, this, [this] {
+                if (playback_handler_) playback_handler_(playback::PlaybackCommand::StepForward);
+            });
+        }
+    }
+    viewer_bottom->addStretch();
+    viewer_big_timecode_ = new QLabel(viewer_panel);
+    viewer_big_timecode_->setObjectName("colorViewerTimecode");
+    QFont big_font = viewer_big_timecode_->font();
+    big_font.setPointSizeF(big_font.pointSizeF() + 6.0);
+    big_font.setBold(true);
+    viewer_big_timecode_->setFont(big_font);
+    viewer_bottom->addWidget(viewer_big_timecode_);
+    viewer_layout->addLayout(viewer_bottom);
+    updateViewerTimecodes();
     auto* node_panel = new QWidget(this);
     node_panel->setObjectName("colorNodesPanel");
     auto* node_layout = new QVBoxLayout(node_panel);
@@ -1310,34 +1426,11 @@ ColorWorkspace::ColorWorkspace(QWidget* parent) : QWidget(parent) {
     effects_title->setObjectName("colorEffectsPanelTitle");
     effects_catalog_layout_->addWidget(effects_title);
     upper_splitter_->addWidget(effects_panel_);
-    upper_splitter_->setStretchFactor(0, 5);
-    upper_splitter_->setStretchFactor(1, 3);
-    upper_splitter_->setStretchFactor(2, 2);
+    upper_splitter_->setStretchFactor(0, 3);
+    upper_splitter_->setStretchFactor(1, 2);
     effects_panel_->hide();
-    root->addWidget(upper_splitter_, 2);
-
-    auto* transport = new QHBoxLayout;
-    transport->addStretch();
-    auto* previous = new QPushButton(QCoreApplication::translate("ColorWorkspace", "Previous frame"), this);
-    auto* play_pause = new QPushButton(QCoreApplication::translate("ColorWorkspace", "Play / Pause"), this);
-    auto* next = new QPushButton(QCoreApplication::translate("ColorWorkspace", "Next frame"), this);
-    previous->setObjectName("colorPreviousFrameButton");
-    play_pause->setObjectName("colorPlayPauseButton");
-    next->setObjectName("colorNextFrameButton");
-    transport->addWidget(previous);
-    transport->addWidget(play_pause);
-    transport->addWidget(next);
-    transport->addStretch();
-    root->addLayout(transport);
-    connect(previous, &QPushButton::clicked, this, [this] {
-        if (playback_handler_) playback_handler_(playback::PlaybackCommand::StepBackward);
-    });
-    connect(play_pause, &QPushButton::clicked, this, [this] {
-        if (playback_handler_) playback_handler_(playback::PlaybackCommand::Play);
-    });
-    connect(next, &QPushButton::clicked, this, [this] {
-        if (playback_handler_) playback_handler_(playback::PlaybackCommand::StepForward);
-    });
+    // The node canvas and the effects panel become the central area of the dock
+    // host below; the Viewer is a dock beside them.
 
     clips_ = new QListWidget(this);
     clips_->setObjectName("colorClipStrip");
@@ -1491,10 +1584,19 @@ ColorWorkspace::ColorWorkspace(QWidget* parent) : QWidget(parent) {
     dock_host->setDockNestingEnabled(true);
     // No explicit minimum height: the dock layout derives it from its docks, so
     // they can never be squeezed into overlapping each other.
-    // The empty central widget collapses so the child docks fill the host.
-    auto* dock_central = new QWidget(dock_host);
-    dock_central->setMaximumSize(0, 0);
-    dock_host->setCentralWidget(dock_central);
+    // The node canvas (with the effects panel) is the central area; docks sit
+    // around it. The bottom area spans the full width under the Viewer dock.
+    dock_host->setCentralWidget(upper_splitter_);
+    dock_host->setCorner(Qt::BottomLeftCorner, Qt::BottomDockWidgetArea);
+    dock_host->setCorner(Qt::BottomRightCorner, Qt::BottomDockWidgetArea);
+    auto* viewer_dock = new QDockWidget(
+        QCoreApplication::translate("ColorWorkspace", "Viewer"), dock_host);
+    viewer_dock->setObjectName("colorViewerDock");
+    viewer_dock->setFeatures(QDockWidget::DockWidgetClosable |
+                             QDockWidget::DockWidgetMovable |
+                             QDockWidget::DockWidgetFloatable);
+    viewer_dock->setWidget(viewer_panel);
+    dock_host->addDockWidget(Qt::LeftDockWidgetArea, viewer_dock);
     auto* timeline_dock = new QDockWidget(
         QCoreApplication::translate("ColorWorkspace", "Timeline"), dock_host);
     timeline_dock->setObjectName("colorTimelineDock");
@@ -1512,7 +1614,7 @@ ColorWorkspace::ColorWorkspace(QWidget* parent) : QWidget(parent) {
     middle_scroll->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     middle_scroll->setWidget(middle_content);
     timeline_dock->setWidget(middle_scroll);
-    dock_host->addDockWidget(Qt::TopDockWidgetArea, timeline_dock);
+    dock_host->addDockWidget(Qt::BottomDockWidgetArea, timeline_dock);
     QDockWidget* first_child_dock = nullptr;
     std::vector<QDockWidget*> child_dock_list;
     QDockWidget* previous_dock = nullptr;
@@ -1764,11 +1866,14 @@ ColorWorkspace::ColorWorkspace(QWidget* parent) : QWidget(parent) {
         child_dock_list.push_back(dock);
         previous_dock = dock;
     }
-    dock_host->resizeDocks({timeline_dock, first_child_dock}, {240, 330}, Qt::Vertical);
+    dock_host_ = dock_host;
+    viewer_dock_ = viewer_dock;
+    timeline_dock_ = timeline_dock;
+    first_child_dock_ = first_child_dock;
     // The three child docks start with equal widths.
     dock_host->resizeDocks({child_dock_list[0], child_dock_list[1], child_dock_list[2]},
         {100, 100, 100}, Qt::Horizontal);
-    root->addWidget(dock_host, 3);
+    root->addWidget(dock_host, 1);
     auto* lower = new QHBoxLayout;
     controls_ = new QWidget(this);
     controls_->setObjectName("colorPrimaryControls");
@@ -2025,10 +2130,8 @@ void ColorWorkspace::setEffectsPanelVisible(bool visible) {
     if (total_width <= 0) return;
     const int effects_width = std::clamp(
         qRound(static_cast<double>(total_width) * 0.22), 260, 420);
-    const int remaining_width = std::max(1, total_width - effects_width);
-    const int preview_width = qRound(static_cast<double>(remaining_width) * 0.67);
-    upper_splitter_->setSizes({
-        preview_width, remaining_width - preview_width, effects_width});
+    const int nodes_width = std::max(1, total_width - effects_width);
+    upper_splitter_->setSizes({nodes_width, effects_width});
     effects_panel_size_initialized_ = true;
 }
 
@@ -2076,14 +2179,51 @@ void ColorWorkspace::setActive(bool active) {
     refreshPowerWindowOverlay();
 }
 
+void ColorWorkspace::showEvent(QShowEvent* event) {
+    QWidget::showEvent(event);
+    if (dock_sizes_applied_) return;
+    dock_sizes_applied_ = true;
+    QTimer::singleShot(0, this, [this] { applyInitialDockSizes(); });
+}
+
+void ColorWorkspace::applyInitialDockSizes() {
+    if (dock_host_ == nullptr || timeline_dock_ == nullptr || first_child_dock_ == nullptr ||
+        viewer_dock_ == nullptr)
+        return;
+    // The bottom docks take about 62% of the height: the Timeline dock a fixed
+    // 240 px and the three child docks the rest; the Viewer takes 45% of the width.
+    const int bottom = std::clamp(qRound(dock_host_->height() * 0.62), 400, 720);
+    dock_host_->resizeDocks({timeline_dock_, first_child_dock_},
+        {240, std::max(160, bottom - 240)}, Qt::Vertical);
+    dock_host_->resizeDocks({viewer_dock_}, {std::max(320, dock_host_->width() * 45 / 100)},
+        Qt::Horizontal);
+}
+
 void ColorWorkspace::setTimelineFrameRate(int numerator, int denominator) {
     frame_rate_numerator_ = numerator;
     frame_rate_denominator_ = denominator;
     if (timeline_view_ != nullptr) timeline_view_->setFrameRate(numerator, denominator);
+    updateViewerTimecodes();
 }
 
 void ColorWorkspace::setPlayheadFrame(qint64 frame) {
+    playhead_frame_ = std::max<qint64>(0, frame);
     if (timeline_view_ != nullptr) timeline_view_->setPlayheadFrame(frame);
+    updateViewerTimecodes();
+}
+
+void ColorWorkspace::updateViewerTimecodes() {
+    if (viewer_big_timecode_ == nullptr) return;
+    const QString timecode = formatFrameTimecode(
+        playhead_frame_, frame_rate_numerator_, frame_rate_denominator_);
+    viewer_big_timecode_->setText(timecode);
+    if (viewer_top_timecode_ != nullptr)
+        viewer_top_timecode_->setText(timecode + QStringLiteral(" \u2304"));
+    if (viewer_scrub_ != nullptr) {
+        const qint64 total = std::max<qint64>(1, timeline_total_frames_);
+        viewer_scrub_->setValue(static_cast<int>(
+            std::clamp<qint64>(playhead_frame_ * 1000 / total, 0, 1000)));
+    }
 }
 
 void ColorWorkspace::setClips(std::vector<ClipItem> clips, timeline::ClipId selected,
@@ -2143,7 +2283,17 @@ void ColorWorkspace::setClips(std::vector<ClipItem> clips, timeline::ClipId sele
                 clip.timeline_start_frame, clip.duration_frames});
         }
         timeline_view_->setFrameRate(frame_rate_numerator_, frame_rate_denominator_);
+        // Viewer title and position-bar range follow the clips.
+        timeline_total_frames_ = 0;
+        QString title = QCoreApplication::translate("ColorWorkspace", "No clip");
+        for (const auto& clip : timeline_clips) {
+            timeline_total_frames_ = std::max(timeline_total_frames_,
+                clip.start_frame + clip.duration_frames);
+            if (clip.id == selected) title = clip.name;
+        }
+        if (viewer_title_ != nullptr) viewer_title_->setText(title);
         timeline_view_->setClips(std::move(timeline_clips), selected);
+        updateViewerTimecodes();
     }
     {
         const QSignalBlocker blocker(grade_versions_);
