@@ -1634,6 +1634,69 @@ int main(int argc, char** argv) {
             require(qFuzzyCompare(input_zoom->value(), 1.0) &&
                         input_page->findChild<QPushButton*>("colorInputSizingModeButton2")->isChecked(),
                     "The Input Sizing page reset must restore every control and the mode.");
+            // Keyframes dock, page 1: Keyframes (visual stage).
+            auto* keyframes_pages = workspace.findChild<QStackedWidget*>("colorKeyframesPages");
+            workspace.findChild<QPushButton*>("colorToolButton17")->click();
+            auto* keyframes_page = workspace.findChild<QWidget*>("colorKeyframesPage");
+            require(keyframes_pages && keyframes_page &&
+                        keyframes_pages->currentWidget()->isAncestorOf(keyframes_page),
+                    "Keyframes dock button 1 must open the Keyframes page.");
+            require(keyframes_page->findChild<QComboBox*>("colorKeyframesFilter") &&
+                        keyframes_page->findChild<QComboBox*>("colorKeyframesFilter")->currentText() == "All" &&
+                        keyframes_page->findChild<QSlider*>("colorKeyframesZoomSlider") &&
+                        keyframes_page->findChild<QSlider*>("colorKeyframesZoomSlider")->value() == 0 &&
+                        keyframes_page->findChild<QPushButton*>("colorKeyframesCollapseButton") &&
+                        keyframes_page->findChild<QLabel*>("colorKeyframesTrackMaster"),
+                    "Keyframes must expose its filter, zoom slider, collapse button and Master row.");
+            require(keyframes_page->findChild<QLabel*>("colorKeyframesTimecode")->text() == "00:00:00:00",
+                    "The Keyframes timecode must start at zero.");
+            for (const char* track : {"Corrector", "Sizing"}) {
+                const QString stem = QStringLiteral("colorKeyframesTrack") + QLatin1String(track);
+                require(keyframes_page->findChild<QPushButton*>(stem + "Enable") &&
+                            keyframes_page->findChild<QPushButton*>(stem + "Enable")->isChecked() &&
+                            keyframes_page->findChild<QPushButton*>(stem + "Lock") &&
+                            !keyframes_page->findChild<QPushButton*>(stem + "Lock")->isChecked() &&
+                            keyframes_page->findChild<QPushButton*>(stem + "Diamond") &&
+                            keyframes_page->findChild<QPushButton*>(stem + "Expand") &&
+                            !keyframes_page->findChild<QPushButton*>(stem + "Expand")->isChecked(),
+                        "Each Keyframes track must have its enable (on), lock (off), diamond and expander.");
+            }
+            auto* keyframes_graph = keyframes_page->findChild<QWidget*>("colorKeyframesGraph");
+            require(keyframes_graph && keyframes_graph->property("keyframeCountCorrector").toInt() == 1 &&
+                        keyframes_graph->property("keyframeCountSizing").toInt() == 1 &&
+                        keyframes_graph->property("keyframeCountMaster").toInt() == 1 &&
+                        qFuzzyIsNull(keyframes_graph->property("playhead").toDouble()),
+                    "Keyframes must start with one sample keyframe per track and the playhead at zero.");
+            keyframes_graph->resize(400, 200);
+            const QPointF keyframes_at(400.0 * 0.5, 60.0);
+            QMouseEvent keyframes_press(QEvent::MouseButtonPress, keyframes_at, keyframes_at, Qt::LeftButton,
+                Qt::LeftButton, Qt::NoModifier);
+            QApplication::sendEvent(keyframes_graph, &keyframes_press);
+            require(std::abs(keyframes_graph->property("playhead").toDouble() - 0.5) < 0.01 &&
+                        keyframes_page->findChild<QLabel*>("colorKeyframesTimecode")->text().startsWith("00:00:19:"),
+                    "Clicking the Keyframes timeline must move the playhead and update the timecode.");
+            keyframes_page->findChild<QPushButton*>("colorKeyframesTrackSizingDiamond")->click();
+            require(keyframes_graph->property("keyframeCountSizing").toInt() == 2 &&
+                        keyframes_graph->property("keyframeCountCorrector").toInt() == 1 &&
+                        keyframes_graph->property("keyframeCountMaster").toInt() == 2,
+                    "The diamond must add a keyframe at the playhead; Master must show the union.");
+            keyframes_page->findChild<QPushButton*>("colorKeyframesTrackSizingDiamond")->click();
+            require(keyframes_graph->property("keyframeCountSizing").toInt() == 2,
+                    "A second diamond click at the same position must not duplicate the keyframe.");
+            keyframes_page->findChild<QPushButton*>("colorKeyframesTrackCorrectorDiamond")->click();
+            require(keyframes_graph->property("keyframeCountMaster").toInt() == 2 &&
+                        keyframes_graph->property("keyframeCountCorrector").toInt() == 2,
+                    "Master must merge keyframes that share a position.");
+            keyframes_page->findChild<QPushButton*>("colorKeyframesTrackSizingLock")->click();
+            keyframes_page->findChild<QPushButton*>("colorKeyframesTrackCorrectorExpand")->click();
+            keyframes_page->findChild<QComboBox*>("colorKeyframesFilter")->setCurrentIndex(2);
+            keyframes_page->findChild<QSlider*>("colorKeyframesZoomSlider")->setValue(40);
+            // The page has no reset button; the dock's page change restores nothing, so
+            // the controls keep what was set on them.
+            require(keyframes_page->findChild<QPushButton*>("colorKeyframesTrackSizingLock")->isChecked() &&
+                        keyframes_page->findChild<QPushButton*>("colorKeyframesTrackCorrectorExpand")->isChecked() &&
+                        keyframes_page->findChild<QComboBox*>("colorKeyframesFilter")->currentIndex() == 2,
+                    "Keyframes controls must hold the values set on them.");
             workspace.findChild<QPushButton*>("colorToolButton1")->click();
         }
         auto* capture_button = workspace.findChild<QPushButton*>("colorCaptureStillButton");

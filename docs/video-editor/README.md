@@ -27,6 +27,7 @@ Detailed subsystem contracts and design notes are listed below; see the [archite
 - [Background Generator](features/BACKGROUND_GENERATOR.md)
 - [Color Panels Dock](features/COLOR_PANELS_DOCK.md)
 - [Color Sizing Dock](features/COLOR_SIZING_DOCK.md)
+- [Color Keyframes Dock](features/COLOR_KEYFRAMES_DOCK.md)
 - [Fusion Composition](features/FUSION_COMPOSITION.md)
 - [Fusion Masks](features/FUSION_MASKS.md)
 

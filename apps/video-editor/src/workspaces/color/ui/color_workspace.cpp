@@ -9,6 +9,7 @@
 #include "workspaces/color/ui/curves_page.h"
 #include "workspaces/color/ui/hdr_wheels_page.h"
 #include "workspaces/color/ui/input_sizing_page.h"
+#include "workspaces/color/ui/keyframes_page.h"
 #include "workspaces/color/ui/key_page.h"
 #include "workspaces/color/ui/motion_effects_page.h"
 #include "workspaces/color/ui/primaries_bars_page.h"
@@ -1420,7 +1421,9 @@ ColorWorkspace::ColorWorkspace(QWidget* parent) : QWidget(parent) {
         // Camera Raw, Color Match, Primaries - Color Bars, HDR Color Wheels,
         // RGB Mixer and Motion Effects (all visual only for now).
         const bool motion_dock = QLatin1String(entry.object_name) == QLatin1String("colorMotionEffectsDock");
-        const bool has_pages = motion_dock ||
+        const bool keyframes_dock =
+            QLatin1String(entry.object_name) == QLatin1String("colorKeyframesDock");
+        const bool has_pages = motion_dock || keyframes_dock ||
             QLatin1String(entry.object_name) == QLatin1String("colorSizingDock");
         QStackedWidget* pages = has_pages ? new QStackedWidget(content) : nullptr;
         auto* page_buttons = has_pages ? new QButtonGroup(content) : nullptr;
@@ -1438,7 +1441,20 @@ ColorWorkspace::ColorWorkspace(QWidget* parent) : QWidget(parent) {
                     // Sizing dock: pages 1 to 10 are Curves - Custom, Color
                     // Slice, Chroma Warp, Qualifier, Window, Tracker, Smart
                     // Mask, Blur, Key and Input Sizing.
-                    if (i == 9) {
+                    if (keyframes_dock) {
+                        // Keyframes dock: page 1 is Keyframes; the others are
+                        // still empty placeholders.
+                        if (i == 0) {
+                            auto* scroll = new QScrollArea(pages);
+                            scroll->setObjectName("colorKeyframesScroll");
+                            scroll->setFrameShape(QFrame::NoFrame);
+                            scroll->setWidgetResizable(true);
+                            scroll->setWidget(new KeyframesPage(scroll));
+                            page = scroll;
+                        } else {
+                            page = new QWidget(pages);
+                        }
+                    } else if (i == 9) {
                         auto* scroll = new QScrollArea(pages);
                         scroll->setObjectName("colorInputSizingScroll");
                         scroll->setFrameShape(QFrame::NoFrame);
@@ -1554,7 +1570,8 @@ ColorWorkspace::ColorWorkspace(QWidget* parent) : QWidget(parent) {
         if (entry.align != ButtonAlign::Right) button_row->addStretch();
         content_layout->addLayout(button_row);
         if (has_pages) {
-            pages->setObjectName(motion_dock ? "colorMotionEffectsPages" : "colorSizingPages");
+            pages->setObjectName(motion_dock ? "colorMotionEffectsPages"
+                                 : keyframes_dock ? "colorKeyframesPages" : "colorSizingPages");
             page_buttons->setExclusive(true);
             page_buttons->button(0)->setChecked(true);
             connect(page_buttons, &QButtonGroup::idClicked, pages,
