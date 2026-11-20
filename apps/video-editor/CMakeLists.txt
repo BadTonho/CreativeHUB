@@ -223,6 +223,8 @@ set(MAIN_EDITOR_CORE_SOURCES
     src/workspaces/color/ui/color_match_page.h
     src/workspaces/color/ui/primaries_bars_page.cpp
     src/workspaces/color/ui/primaries_bars_page.h
+    src/workspaces/color/ui/hdr_wheels_page.cpp
+    src/workspaces/color/ui/hdr_wheels_page.h
     src/workspaces/color/ui/color_workspace.cpp
     src/workspaces/color/ui/color_workspace.h
     src/workspaces/audio/ui/audio_workspace.h

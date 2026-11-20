@@ -876,6 +876,54 @@ int main(int argc, char** argv) {
             bars_page->findChild<QPushButton*>("colorPrimariesBarsResetButton")->click();
             require(qFuzzyIsNull(lift_value->value()),
                     "The page reset must restore every group's defaults.");
+            // High Dynamic Range - Color Wheels page (visual stage).
+            workspace.findChild<QPushButton*>("colorToolButton4")->click();
+            auto* hdr_page = workspace.findChild<QWidget*>("colorHdrWheelsPage");
+            require(hdr_page && motion_pages->currentWidget()->isAncestorOf(hdr_page),
+                    "Motion Effects button 4 must select the High Dynamic Range page.");
+            for (const char* wheel_name : {"Dark", "Shadow", "Light", "Global"}) {
+                const QString prefix = QStringLiteral("colorHdrWheels") + QLatin1String(wheel_name);
+                require(hdr_page->findChild<QWidget*>(prefix + "Wheel") &&
+                            hdr_page->findChild<QPushButton*>(prefix + "ResetButton"),
+                        "Each HDR wheel must have its wheel and reset button.");
+                require(qFuzzyCompare(hdr_page->findChild<QDoubleSpinBox*>(prefix + "Sat")->value(), 1.0) &&
+                            qFuzzyIsNull(hdr_page->findChild<QDoubleSpinBox*>(prefix + "Exp")->value()) &&
+                            qFuzzyIsNull(hdr_page->findChild<QDoubleSpinBox*>(prefix + "X")->value()),
+                        "Each HDR wheel must start with Exp 0, Sat 1 and X 0.");
+            }
+            require(!hdr_page->findChild<QWidget*>("colorHdrWheelsGlobalRange") &&
+                        !hdr_page->findChild<QWidget*>("colorHdrWheelsGlobalZoneValue") &&
+                        qFuzzyCompare(hdr_page->findChild<QDoubleSpinBox*>("colorHdrWheelsDarkZoneValue")->value(), -1.5) &&
+                        qFuzzyCompare(hdr_page->findChild<QDoubleSpinBox*>("colorHdrWheelsShadowZoneValue")->value(), 1.0) &&
+                        qFuzzyCompare(hdr_page->findChild<QDoubleSpinBox*>("colorHdrWheelsLightZoneValue")->value(), -1.0) &&
+                        qFuzzyCompare(hdr_page->findChild<QDoubleSpinBox*>("colorHdrWheelsDarkRange")->value(), 0.2) &&
+                        qFuzzyCompare(hdr_page->findChild<QDoubleSpinBox*>("colorHdrWheelsShadowRange")->value(), 0.22),
+                    "HDR zone values and ranges must match the documented defaults; Global has none.");
+            require(qFuzzyCompare(hdr_page->findChild<QDoubleSpinBox*>("colorHdrWheelsCont")->value(), 1.0) &&
+                        qFuzzyIsNull(hdr_page->findChild<QDoubleSpinBox*>("colorHdrWheelsPivot")->value()) &&
+                        hdr_page->findChild<QDoubleSpinBox*>("colorHdrWheelsBOfs"),
+                    "HDR bottom row must start at its documented defaults.");
+            // Dragging the puck moves X/Y; typing X/Y keeps the puck in step.
+            auto* dark_wheel = hdr_page->findChild<QWidget*>("colorHdrWheelsDarkWheel");
+            auto* dark_x = hdr_page->findChild<QDoubleSpinBox*>("colorHdrWheelsDarkX");
+            auto* dark_y = hdr_page->findChild<QDoubleSpinBox*>("colorHdrWheelsDarkY");
+            QMouseEvent wheel_press(QEvent::MouseButtonPress,
+                QPointF(dark_wheel->width() / 2.0 + 20.0, dark_wheel->height() / 2.0),
+                QPointF(), Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+            QApplication::sendEvent(dark_wheel, &wheel_press);
+            require(dark_x->value() > 0.3 && std::abs(dark_y->value()) < 0.05,
+                    "Dragging an HDR wheel puck must update its X and Y fields.");
+            hdr_page->findChild<QPushButton*>("colorHdrWheelsDarkResetButton")->click();
+            require(qFuzzyIsNull(dark_x->value()) &&
+                        qFuzzyCompare(hdr_page->findChild<QDoubleSpinBox*>("colorHdrWheelsDarkZoneValue")->value(), -1.5),
+                    "An HDR wheel reset must restore that wheel's defaults.");
+            hdr_page->findChild<QPushButton*>("colorHdrWheelsZoneDot3")->click();
+            hdr_page->findChild<QPushButton*>("colorHdrWheelsNextZoneButton")->click();
+            require(hdr_page->findChild<QPushButton*>("colorHdrWheelsZoneDot4")->isChecked(),
+                    "The HDR zone pager Next button must select the following zone set.");
+            hdr_page->findChild<QPushButton*>("colorHdrWheelsResetButton")->click();
+            require(hdr_page->findChild<QPushButton*>("colorHdrWheelsZoneDot1")->isChecked(),
+                    "The HDR page reset must restore the first zone set.");
             workspace.findChild<QPushButton*>("colorToolButton1")->click();
         }
         auto* capture_button = workspace.findChild<QPushButton*>("colorCaptureStillButton");

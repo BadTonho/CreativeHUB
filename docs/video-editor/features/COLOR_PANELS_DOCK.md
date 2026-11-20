@@ -1,8 +1,8 @@
 # Color Panels Dock
 
-Status: **Stage 1 (visual only) is implemented for pages 1 (Camera Raw), 2 (Color Match)
-and 3 (Primaries - Color Bars). Pages 4 to 6 are planned; their buttons select empty
-placeholder pages.**
+Status: **Stage 1 (visual only) is implemented for pages 1 (Camera Raw), 2 (Color Match),
+3 (Primaries - Color Bars) and 4 (High Dynamic Range - Color Wheels). Pages 5 and 6 are
+planned; their buttons select empty placeholder pages.**
 The pages described below are not implemented. Control names, ranges and
 defaults are taken from the maintainer's layout reference screenshots and are
 proposals until implemented and recorded as decisions. Behavior marked
@@ -219,7 +219,23 @@ exists today.
 | Bottom row | Temp, Tint, Hue, Cont, Pivot, MD, B/Ofs | Number | Proposed per control | 0.00 / 0.00 / 0.00 / 1.000 / 0.000 / 0.00 / 0.000 |
 | Title bar | Mode and history actions | Buttons | n/a | n/a |
 
-**Behavior.** *Pending.* Needs a new effect, a color-space-aware evaluator and
+**Implemented (stage 1, visual only).** Button 4 shows the page
+(`colorHdrWheelsPage`, controls named `colorHdrWheels*`, inside a scroll area).
+Each of the four wheels is a painted hue ring with a dark disc and two
+decorative side arcs. The puck can be dragged (double-click centers it) and
+mirrors the wheel's X and Y fields in the range -1 to 1; Exp (-4 to 4) and Sat
+(0 to 3) fields mirror thin sliders underneath. Dark, Shadow and Light also have
+a zone button, a zone value (-1.50, 1.00 and -1.00; shown without a plus sign)
+and a third field next to Y (0.20, 0.22 and 0.22; named Range here, its meaning
+is *Pending*); Global has neither. Each wheel has a reset that restores only
+that wheel. The six dots and the arrows choose a zone set; the selection is
+stored but does not change what the wheels show. Header buttons (panel,
+wheels/graph, "...") do nothing except highlight the mode; the header reset
+restores everything. The bottom row (Temp, Tint, Hue, Cont 1.000, Pivot 0.000,
+MD, B/Ofs) holds local values. The wheel arcs are decorative. No effect or
+grade is edited.
+
+**Behavior (stage 2).** *Pending.* Needs a new effect, a color-space-aware evaluator and
 a CSP schema bump. Zone-weighting function, color space and the meaning of the
 zone range values are *Pending*.
 
