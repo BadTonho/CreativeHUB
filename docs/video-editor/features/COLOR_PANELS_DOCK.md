@@ -1,6 +1,7 @@
 # Color Panels Dock
 
-Status: **Planned. Only the dock shell and six unlabeled placeholder buttons exist.**
+Status: **Stage 1 (visual only) is implemented for page 1, Camera Raw. Pages 2 to 6 are
+planned; their buttons select empty placeholder pages.**
 The pages described below are not implemented. Control names, ranges and
 defaults are taken from the maintainer's layout reference screenshots and are
 proposals until implemented and recorded as decisions. Behavior marked
@@ -80,7 +81,19 @@ why.
 | Color | Shadows, Color Boost, Saturation, Midtone Detail | Number | -100 to 100 (proposed) | 0.00 |
 | Footer | Use Changes / Use Settings | Buttons | n/a | n/a |
 
-**Behavior.** *Pending.* Intended: changes preview live; **Use Changes**
+**Implemented (stage 1, visual only).** The page opens by default in the
+Motion Effects dock (`colorCameraRawPage`, controls named `colorCameraRaw*`).
+Controls hold local state and change no image or project data. Decode Quality
+offers Use project setting, Full, Half, Quarter and Eighth. Lift, Gain,
+Contrast and both decode checkboxes are enabled only when Decode Using is
+Clip; Camera default leaves them disabled. The Develop and Color controls are
+always enabled. Exposure range is 0 to 10000 and Color Temp 1000 to 20000 K
+(proposed). **Use Settings** restores every control to its default; **Use
+Changes** and the header "..." button do nothing yet. The camera-format label
+is empty because no raw source is detected. Disabling all controls for
+non-raw sources, live preview and persistence are stage 2.
+
+**Behavior (stage 2).** *Pending.* Intended: changes preview live; **Use Changes**
 keeps the edits as the clip's raw settings and **Use Settings** reverts to the
 camera or project settings. Supported formats and the decoder are *Pending*
 and depend on codec and license tracking.

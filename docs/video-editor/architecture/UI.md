@@ -42,8 +42,9 @@ Keyframes (3, right). The docks are movable, closable and floatable;
 right-clicking a dock title bar reopens closed ones. Buttons and docks have no
 behavior or content yet; they will be assigned individually. Dock arrangement
 is not persisted yet. The primary-grade controls and the scope panel are
-currently hidden; they are planned to move into these docks. The six planned
-Motion Effects dock pages are specified in
+currently hidden; they are planned to move into these docks. The Motion Effects dock selects its pages with its six buttons (page 1,
+Camera Raw, is implemented visually; pages 2 to 6 are empty). The six
+pages are specified in
 [Color Panels Dock](../features/COLOR_PANELS_DOCK.md).
 
 The upper Color area is a horizontal splitter with the shared Viewer, node

@@ -1,6 +1,7 @@
 #include "workspaces/color/ui/color_workspace.h"
 
 #include "ui/effects/effects_catalog.h"
+#include "workspaces/color/ui/camera_raw_page.h"
 #include "ui/preview/preview_widget.h"
 #include "workspaces/color/evaluation/color_graph_evaluator.h"
 
@@ -18,6 +19,7 @@
 #include <QGridLayout>
 #include <QHBoxLayout>
 #include <QIcon>
+#include <QButtonGroup>
 #include <QDockWidget>
 #include <QLabel>
 #include <QMainWindow>
@@ -40,6 +42,7 @@
 #include <QSignalBlocker>
 #include <QSplitter>
 #include <QSlider>
+#include <QStackedWidget>
 #include <QThreadPool>
 #include <QTimer>
 #include <QTransform>
@@ -1117,6 +1120,9 @@ ColorWorkspace::ColorWorkspace(QWidget* parent) : QWidget(parent) {
             border-radius: 4px; padding: 5px 7px;
         }
         QWidget#colorWorkspacePage QPushButton:hover { background: #39516a; }
+        QWidget#colorWorkspacePage QPushButton:checked {
+            background: #2f5f8f; border-color: #6aa3d8;
+        }
     )"));
     auto* root = new QVBoxLayout(this);
     root->setContentsMargins(8, 8, 8, 8);
@@ -1395,16 +1401,36 @@ ColorWorkspace::ColorWorkspace(QWidget* parent) : QWidget(parent) {
         auto* button_row = new QHBoxLayout;
         button_row->setSpacing(4);
         if (entry.align != ButtonAlign::Left) button_row->addStretch();
+        // The Motion Effects dock's buttons select its pages; its first page
+        // is Camera Raw and the others are still empty placeholders.
+        const bool has_pages = QLatin1String(entry.object_name) == QLatin1String("colorMotionEffectsDock");
+        QStackedWidget* pages = has_pages ? new QStackedWidget(content) : nullptr;
+        auto* page_buttons = has_pages ? new QButtonGroup(content) : nullptr;
         for (int i = 0; i < entry.button_count; ++i) {
             auto* button = new QPushButton(content);
             button->setObjectName(QStringLiteral("colorToolButton%1").arg(++tool_index));
             button->setFixedSize(40, 32);
             button->setFocusPolicy(Qt::NoFocus);
             button_row->addWidget(button);
+            if (has_pages) {
+                button->setCheckable(true);
+                page_buttons->addButton(button, i);
+                pages->addWidget(i == 0 ? static_cast<QWidget*>(new CameraRawPage(pages))
+                                        : new QWidget(pages));
+            }
         }
         if (entry.align != ButtonAlign::Right) button_row->addStretch();
         content_layout->addLayout(button_row);
-        content_layout->addStretch(1);
+        if (has_pages) {
+            pages->setObjectName("colorMotionEffectsPages");
+            page_buttons->setExclusive(true);
+            page_buttons->button(0)->setChecked(true);
+            connect(page_buttons, &QButtonGroup::idClicked, pages,
+                &QStackedWidget::setCurrentIndex);
+            content_layout->addWidget(pages, 1);
+        } else {
+            content_layout->addStretch(1);
+        }
         dock->setWidget(content);
         if (previous_dock == nullptr) {
             dock_host->addDockWidget(Qt::TopDockWidgetArea, dock);

@@ -750,6 +750,53 @@ int main(int argc, char** argv) {
                                     QStringLiteral("colorToolButton%1").arg(i)),
                         "Each Color child dock must own its row of placeholder buttons.");
         }
+        {
+            // Camera Raw page (visual stage): documented controls and defaults.
+            auto* raw_page = workspace.findChild<QWidget*>("colorCameraRawPage");
+            require(raw_page, "Color Motion Effects dock must open on the Camera Raw page.");
+            const std::pair<const char*, double> raw_defaults[] = {
+                {"colorCameraRawLift", 0.0}, {"colorCameraRawGain", 0.0},
+                {"colorCameraRawContrast", 0.0}, {"colorCameraRawColorTemp", 2000.0},
+                {"colorCameraRawTint", 0.0}, {"colorCameraRawExposure", 160.0},
+                {"colorCameraRawSharpness", 10.0}, {"colorCameraRawHighlights", 0.0},
+                {"colorCameraRawFinetuneRed", 100.0}, {"colorCameraRawFinetuneGreen", 100.0},
+                {"colorCameraRawFinetuneBlue", 50.0}, {"colorCameraRawShadows", 0.0},
+                {"colorCameraRawColorBoost", 0.0}, {"colorCameraRawSaturation", 0.0},
+                {"colorCameraRawMidtoneDetail", 0.0},
+            };
+            for (const auto& [name, value] : raw_defaults) {
+                auto* box = raw_page->findChild<QDoubleSpinBox*>(name);
+                require(box && qFuzzyCompare(box->value() + 1.0, value + 1.0),
+                        "Camera Raw numeric controls must start at their documented defaults.");
+            }
+            auto* decode_using = raw_page->findChild<QComboBox*>("colorCameraRawDecodeUsing");
+            auto* lift = raw_page->findChild<QDoubleSpinBox*>("colorCameraRawLift");
+            auto* mono = raw_page->findChild<QCheckBox*>("colorCameraRawMonochrome");
+            auto* tint = raw_page->findChild<QDoubleSpinBox*>("colorCameraRawTint");
+            auto* use_settings = raw_page->findChild<QPushButton*>("colorCameraRawUseSettingsButton");
+            require(decode_using && lift && mono && tint && use_settings &&
+                        raw_page->findChild<QPushButton*>("colorCameraRawUseChangesButton") &&
+                        raw_page->findChild<QComboBox*>("colorCameraRawDecodeQuality"),
+                    "Camera Raw must expose its decode controls and footer actions.");
+            require(!lift->isEnabled() && !mono->isEnabled(),
+                    "Camera Raw clip decode overrides must be disabled for the camera default.");
+            decode_using->setCurrentIndex(1);
+            require(lift->isEnabled() && mono->isEnabled(),
+                    "Camera Raw clip decode overrides must enable when decoding with the clip.");
+            lift->setValue(12.5);
+            tint->setValue(-30.0);
+            mono->setChecked(true);
+            use_settings->click();
+            require(qFuzzyIsNull(lift->value()) && qFuzzyIsNull(tint->value()) && !mono->isChecked() &&
+                        decode_using->currentIndex() == 0,
+                    "Camera Raw Use Settings must restore the documented defaults.");
+            // Pages 2-6 are still empty placeholders: selecting one hides Camera Raw.
+            auto* second = workspace.findChild<QPushButton*>("colorToolButton2");
+            second->click();
+            require(!raw_page->isVisibleTo(&workspace) || !raw_page->isVisible(),
+                    "Selecting another Motion Effects page must hide Camera Raw.");
+            workspace.findChild<QPushButton*>("colorToolButton1")->click();
+        }
         auto* capture_button = workspace.findChild<QPushButton*>("colorCaptureStillButton");
         auto* rename_button = workspace.findChild<QPushButton*>("colorRenameStillButton");
         auto* remove_button = workspace.findChild<QPushButton*>("colorRemoveStillButton");
