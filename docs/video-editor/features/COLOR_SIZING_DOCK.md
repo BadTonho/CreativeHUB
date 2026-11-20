@@ -1,7 +1,8 @@
 # Color Sizing Dock
 
-Status: **Stage 1 (visual only) is implemented for page 1, Curves - Custom. Pages 2 to
-11 are not yet specified; their buttons select empty placeholder pages.** Control
+Status: **Stage 1 (visual only) is implemented for pages 1 (Curves - Custom) and 2 (Color
+Slice). Pages 3 to 11 are not yet specified; their buttons select empty placeholder
+pages.** Control
 names, ranges and defaults are taken from the maintainer's layout reference
 screenshots and are proposals until implemented and recorded as decisions.
 Behavior marked *Pending* has not been decided.
@@ -30,7 +31,8 @@ Delivery stages:
 | Button | Page title | Status |
 | --- | --- | --- |
 | 1 | Curves - Custom | Visual stage implemented |
-| 2 to 11 | *To be specified by the maintainer* | Empty placeholder page |
+| 2 | Color Slice | Visual stage implemented |
+| 3 to 11 | *To be specified by the maintainer* | Empty placeholder page |
 
 ## 1. Curves - Custom
 
@@ -73,11 +75,47 @@ spline (not straight segments) must match the existing Curves evaluation; a live
 histogram of the node's input would be drawn behind the curve. Changes
 participate in Undo/Redo and persist in the existing Curves schema.
 
+## 2. Color Slice
+
+**Purpose.** Adjust density, saturation and hue separately for seven color
+slices (Red, Skin, Yellow, Green, Cyan, Blue, Magenta), plus global versions of
+the same controls. The page is titled "Color Slice"; the reference layout's own
+name for this feature is not used in the interface.
+
+**Applies to.** A new color-slice effect on the selected Color node. No engine
+support exists today.
+
+**Implemented (stage 1, visual only).** Button 2 shows the page
+(`colorSlicePage`, controls named `colorSlice*`, inside a scroll area).
+
+- **Header.** Title and a page reset.
+- **Global row.** Den 0.00, Den.Depth 0.00, Sat 1.00, Sat.Balance 0.00, Sat.Depth
+  0.00 and Hue 0.00. Labels keep the reference abbreviations; their meaning is
+  *Pending*. Ranges are proposed: Sat 0 to 2, the others -1 to 1.
+- **Seven columns** separated by lines. Each has an enable toggle (on by
+  default, no effect yet), the slice name, a column reset, a small painted hue
+  wheel with a wedge marking the slice, a Center field and thin slider (-1 to 1,
+  default 0.00), a Hue field and thin slider with a decorative colored groove
+  (-1 to 1, default 0.00), and two vertical bars with fields: bar A (-1 to 1,
+  default 0.00, handle in the slice color) and bar B (0 to 2, default 1.00).
+  Bars, thin sliders and fields mirror each other. What bars A and B control is
+  *Pending* (the objects are named `...SliderA/B` and `...ValueA/B` until it is
+  decided). The column reset restores that column only; the page reset
+  restores everything and re-enables every toggle.
+- The wheels are not interactive and their wedges are fixed. Nothing edits a
+  grade, an image or project data.
+
+**Behavior (stage 2).** *Pending.* Needs a new effect that selects pixels by hue
+(centered on Center with the wheel's slice width), applies density, saturation
+and hue changes with soft falloff, and a CSP schema bump. Evaluation must be
+measured on CPU, OpenGL and Vulkan.
+
 ## Verification
 
 - Stage 1: the Color workspace test checks that button 1 opens the page, the
   documented defaults, strength slider/field linking, resets, and graph point
-  add/remove.
+  add/remove; button 2 opens Color Slice, whose seven columns, defaults, bar/field
+  linking and resets are checked.
 - Stage 2: evaluator parity with the existing Curves node, persistence and
   older-version compatibility, and a manual visual check recorded in the
   [regression guide](../validation/REGRESSION_TESTING.md).

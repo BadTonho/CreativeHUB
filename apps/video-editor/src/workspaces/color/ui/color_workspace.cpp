@@ -3,6 +3,7 @@
 #include "ui/effects/effects_catalog.h"
 #include "workspaces/color/ui/camera_raw_page.h"
 #include "workspaces/color/ui/color_match_page.h"
+#include "workspaces/color/ui/color_slice_page.h"
 #include "workspaces/color/ui/curves_page.h"
 #include "workspaces/color/ui/hdr_wheels_page.h"
 #include "workspaces/color/ui/motion_effects_page.h"
@@ -1426,9 +1427,16 @@ ColorWorkspace::ColorWorkspace(QWidget* parent) : QWidget(parent) {
                 page_buttons->addButton(button, i);
                 QWidget* page = nullptr;
                 if (!motion_dock) {
-                    // Sizing dock: its first page is Curves - Custom; the
-                    // others are still empty placeholders.
-                    if (i == 0) {
+                    // Sizing dock: page 1 is Curves - Custom and page 2 is
+                    // Color Slice; the others are still empty placeholders.
+                    if (i == 1) {
+                        auto* scroll = new QScrollArea(pages);
+                        scroll->setObjectName("colorSliceScroll");
+                        scroll->setFrameShape(QFrame::NoFrame);
+                        scroll->setWidgetResizable(true);
+                        scroll->setWidget(new ColorSlicePage(scroll));
+                        page = scroll;
+                    } else if (i == 0) {
                         auto* scroll = new QScrollArea(pages);
                         scroll->setObjectName("colorCurvesScroll");
                         scroll->setFrameShape(QFrame::NoFrame);

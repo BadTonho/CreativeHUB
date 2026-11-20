@@ -1082,6 +1082,57 @@ int main(int argc, char** argv) {
                         curves_page->findChild<QPushButton*>("colorCurvesEditR")->isChecked() &&
                         qFuzzyCompare(curves_page->findChild<QDoubleSpinBox*>("colorCurvesSoftClipLow")->value(), 50.0),
                     "The Curves page reset must restore the graph, toggles and fields.");
+            // Sizing dock, page 2: Color Slice (visual stage).
+            workspace.findChild<QPushButton*>("colorToolButton8")->click();
+            auto* slice_page = workspace.findChild<QWidget*>("colorSlicePage");
+            require(slice_page && sizing_pages->currentWidget()->isAncestorOf(slice_page) &&
+                        !sizing_pages->currentWidget()->isAncestorOf(curves_page),
+                    "Sizing dock button 2 must open the Color Slice page.");
+            const std::pair<const char*, double> slice_globals[] = {
+                {"colorSliceDen", 0.0}, {"colorSliceDenDepth", 0.0}, {"colorSliceSat", 1.0},
+                {"colorSliceSatBalance", 0.0}, {"colorSliceSatDepth", 0.0}, {"colorSliceHue", 0.0},
+            };
+            for (const auto& [name, value] : slice_globals) {
+                auto* box = slice_page->findChild<QDoubleSpinBox*>(name);
+                require(box && qFuzzyCompare(box->value() + 1.0, value + 1.0),
+                        "Color Slice global controls must start at their documented defaults.");
+            }
+            for (const char* slice : {"Red", "Skin", "Yellow", "Green", "Cyan", "Blue", "Magenta"}) {
+                const QString prefix = QStringLiteral("colorSlice") + QLatin1String(slice);
+                require(slice_page->findChild<QWidget*>(prefix + "Wheel") &&
+                            slice_page->findChild<QPushButton*>(prefix + "ResetButton") &&
+                            slice_page->findChild<QPushButton*>(prefix + "ToggleButton")->isChecked() &&
+                            slice_page->findChild<QSlider*>(prefix + "SliderA") &&
+                            slice_page->findChild<QSlider*>(prefix + "SliderB") &&
+                            slice_page->findChild<QSlider*>(prefix + "CenterSlider") &&
+                            slice_page->findChild<QSlider*>(prefix + "HueSlider"),
+                        "Each Color Slice column must have its wheel, toggle, reset and sliders.");
+                require(qFuzzyIsNull(slice_page->findChild<QDoubleSpinBox*>(prefix + "Center")->value()) &&
+                            qFuzzyIsNull(slice_page->findChild<QDoubleSpinBox*>(prefix + "Hue")->value()) &&
+                            qFuzzyIsNull(slice_page->findChild<QDoubleSpinBox*>(prefix + "ValueA")->value()) &&
+                            qFuzzyCompare(slice_page->findChild<QDoubleSpinBox*>(prefix + "ValueB")->value(), 1.0),
+                        "Each Color Slice column must start at 0, 0, 0 and 1.");
+            }
+            require(!slice_page->findChild<QWidget*>("colorSliceOrangeWheel"),
+                    "Color Slice must have exactly seven columns.");
+            auto* slice_a = slice_page->findChild<QSlider*>("colorSliceGreenSliderA");
+            auto* slice_a_value = slice_page->findChild<QDoubleSpinBox*>("colorSliceGreenValueA");
+            auto* slice_red_center = slice_page->findChild<QDoubleSpinBox*>("colorSliceRedCenter");
+            slice_a->setValue(50);
+            require(qFuzzyCompare(slice_a_value->value(), 0.5), "Moving a Color Slice bar must update its value.");
+            slice_a_value->setValue(-0.25);
+            require(slice_a->value() == -25, "Typing a Color Slice value must move its bar.");
+            slice_red_center->setValue(0.3);
+            slice_page->findChild<QPushButton*>("colorSliceGreenToggleButton")->setChecked(false);
+            slice_page->findChild<QPushButton*>("colorSliceGreenResetButton")->click();
+            require(qFuzzyIsNull(slice_a_value->value()) && qFuzzyCompare(slice_red_center->value(), 0.3) &&
+                        slice_page->findChild<QPushButton*>("colorSliceGreenToggleButton")->isChecked(),
+                    "A Color Slice column reset must restore only that column.");
+            slice_page->findChild<QDoubleSpinBox*>("colorSliceSat")->setValue(1.7);
+            slice_page->findChild<QPushButton*>("colorSliceResetButton")->click();
+            require(qFuzzyIsNull(slice_red_center->value()) &&
+                        qFuzzyCompare(slice_page->findChild<QDoubleSpinBox*>("colorSliceSat")->value(), 1.0),
+                    "The Color Slice page reset must restore every control.");
             workspace.findChild<QPushButton*>("colorToolButton1")->click();
         }
         auto* capture_button = workspace.findChild<QPushButton*>("colorCaptureStillButton");
