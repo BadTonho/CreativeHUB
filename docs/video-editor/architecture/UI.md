@@ -45,9 +45,9 @@ is not persisted yet. The primary-grade controls and the scope panel are
 currently hidden; they are planned to move into these docks. The Motion Effects dock selects its pages with its six buttons (pages 1,
 Camera Raw, 2, Color Match, and 3, Primaries - Color Bars, 4, High Dynamic Range - Color Wheels, and 5, RGB Mixer, and 6, Motion Effects, are
 implemented visually; all six pages are visual only). The Sizing - Input Sizing
-dock uses the same button-and-page scheme: its first nine buttons open visual
-Curves - Custom, Color Slice, Color Warp, Qualifier, Window, Tracker, Smart Mask, Blur
-and Key pages and the other two are empty (see
+dock uses the same button-and-page scheme: its first ten buttons open visual
+Curves - Custom, Color Slice, Color Warp, Qualifier, Window, Tracker, Smart Mask, Blur,
+Key and Input Sizing pages and the eleventh is empty (see
 [Color Sizing Dock](../features/COLOR_SIZING_DOCK.md)). The six
 pages are specified in
 [Color Panels Dock](../features/COLOR_PANELS_DOCK.md).

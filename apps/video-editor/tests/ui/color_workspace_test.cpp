@@ -1579,6 +1579,61 @@ int main(int argc, char** argv) {
                         !key_page->findChild<QPushButton*>("colorKeyOutputEnable")->isChecked() &&
                         key_page->findChild<QPushButton*>("colorKeyInputEnable")->isChecked(),
                     "The Key reset must restore every field and toggle.");
+            // Sizing dock, page 10: Sizing - Input Sizing (visual stage).
+            workspace.findChild<QPushButton*>("colorToolButton16")->click();
+            auto* input_page = workspace.findChild<QWidget*>("colorInputSizingPage");
+            require(input_page && sizing_pages->currentWidget()->isAncestorOf(input_page) &&
+                        !sizing_pages->currentWidget()->isAncestorOf(key_page),
+                    "Sizing dock button 10 must open the Sizing - Input Sizing page.");
+            for (int i = 1; i <= 5; ++i)
+                require(input_page->findChild<QPushButton*>(
+                            QStringLiteral("colorInputSizingModeButton%1").arg(i)),
+                        "Input Sizing must show its five sizing-mode buttons.");
+            require(input_page->findChild<QPushButton*>("colorInputSizingModeButton2")->isChecked() &&
+                        input_page->findChild<QPushButton*>("colorInputSizingResetButton") &&
+                        input_page->findChild<QPushButton*>("colorInputSizingSizingResetButton") &&
+                        input_page->findChild<QPushButton*>("colorInputSizingBlankingResetButton"),
+                    "Input Sizing must start on its second mode with its reset buttons present.");
+            const std::pair<const char*, double> input_defaults[] = {
+                {"colorInputSizingPan", 0.0}, {"colorInputSizingTilt", 0.0}, {"colorInputSizingZoom", 1.0},
+                {"colorInputSizingRotate", 0.0}, {"colorInputSizingWidth", 1.0},
+                {"colorInputSizingHeight", 1.0}, {"colorInputSizingPitch", 0.0}, {"colorInputSizingYaw", 0.0},
+            };
+            for (const auto& [name, value] : input_defaults) {
+                auto* box = input_page->findChild<QDoubleSpinBox*>(name);
+                require(box && qFuzzyCompare(box->value() + 1.0, value + 1.0) && box->isEnabled(),
+                        "Input Sizing fields must start at their documented defaults.");
+            }
+            auto* flip_h = input_page->findChild<QPushButton*>("colorInputSizingFlipHorizontal");
+            auto* flip_v = input_page->findChild<QPushButton*>("colorInputSizingFlipVertical");
+            require(flip_h && flip_v && !flip_h->isChecked() && !flip_v->isChecked(),
+                    "Input Sizing flips must start off.");
+            for (const char* name : {"colorInputSizingBlankingTop", "colorInputSizingBlankingRight",
+                     "colorInputSizingBlankingBottom", "colorInputSizingBlankingLeft"})
+                require(input_page->findChild<QDoubleSpinBox*>(name) &&
+                            !input_page->findChild<QDoubleSpinBox*>(name)->isEnabled(),
+                        "The Blanking fields must be present and disabled.");
+            require(input_page->findChild<QCheckBox*>("colorInputSizingBlankingSmooth") &&
+                        !input_page->findChild<QCheckBox*>("colorInputSizingBlankingSmooth")->isEnabled(),
+                    "The Blanking Smooth checkbox must be present and disabled.");
+            auto* input_zoom = input_page->findChild<QDoubleSpinBox*>("colorInputSizingZoom");
+            auto* input_pan = input_page->findChild<QDoubleSpinBox*>("colorInputSizingPan");
+            input_zoom->setValue(2.5);
+            input_pan->setValue(-1.25);
+            flip_h->click();
+            require(qFuzzyCompare(input_zoom->value(), 2.5) && flip_h->isChecked(),
+                    "Input Sizing fields and flips must hold the values set on them.");
+            input_page->findChild<QPushButton*>("colorInputSizingModeButton4")->click();
+            input_page->findChild<QPushButton*>("colorInputSizingSizingResetButton")->click();
+            require(qFuzzyCompare(input_zoom->value(), 1.0) && qFuzzyIsNull(input_pan->value()) &&
+                        !flip_h->isChecked() &&
+                        input_page->findChild<QPushButton*>("colorInputSizingModeButton4")->isChecked(),
+                    "The Sizing reset must restore its fields and flips but not the mode.");
+            input_zoom->setValue(3.0);
+            input_page->findChild<QPushButton*>("colorInputSizingResetButton")->click();
+            require(qFuzzyCompare(input_zoom->value(), 1.0) &&
+                        input_page->findChild<QPushButton*>("colorInputSizingModeButton2")->isChecked(),
+                    "The Input Sizing page reset must restore every control and the mode.");
             workspace.findChild<QPushButton*>("colorToolButton1")->click();
         }
         auto* capture_button = workspace.findChild<QPushButton*>("colorCaptureStillButton");

@@ -1,8 +1,8 @@
 # Color Sizing Dock
 
 Status: **Stage 1 (visual only) is implemented for pages 1 (Curves - Custom), 2 (Color
-Slice), 3 (Color Warp - Chroma Warp), 4 (Qualifier - HSL), 5 (Window), 6 (Tracker - Window), 7 (Smart Mask), 8 (Blur - Blur) and 9 (Key).
-Pages 10 and 11 are not yet specified; their buttons select empty placeholder pages.** Control
+Slice), 3 (Color Warp - Chroma Warp), 4 (Qualifier - HSL), 5 (Window), 6 (Tracker - Window), 7 (Smart Mask), 8 (Blur - Blur), 9 (Key) and 10 (Sizing - Input Sizing).
+Page 11 is not yet specified; its button selects an empty placeholder page.** Control
 names, ranges and defaults are taken from the maintainer's layout reference
 screenshots and are proposals until implemented and recorded as decisions.
 Behavior marked *Pending* has not been decided.
@@ -39,7 +39,8 @@ Delivery stages:
 | 7 | Smart Mask | Visual stage implemented |
 | 8 | Blur - Blur | Visual stage implemented |
 | 9 | Key | Visual stage implemented |
-| 10 to 11 | *To be specified by the maintainer* | Empty placeholder page |
+| 10 | Sizing - Input Sizing | Visual stage implemented |
+| 11 | *To be specified by the maintainer* | Empty placeholder page |
 
 ## 1. Curves - Custom
 
@@ -404,6 +405,43 @@ combines with the Qualifier page's matte. The relation to the existing qualifier
 matte refinement, persistence (CSP schema bump) and CPU, OpenGL and Vulkan evaluation
 are *Pending*.
 
+## 10. Sizing - Input Sizing
+
+**Purpose.** Reposition, scale, rotate and flip the input image of the selected
+node and, in other sizing modes, blank its edges. The Edit workspace already has clip
+transform controls in the Inspector; this page is separate from them and binding is
+stage 2.
+
+**Applies to.** The selected Color node or clip (stage 2).
+
+**Implemented (stage 1, visual only).** Button 10 shows the page
+(`colorInputSizingPage`, controls named `colorInputSizing*`, inside a scroll area).
+The dock's own title is also "Sizing - Input Sizing".
+
+- **Header.** Title, five exclusive sizing-mode buttons (the second, the Input Sizing
+  mode, is selected; the others only change the highlight and have placeholder
+  accessible names "Sizing mode 1" to "Sizing mode 5"), a page reset and a "..."
+  button that does nothing yet.
+- **Sizing** (with its own reset). Left column: Pan 0.000, Tilt 0.000, Zoom 1.000 and
+  Rotate 0.000. Right column, after a divider: Width 1.000, Height 1.000, Pitch 0.000,
+  Yaw 0.000 and Flip, which has two independent toggles (horizontal and vertical, off
+  by default). Fields have three decimals and proposed ranges: Pan and Tilt -10 to
+  10, Zoom, Width and Height 0 to 10, Rotate -360 to 360, Pitch and Yaw -90 to 90.
+  The Sizing reset restores these fields and the flips, not the mode.
+- **Blanking** (own reset, disabled). Top, Right, Bottom and Left fields shown empty
+  and a Smooth checkbox, all disabled as in the reference layout. They would apply
+  to the other sizing modes (*Pending*).
+- **Page reset** restores every field, both flips, Smooth and the second mode.
+
+Nothing transforms an image or touches project data. What the five modes are, and
+the Blanking units, are *Pending*.
+
+**Behavior (stage 2).** *Pending.* Intended: the fields drive a 2D/3D input transform
+on the selected node, composed with the Edit workspace transform without duplicating
+the scaling and sampling code; pitch and yaw imply a perspective transform. The
+interaction with the Viewer (on-screen handles), persistence (CSP schema bump) and
+CPU, OpenGL and Vulkan evaluation are *Pending*.
+
 ## Verification
 
 - Stage 1: the Color workspace test checks that button 1 opens the page, the
@@ -420,7 +458,9 @@ are *Pending*.
   enabling by quality, slider/field linking, the playhead and the reset are checked;
   button 8 opens Blur - Blur, where the defaults, channel linking, the disabled footer,
   group resets and the page reset are checked; button 9 opens Key, where the preview,
-  field and toggle defaults, held values and the reset are checked.
+  field and toggle defaults, held values and the reset are checked; button 10 opens
+  Sizing - Input Sizing, where the defaults, flips, the disabled Blanking section and
+  both resets are checked.
 - Stage 2: evaluator parity with the existing Curves node, persistence and
   older-version compatibility, and a manual visual check recorded in the
   [regression guide](../validation/REGRESSION_TESTING.md).

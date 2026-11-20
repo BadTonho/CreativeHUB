@@ -247,6 +247,8 @@ set(MAIN_EDITOR_CORE_SOURCES
     src/workspaces/color/ui/blur_page.h
     src/workspaces/color/ui/key_page.cpp
     src/workspaces/color/ui/key_page.h
+    src/workspaces/color/ui/input_sizing_page.cpp
+    src/workspaces/color/ui/input_sizing_page.h
     src/workspaces/color/ui/color_workspace.cpp
     src/workspaces/color/ui/color_workspace.h
     src/workspaces/audio/ui/audio_workspace.h
