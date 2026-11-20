@@ -288,6 +288,9 @@ Native visual and macOS/Linux acceptance remains pending.
   semantics; compare CPU, GPU, export and linked output on transparent inputs.
 - [x] Preserve preview/export equivalence, history, persistence, recovery, and
   linked output for clipping and the six implemented blend modes.
+- [ ] Add blend-range controls (blend by the layer's own tones and by the tones of
+  the layers below, with split thresholds), plus solo/isolate layer, layer color
+  labels and show/hide-all commands.
 
 #### 4.3. Non-destructive adjustments and fill layers
 
@@ -322,6 +325,12 @@ Native visual and macOS/Linux acceptance remains pending.
   with existing values, history and document migration.
 - [ ] Add editable solid-color, gradient, and pattern fill layers and reusable
   adjustment/fill presets.
+- [ ] Add further adjustments as separately bounded increments: Vibrance, Photo
+  Filter, Channel Mixer, Shadows/Highlights, Replace Color, Dehaze, Equalize and
+  automatic tone/contrast/color, each with defined parameter ranges, neutral
+  behavior, alpha, masks and color-space semantics.
+- [ ] Add temperature/tint white balance with a neutral eyedropper, split toning,
+  per-hue (HSL) controls and a three-range color grading adjustment.
 
 #### 4.4. Layer styles and organization
 
@@ -338,6 +347,13 @@ Native visual and macOS/Linux acceptance remains pending.
 - [ ] Extend linked raster resources into embedded/linked object containers
   with controlled relink/refresh, preserved source data through transforms,
   and reeditable filter stacks. Current linked imports remain the baseline.
+- [ ] Add duplicate layer, merge down, merge selected/visible, flatten and
+  stamp-visible commands, with defined handling of masks, adjustments, styles,
+  groups and clipping chains. Add copy/cut/paste (including paste in place and
+  paste into a layer or mask) through the system clipboard, and layer copy between
+  documents.
+- [ ] Add layer selection and arrangement helpers: align and distribute,
+  select-by-label, link/unlink, and moving layers between documents by drag.
 
 #### 4.5. Selection refinement, paths, and vector design
 
@@ -357,6 +373,17 @@ Native visual and macOS/Linux acceptance remains pending.
   corners, and union/subtract/intersect/exclude operations.
 - [ ] Add richer paragraph/character formatting, variable-font axis and
   OpenType controls, text on paths, and reusable typography styles.
+- [ ] Add select-all, inverse, reselect and hide-edges commands, selection
+  intersection, quick mask, and conversion between selections, masks and
+  channels.
+- [ ] Extend text with bold/italic style selection, per-run styling, kerning,
+  leading and baseline shift, small caps and super/subscript, justification and
+  indents, text effects (shadow, stroke, background, gradient or image fill) as
+  layer-style properties, conversion to shape/outline, a glyph panel, spell
+  check and missing-font substitution.
+- [ ] Extend vector tools with Bezier-path boolean operations, compound shapes,
+  corner and cap/join/dash stroke options, gradient fill and stroke, custom shape
+  libraries, point/corner editing and image trace.
 
 #### 4.6. Brush engine and retouching
 
@@ -371,6 +398,15 @@ Native visual and macOS/Linux acceptance remains pending.
   Healing, sampled Healing Brush, and Patch workflows.
 - [ ] Add Dodge/Burn with tonal-range targeting, Sponge saturation controls,
   Sharpen, and Smudge. Extend the existing Blur tool only where needed.
+- [ ] Add additional gradient types (radial, angular, reflected, diamond) with a
+  multi-stop gradient editor, noise gradients and preset import/export; a Fill
+  command with foreground/background/pattern/history sources and preserve-
+  transparency; pattern definition and offset for seamless tiles.
+- [ ] Add background and magic eraser modes, a history brush, a stroke stabilizer
+  and straight-line painting; brush libraries with import/export and a preset
+  manager.
+- [ ] Add frequency separation, skin-smoothing and red-eye tools, and an eyedropper
+  with sample-size/layer options, a multi-point color sampler and an info panel.
 
 #### 4.7. Advanced transforms and deformation
 
@@ -381,6 +417,10 @@ Native visual and macOS/Linux acceptance remains pending.
   separate Motion Studio contract and producer/consumer coverage.
 - [ ] Add Liquify-style forward warp, reconstruct, smooth, twirl, pucker, and
   bloat tools. Face-aware deformation belongs to the assisted-editing stage.
+- [ ] Add an image-resize command with selectable resampling methods and
+  resolution (distinct from Canvas Size), arbitrary-angle canvas rotation,
+  straighten, trim by transparency/color, perspective crop and crop guides with
+  preset aspect ratios, and non-destructive crop that preserves cropped pixels.
 
 #### 4.8. Layout, precision, and color-managed photography
 
@@ -396,6 +436,16 @@ Native visual and macOS/Linux acceptance remains pending.
 - [ ] Add non-destructive RAW development with exposure, color, and optical
   controls and preserved original camera data. Evaluate supported camera formats,
   decoding dependencies, licenses, color profiles and a recoverable editing path.
+- [ ] Add multi-exposure HDR merge, panorama stitching, focus stacking and
+  statistical image stacks, with automatic layer alignment and blending, as
+  separately bounded workflows.
+- [ ] Add a history panel with snapshots and non-linear states, a live histogram
+  and info panel, clipping warnings, pixel grid at high zoom, split/N-up document
+  views, view rotation, and Navigator and Properties panels.
+- [ ] Add file-format breadth in bounded increments: layered document import
+  (for example PSD, at least flattened first), HEIC/AVIF/JPEG XL/GIF/TGA/EXR/DNG
+  reading, and export of WebP, AVIF, GIF, TIFF and PDF with profile embedding,
+  metadata editing and Content Credentials where appropriate.
 
 #### 4.9. Automation and asset delivery
 
@@ -408,6 +458,10 @@ Native visual and macOS/Linux acceptance remains pending.
   vector output; offer per-layer and artboard delivery where supported.
 - [ ] Add controlled layer-based asset generation and a documented
   scripting/extension API with explicit ownership and error boundaries.
+- [ ] Add tool presets, export presets with multi-size/scale delivery (1x/2x/3x,
+  suffixes) and a side-by-side optimized web preview; data-driven documents that
+  replace text and images from a data file; a filter/effect plug-in interface once
+  the processing contracts are stable.
 
 #### 4.10. Assisted editing and content reconstruction
 
@@ -425,6 +479,36 @@ Native visual and macOS/Linux acceptance remains pending.
 - [ ] For assisted workflows, define editable output, selection/mask scope,
   cancellation, model availability and explicit disclosure when processing is
   online. Review generated or reconstructed results before accepting them.
+
+#### 4.11. Filters and effects library
+
+Added by the 2026-11-20 capability review. Beyond the existing Blur tool, a bounded
+catalog of editable filters applied to layers, selections or masks:
+
+- [ ] Blur family: box, radial/spin, motion, surface/bilateral, shape, lens blur with
+  depth, tilt-shift, field/iris/path blurs, zoom and average.
+- [ ] Sharpen: unsharp mask, smart sharpen with blur-type controls, high pass,
+  clarity and texture. Noise: add, reduce, despeckle, dust and scratches, median.
+- [ ] Distort: ripple, wave, zigzag, twirl, pinch, spherize, polar coordinates,
+  shear, displacement map, glass, lens correction and adaptive wide-angle.
+- [ ] Stylize and pixelate: emboss, find edges, diffuse, tiles, trace contour,
+  solarize, oil paint, mosaic, crystallize, pointillize, mezzotint, halftone, facet.
+- [ ] Render and texture: clouds, fibers, lens flare, lighting effects, picture frame,
+  artistic and sketch effects, grain, vignette, chromatic aberration, duotone.
+- [ ] Reeditable filter stacks with per-filter masks, blend mode and opacity, built on
+  the object-container work in 4.4, and reusable filter presets.
+
+#### 4.12. Print, publishing and layout
+
+Added by the 2026-11-20 capability review; evaluate against the creator-focused
+first release before committing scope.
+
+- [ ] Print dialog with color management, printer/paper profiles, bleed and crop
+  marks, contact sheets, and PDF export with embedded fonts and standard presets.
+- [ ] Resolution check and DPI-aware export, templates for common social and web
+  sizes, and device mockup placement.
+- [ ] Multi-page and layout features (master pages, text frames, tables) belong to a
+  separate layout product decision and are not planned for the Image Editor.
 
 #### Delivery requirements for each implementation
 

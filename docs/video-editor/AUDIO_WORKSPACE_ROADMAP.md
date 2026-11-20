@@ -116,6 +116,11 @@ Master meters.
    sound library. Define device, permission, latency, and asset ownership rules.
 4. **Delivery and formats:** audio-only export and, after a separate format and
    device review, surround workflows.
+5. **Editing and effects (capability review, 2026-11-20):** per-clip fade handles
+   with selectable curves, pitch-preserving time stretch, graphic/notch/dynamic EQ,
+   limiter, expander, gate, de-esser and multiband dynamics, reverb/delay/modulation,
+   an audio plug-in host, spectrum/phase analysis, stem export, and music/voice
+   separation. Each needs the same scope, parity and device-acceptance review.
 
 Future work needs a scoped workflow, compatibility assessment for persisted
 changes, playback/export parity coverage, and relevant device acceptance.

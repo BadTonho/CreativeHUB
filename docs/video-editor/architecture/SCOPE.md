@@ -80,9 +80,10 @@ The Video Editor currently includes:
   conversion, and display orientation matching decoded dimensions;
 - provisional Qt OpenGL presentation with CPU fallback and grayscale, plus
   optional shared GPU timeline composition and direct texture delivery
-  (Settings > General, default off; RGBA/CPU fallback);
-- worker-thread frame stepping and playback, with CPU decoding by default and
-  experimental Windows D3D11 H.264/HEVC 8-bit decoding;
+  (Settings > General, default on since 2026-11-20; RGBA/CPU fallback);
+- worker-thread frame stepping and playback, with hardware decoding requested by
+  default (experimental Windows D3D11 H.264/HEVC 8-bit) and automatic CPU
+  decoding when it is unavailable or the preference is off;
 - multiple video tracks with stable identifiers, absolute positions, gaps,
   cross-track overlap, direct selection, track management, and positional
   drops from the Media Browser;
@@ -142,7 +143,7 @@ The Video Editor currently includes:
   through audio tails, configurable output settings, progress, and cancellation,
   but no YouTube-named preset;
 - independent per-job experimental GPU export composition (Render > Video,
-  default off), supporting 1080p, 1440p and 4K UHD with RGBA readback and CPU fallback;
+  default on since 2026-11-20), supporting 1080p, 1440p and 4K UHD with RGBA readback and CPU fallback;
 - experimental ordered GPU effects/Fusion and native Windows/NVIDIA
   decode/composition/NVENC delivery, with explicit recovery and transfer metrics;
 - local structured diagnostic logging;

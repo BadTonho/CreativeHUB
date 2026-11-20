@@ -575,9 +575,76 @@ costs.
   - Point tracking, planar tracking, warp stabilization, and tracked/rotoscoped
     masks.
 - **Export and pipeline:**
-  - Image-sequence export (e.g., PNG sequence).
+  - Image-sequence export is implemented for PNG with transparency; see
+    [Image sequence export](features/IMAGE_SEQUENCE_EXPORT.md). Other sequence
+    formats remain candidates.
   - *Render Queue* for batch jobs, reusable output templates/presets, and
     per-composition RAM/disk frame-cache indicators in the timeline ruler.
+
+Capability review (2026-11-20): additional candidates recorded after comparing this
+backlog with what mature motion-design tools provide. They are unprioritized and
+not approved release commitments; each needs its own contract, `.motion` schema
+and migration plan, preview/export parity coverage, and `.cscomp` interchange
+decision. Do not duplicate items already listed above.
+
+- **Project, composition and workflow:** work area (render and preview a range),
+  composition settings for pixel aspect ratio, fractional and drop-frame rates,
+  background color, shutter and motion-blur defaults; interpret-footage controls
+  (frame rate, fields, alpha mode, loop); proxies and a resolution/downsample
+  control in the Viewer; multiple compositions per project with tabs and
+  duplication; a composition flowchart; snapshots to compare states; project
+  consolidation, unused-item removal and relink; reusable project templates and
+  expose-property templates that the Video Editor can consume.
+- **Layer switches and styles:** shy, solo, guide layers, per-layer quality,
+  continuously-rasterize/collapse-transformations for nested compositions,
+  adjustment-layer switch, label colors and comments; layer styles (inner shadow,
+  inner/outer glow, bevel and emboss, satin, color/gradient overlay, stroke) with
+  blend options; stencil and silhouette matte modes and animated blend modes.
+- **Animation tooling:** keyframe assistants (easy ease variants, exponential scale,
+  time-reverse keyframes, sequence layers), motion sketch, a smoother and a wiggler
+  to thin or randomize keyframes, separate X/Y/Z dimensions, auto-orient along a
+  path, an animation-preset library with save, apply and share, and property
+  controls (slider, checkbox, color, point, angle, layer, dropdown) that drive
+  other properties for reusable rigs.
+- **Effect families (extending the list above):** directional, radial, zoom and lens
+  blurs with bokeh shapes; sharpen and unsharp mask; noise, grain and denoise;
+  mesh warp, bulge, twirl, ripple, magnify and polar coordinates; mosaic, halftone,
+  posterize, threshold, emboss and find-edges; generators (cell pattern, lightning,
+  beam, scribble, radio waves); wipe-style effects with gradient and iris shapes;
+  channel utilities (shift/set channels, set matte, arithmetic, channel blur);
+  light effects (lens flare, light rays, light wrap); glitch and light-leak looks;
+  camera shake; effect presets that can be saved and shared.
+- **Shape and text extras:** polygon/star shapes with roundness, create shapes or
+  masks from text, text with multiple fills/strokes and gradient fill, per-run
+  styling, paragraph text with justification and OpenType/variable-font controls,
+  vertical text, text templates with exposed controls, data-driven text (counters,
+  timecode, CSV/JSON), and automatic vector tracing of images.
+- **Color, depth and HDR:** 16-bit and 32-bit floating-point composition, linear
+  blending, explicit working color spaces and display transforms, LUT import, wide
+  gamut and HDR output, pixel-info and color-picker tools, and scopes in the Viewer.
+- **Time and render:** native motion blur and pixel motion blur, frame blending and
+  optical-flow interpolation for retimed footage, time displacement and echo,
+  region-of-interest rendering, adaptive preview resolution, RAM and disk preview
+  cache, multi-frame rendering, selectable render passes (alpha-only, depth),
+  distributed or command-line rendering, and a render queue with output-module
+  templates (see the queue item above).
+- **Import and interchange:** layered image documents with editable text and shapes,
+  SVG and other vector sources, image sequences and multi-layer EXR as footage,
+  alpha-channel footage, 3D model import, project import from the Video Editor,
+  and export of image sequences in additional formats and animated formats.
+- **Rigging and deformation:** pin-based puppet deformation with stiffness and
+  overlap controls, IK/FK bone rigs and character-style rigging helpers; evaluate
+  together with the static deformation work planned in the Image Editor.
+- **Viewer and timeline ergonomics:** zoom/rotate-view tools, multi-view layouts
+  (two and four views, custom 3D views), transparency grid, channel view
+  (RGB/alpha/luma), magnification, snapshots, a property-search field, switch
+  columns, ripple/insert editing and a layer search.
+- **Extensibility:** a scripting API and a documented effect plug-in interface with
+  stability, security and licensing rules, expression-language support, and shared
+  preset/template libraries.
+- **Assisted workflows (local-first):** rotoscoping assistance, object removal,
+  scene-edit detection, beat detection and speech-to-text; evaluate model size,
+  licenses, privacy and local versus online processing first.
 
 ##### Suggested practical implementation sequence (highest workflow impact first)
 

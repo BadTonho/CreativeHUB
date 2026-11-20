@@ -57,11 +57,14 @@ platform validation remain tracked below and in those guides.
   consumer. Extract a focused shared library only when another application has
   a real use for the same behavior and a stable API can serve both. See the
   [cross-application compatibility proposal](../CROSS_APPLICATION_COMPATIBILITY.md).
-- CPU composition remains the default. An experimental shared OpenGL 3.2 Core
-  backend is available for timeline preview through Settings > General, with
-  CPU fallback and automatic shared-texture delivery, retaining worker readback
-  when required. Offline export independently offers per-job experimental GPU
-  composition through 4K. The opt-in Windows/NVIDIA extension retains decode,
+- GPU composition and hardware decoding are on by default (2026-11-20
+  maintainer decision, provisional; stored opt-outs are kept). The shared
+  OpenGL 3.2 Core backend composes the timeline preview through Settings >
+  General, with CPU fallback and automatic shared-texture delivery, retaining
+  worker readback when required. Offline export independently offers per-job
+  GPU composition through 4K, also checked by default in Render > Video. The
+  Windows/NVIDIA extension (hardware encoders, native NVENC, Vulkan) remains
+  opt-in and retains decode,
   effects/Fusion, composition, and NVENC input on the GPU, with RGBA/CPU recovery. Qt OpenGL presents
   the final preview frame. See the
   [rendering boundary](architecture/RENDERING.md).
@@ -88,8 +91,8 @@ hardware encoder discovery extend these stages; their device acceptance is
 recorded separately in [GPU_PIPELINE.md](gpu/GPU_PIPELINE.md). See the
 [delivery contract](gpu/GPU_TEXTURE_DELIVERY.md) and [export contract](gpu/GPU_EXPORT.md).
 The Windows/NVIDIA implementation passed explicit H.264/HEVC native integration
-and the final 101-test Windows regression gate on 2026-10-10. Hardware options
-remain disabled by default; human timing and other native platforms are pending.
+and the final 101-test Windows regression gate on 2026-10-10. Hardware encoders
+and Vulkan remain opt-in; human timing and other native platforms are pending.
 The 15-minute offscreen run completed 27,000 native GPU frames without fallback
 or readback. Its recorded latency spikes keep smooth physical 30 fps playback
 acceptance pending; see the pipeline's prolonged-run statistics.
@@ -236,6 +239,83 @@ performance, licensing, and maintenance cost.
 - **Delivery:** batch render queue; saved output profiles; still-frame and
   caption delivery; project interchange and relinking checks for expanded
   workflows.
+
+Capability review (2026-11-20): the following candidate areas were added from a
+review of what mature professional video editors offer that this application does
+not yet provide. They remain unprioritized candidates; each needs its own scoped
+contract, persistence and migration plan, preview/export parity coverage and
+cross-platform review before implementation. Existing implemented behavior is not
+repeated here.
+
+- **Timeline editing workflow:** named timeline and clip markers (comment, chapter,
+  range) with a marker list and export; lift/extract and three- or four-point
+  source-to-timeline edits with a separate source viewer and in/out marks; track
+  targeting and source patching; linked clips and groups; sync locks and clip
+  enable/disable; selection by label or shared media; a rate-stretch tool; numeric
+  trim entry and a dual-viewer trim mode; gap detection and automatic gap closing;
+  subclips, ratings, keywords and favorite/reject flags; match-frame and
+  go-to-edit navigation; a history list; find-in-timeline; configurable snapping
+  per target type; timeline comparison and change lists for revised cuts.
+- **Speed and timing:** constant speed and duration changes with pitch
+  preservation, reverse playback, freeze frames, keyframed time remapping,
+  frame blending and motion-compensated interpolation; mixed frame-rate timelines
+  with interpolation; fractional and drop-frame rates, interlaced footage,
+  anamorphic pixel aspect ratios, variable-frame-rate conforming, and a timeline
+  resolution that differs from the project canvas; additional project canvases
+  and rates beyond 16:9/9:16 and 24-60 fps.
+- **Transitions and titles:** an expanded transition set (wipes, slides, pushes,
+  zooms, iris shapes, luma/gradient wipes, dip-to-color and stylized transitions)
+  with direction, edge, easing and keyframes; transition alignment, default
+  transition and duration settings, and applying a transition to several cuts at
+  once; selectable audio crossfade curves; rich text (per-run styling, kerning and
+  leading, OpenType and variable fonts, text on a path), text animation presets and
+  per-character animation, title templates with exposed controls; generators
+  (bars and tone, countdown, timecode burn-in, solid, gradient, noise); rolling and
+  crawling credits.
+- **Effects catalog:** crop, mirror, corner pin, lens correction, stabilization with
+  rolling-shutter repair, sharpen, noise reduction, film grain, vignette, glow and
+  light effects, stylize effects; blend modes beyond the current set and
+  layer-style effects (shadow, glow, stroke) for any clip; effect presets that can be
+  saved and shared; copy/paste of effect stacks; keyframes for every effect
+  parameter with Bezier, hold and ease interpolation, motion paths and
+  speed/value graph views.
+- **Color and monitoring:** project, timeline and output color transforms; LUT
+  import, preview and placement in the graph; log decoding; wide-gamut display;
+  tone mapping and HDR metadata; zebra, false color, gamut and clipping warnings,
+  safe-area overlays and additional scopes. The staged color work (curves, tracking,
+  managed color, restoration) stays in the
+  [Color Workspace Roadmap](COLOR_WORKSPACE_ROADMAP.md).
+- **Audio:** see the [Audio Workspace Roadmap](AUDIO_WORKSPACE_ROADMAP.md) for
+  recording, automation, loudness, restoration and surround candidates. Additional
+  candidates recorded here: per-clip fade handles with selectable curves, pitch-
+  preserving time stretch, expanded EQ and dynamics (limiter, expander, gate,
+  de-esser, multiband), reverb/delay/modulation, an audio plug-in host, spectrum and
+  phase analysis, stem export, and music/voice separation.
+- **Media management:** thumbnails and filmstrip display, hover scrubbing, proxies
+  and optimized media, a background render cache, project consolidation and
+  transcoding, smart bins driven by metadata rules, content search (visual and
+  speech), camera RAW decoding, professional intermediate codecs, image sequences,
+  alpha-channel footage and layered image documents.
+- **Delivery:** presets for common publishing platforms with optional direct
+  upload, simultaneous multi-format export, per-clip export, smart rendering that
+  avoids re-encoding when formats match, export of in/out ranges, burn-in overlays,
+  embedded metadata and chapters, audio-only and stem export, image-sequence and
+  still export, and broadcast delivery formats with validation checks.
+- **Interchange and conform:** EDL, AAF, XML and OpenTimelineIO import and export,
+  relink and conform workflows, audio round trips with dedicated audio tools, and
+  version comparison.
+- **Interface and hardware:** floating and multi-monitor windows, preset shortcut
+  maps from other editors, control-surface and hardware-panel support, command
+  search, external monitor output with reference-monitor features, and adaptive
+  playback resolution.
+- **Extensibility:** a scripting API, a documented plug-in interface for effects and
+  codecs, and automation hooks; define stability, security, licensing and ownership
+  rules first.
+- **Assisted editing (local-first):** silence and scene detection, automatic
+  reframing for other aspect ratios, subject tracking, speech-to-text captions,
+  beat detection and automatic color matching. Evaluate model size, licenses,
+  privacy and whether processing is local or online before choosing an
+  implementation; disclose any online processing explicitly.
 
 ## 4. Deferred technical and ecosystem work
 
