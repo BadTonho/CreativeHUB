@@ -1285,6 +1285,63 @@ int main(int argc, char** argv) {
                         qual_page->findChild<QPushButton*>("colorQualifierMatteTab1")->isChecked() &&
                         !qual_page->findChild<QPushButton*>("colorQualifierInvertButton")->isChecked(),
                     "The Qualifier page reset must restore every control.");
+            // Sizing dock, page 5: Window (visual stage).
+            workspace.findChild<QPushButton*>("colorToolButton11")->click();
+            auto* window_page = workspace.findChild<QWidget*>("colorWindowPage");
+            require(window_page && sizing_pages->currentWidget()->isAncestorOf(window_page) &&
+                        !sizing_pages->currentWidget()->isAncestorOf(qual_page),
+                    "Sizing dock button 5 must open the Window page.");
+            for (const char* name : {"colorWindowAddLinearButton", "colorWindowAddCircleButton",
+                     "colorWindowAddPolygonButton", "colorWindowAddCurveButton",
+                     "colorWindowAddGradientButton", "colorWindowDeleteButton", "colorWindowResetButton"})
+                require(window_page->findChild<QPushButton*>(name),
+                        "Window must expose its add, Delete and reset buttons.");
+            auto* window_list = window_page->findChild<QWidget*>("colorWindowList");
+            auto* window_delete = window_page->findChild<QPushButton*>("colorWindowDeleteButton");
+            require(window_list && window_list->property("rowCount").toInt() == 5 &&
+                        window_list->property("selectedRow").toInt() == -1 && !window_delete->isEnabled(),
+                    "Window must start with five rows, none selected, and Delete disabled.");
+            const std::pair<const char*, double> window_defaults[] = {
+                {"colorWindowSize", 50.0}, {"colorWindowAspect", 50.0}, {"colorWindowPan", 50.0},
+                {"colorWindowTilt", 50.0}, {"colorWindowRotate", 0.0}, {"colorWindowOpacity", 100.0},
+                {"colorWindowSoft1", 2.07}, {"colorWindowSoft2", 50.0}, {"colorWindowSoft3", 50.0},
+                {"colorWindowSoft4", 50.0}, {"colorWindowInside", 50.0}, {"colorWindowOutside", 50.0},
+            };
+            for (const auto& [name, value] : window_defaults) {
+                auto* box = window_page->findChild<QDoubleSpinBox*>(name);
+                require(box && qFuzzyCompare(box->value() + 1.0, value + 1.0) && !box->isEnabled(),
+                        "Window fields must start at their documented defaults and disabled.");
+            }
+            auto window_rows = [&] { return window_list->findChildren<QFrame*>("colorWindowRow"); };
+            require(window_rows().size() == 5, "Window must list five sample rows.");
+            const auto window_press = [&](QWidget* target) {
+                QMouseEvent press(QEvent::MouseButtonPress, QPointF(4, 4), QPointF(4, 4), Qt::LeftButton,
+                    Qt::LeftButton, Qt::NoModifier);
+                QApplication::sendEvent(target, &press);
+            };
+            window_press(window_rows().at(1));
+            require(window_list->property("selectedRow").toInt() == 1 &&
+                        window_page->findChild<QDoubleSpinBox*>("colorWindowSize")->isEnabled() &&
+                        window_delete->isEnabled() &&
+                        window_rows().at(1)->findChild<QPushButton*>("colorWindowRowEnableButton")->isEnabled() &&
+                        !window_rows().at(0)->findChild<QPushButton*>("colorWindowRowEnableButton")->isEnabled(),
+                    "Selecting a Window row must enable its toggles, the fields and Delete.");
+            window_page->findChild<QPushButton*>("colorWindowAddCircleButton")->click();
+            require(window_list->property("rowCount").toInt() == 6 &&
+                        window_list->property("selectedRow").toInt() == 5,
+                    "Adding a window must append and select a row.");
+            window_delete->click();
+            require(window_list->property("rowCount").toInt() == 5 &&
+                        window_list->property("selectedRow").toInt() == -1 && !window_delete->isEnabled() &&
+                        !window_page->findChild<QDoubleSpinBox*>("colorWindowSize")->isEnabled(),
+                    "Delete must remove the selected row and disable the fields.");
+            window_page->findChild<QPushButton*>("colorWindowAddGradientButton")->click();
+            window_page->findChild<QDoubleSpinBox*>("colorWindowOpacity")->setValue(40.0);
+            window_page->findChild<QPushButton*>("colorWindowResetButton")->click();
+            require(window_list->property("rowCount").toInt() == 5 &&
+                        window_list->property("selectedRow").toInt() == -1 &&
+                        qFuzzyCompare(window_page->findChild<QDoubleSpinBox*>("colorWindowOpacity")->value(), 100.0),
+                    "The Window page reset must restore the five rows, no selection and the defaults.");
             workspace.findChild<QPushButton*>("colorToolButton1")->click();
         }
         auto* capture_button = workspace.findChild<QPushButton*>("colorCaptureStillButton");

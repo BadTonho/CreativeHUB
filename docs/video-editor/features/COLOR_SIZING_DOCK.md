@@ -1,8 +1,8 @@
 # Color Sizing Dock
 
 Status: **Stage 1 (visual only) is implemented for pages 1 (Curves - Custom), 2 (Color
-Slice), 3 (Color Warp - Chroma Warp) and 4 (Qualifier - HSL). Pages 5 to 11 are not
-yet specified; their buttons select empty placeholder pages.** Control
+Slice), 3 (Color Warp - Chroma Warp), 4 (Qualifier - HSL) and 5 (Window). Pages 6 to 11 are
+not yet specified; their buttons select empty placeholder pages.** Control
 names, ranges and defaults are taken from the maintainer's layout reference
 screenshots and are proposals until implemented and recorded as decisions.
 Behavior marked *Pending* has not been decided.
@@ -34,7 +34,8 @@ Delivery stages:
 | 2 | Color Slice | Visual stage implemented |
 | 3 | Color Warp - Chroma Warp | Visual stage implemented |
 | 4 | Qualifier - HSL | Visual stage implemented |
-| 5 to 11 | *To be specified by the maintainer* | Empty placeholder page |
+| 5 | Window | Visual stage implemented |
+| 6 to 11 | *To be specified by the maintainer* | Empty placeholder page |
 
 ## 1. Curves - Custom
 
@@ -202,6 +203,45 @@ feed the selected node as a qualifier. The relation to the existing qualifier
 matte refinement and its CSP persistence, the meaning of Sym and of the two
 finesse sets, and the evaluation on CPU, OpenGL and Vulkan are *Pending*.
 
+## 5. Window
+
+**Purpose.** Manage shape windows (linear, circle, polygon, curve and gradient)
+and shape their transform and softness. The Color workspace already has Power
+Windows (rectangle and ellipse, with tracking, persisted in CSP v40); this page is
+separate from them and binding the two is stage 2.
+
+**Applies to.** The selected window of the selected Color node (stage 2).
+
+**Implemented (stage 1, visual only).** Button 5 shows the page
+(`colorWindowPage`, controls named `colorWindow*`, inside a scroll area).
+
+- **Header.** Title, a page reset and a "..." button that does nothing yet.
+- **Actions.** Add buttons Linear, Circle, Polygon, Curve and Gradient, and Delete.
+  An add button appends a row of that shape at the end of the list and selects it.
+  Delete removes the selected row and is enabled only while a row is selected.
+- **List** (`colorWindowList`, in its own scroll area). Starts with five sample rows,
+  one per shape, none selected, so the page matches the reference layout. Each row
+  shows a painted shape icon on a dark tile and two toggles on the right (enable,
+  on by default, and invert, off by default). The toggles are disabled until the row
+  is selected. Clicking a row selects it (single selection). The list exposes
+  `rowCount` and `selectedRow` as properties.
+- **Transform and Softness.** Twelve fields in two groups, all disabled until a row
+  is selected, with proposed ranges: Size, Aspect, Pan and Tilt 50.00 (0 to 100),
+  Rotate 0.00 (-180 to 180), Opacity 100.00 (0 to 100); Soft 1 2.07, Soft 2, Soft 3
+  and Soft 4 50.00, Inside 50.00 and Outside 50.00 (0 to 100). They hold one shared
+  set of values, not values per window.
+- **Page reset** restores the five sample rows with no selection and every field's
+  default.
+
+Nothing creates a window, a matte or any project data. The meaning of the four Soft
+values and of the two row toggles is *Pending*.
+
+**Behavior (stage 2).** *Pending.* Intended: each row is a window on the selected
+node with its own transform and softness, combined with the existing Power Windows
+model (shapes, ordered Add/Subtract/Intersect coverage, animation and tracking).
+Polygon, curve and gradient windows, per-window values, persistence (CSP schema
+bump) and CPU, OpenGL and Vulkan evaluation are *Pending*.
+
 ## Verification
 
 - Stage 1: the Color workspace test checks that button 1 opens the page, the
@@ -210,7 +250,9 @@ finesse sets, and the evaluation on CPU, OpenGL and Vulkan are *Pending*.
   linking and resets are checked; button 3 opens Chroma Warp, where pin
   adding, selecting, deleting, tool behavior, pin controls and resets are checked;
   button 4 opens Qualifier - HSL, where defaults, the Hue/Saturation range bars and
-  handle dragging, Matte Finesse sliders and resets are checked.
+  handle dragging, Matte Finesse sliders and resets are checked; button 5 opens
+  Window, where the sample rows, selection, add, Delete, field enabling and reset are
+  checked.
 - Stage 2: evaluator parity with the existing Curves node, persistence and
   older-version compatibility, and a manual visual check recorded in the
   [regression guide](../validation/REGRESSION_TESTING.md).
