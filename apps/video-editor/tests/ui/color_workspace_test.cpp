@@ -1697,6 +1697,27 @@ int main(int argc, char** argv) {
                         keyframes_page->findChild<QPushButton*>("colorKeyframesTrackCorrectorExpand")->isChecked() &&
                         keyframes_page->findChild<QComboBox*>("colorKeyframesFilter")->currentIndex() == 2,
                     "Keyframes controls must hold the values set on them.");
+            // Keyframes dock, page 2: Scopes (visual stage).
+            workspace.findChild<QPushButton*>("colorToolButton18")->click();
+            auto* scopes_page = workspace.findChild<QWidget*>("colorScopesPage");
+            require(scopes_page && keyframes_pages->currentWidget()->isAncestorOf(scopes_page) &&
+                        !keyframes_pages->currentWidget()->isAncestorOf(keyframes_page),
+                    "Keyframes dock button 2 must open the Scopes page.");
+            for (const char* name : {"colorScopesSettingsButton", "colorScopesExpandButton",
+                     "colorScopesMoreButton"})
+                require(scopes_page->findChild<QPushButton*>(name),
+                        "Scopes must expose its settings, expand and more buttons.");
+            auto* scopes_mode = scopes_page->findChild<QComboBox*>("colorScopesMode");
+            auto* scopes_graph = scopes_page->findChild<QWidget*>("colorScopesGraph");
+            require(scopes_mode && scopes_graph && scopes_mode->currentText() == "Parade" &&
+                        scopes_mode->count() == 4 && scopes_graph->property("mode").toInt() == 1,
+                    "Scopes must start on Parade with four scope kinds.");
+            scopes_mode->setCurrentIndex(3);
+            require(scopes_graph->property("mode").toInt() == 3 &&
+                        scopes_mode->currentText() == "Vectorscope",
+                    "Choosing a scope kind must switch the graticule.");
+            scopes_mode->setCurrentIndex(0);
+            require(scopes_graph->property("mode").toInt() == 0, "Waveform must be selectable.");
             workspace.findChild<QPushButton*>("colorToolButton1")->click();
         }
         auto* capture_button = workspace.findChild<QPushButton*>("colorCaptureStillButton");

@@ -1,7 +1,7 @@
 # Color Keyframes Dock
 
-Status: **Stage 1 (visual only) is implemented for page 1, Keyframes. Pages 2 and 3
-are not yet specified; their buttons select empty placeholder pages.** Control names
+Status: **Stage 1 (visual only) is implemented for pages 1 (Keyframes) and 2 (Scopes).
+Page 3 is not yet specified; its button selects an empty placeholder page.** Control names
 and defaults are taken from the maintainer's layout reference screenshots and are
 proposals until implemented and recorded as decisions. Behavior marked *Pending* has
 not been decided.
@@ -32,7 +32,8 @@ Delivery stages:
 | Button | Page title | Status |
 | --- | --- | --- |
 | 1 | Keyframes | Visual stage implemented |
-| 2 to 3 | *To be specified by the maintainer* | Empty placeholder page |
+| 2 | Scopes | Visual stage implemented |
+| 3 | *To be specified by the maintainer* | Empty placeholder page |
 
 ## 1. Keyframes
 
@@ -78,12 +79,48 @@ Undo/Redo, and edits persist through the project's existing animation data (a CS
 schema bump only if a format change is needed). The frame rate and timeline length
 come from the project, not from fixed text.
 
+## 2. Scopes
+
+**Purpose.** Show the video scopes (waveform, parade, histogram, vectorscope) of the
+selected clip's current frame beside the keyframes.
+
+**Applies to.** The Viewer's current composed frame (stage 2).
+
+**Existing scope.** The Color workspace already has a working scope panel (RGB
+waveform, RGB Parade, Vectorscope and RGB Histogram, fed by the Viewer frame). It is
+currently hidden and is not used by this page. In stage 2 the existing scope widgets
+and their frame feed should be moved into or reused by this page rather than
+duplicated, in line with the shared-engine rule in the project's working rules.
+
+**Implemented (stage 1, visual only).** Button 2 shows the page
+(`colorScopesPage`, controls named `colorScopes*`, inside a scroll area).
+
+- **Header.** Title "Scopes", a mode dropdown (Waveform, Parade, Histogram,
+  Vectorscope; Parade selected), and settings, expand and "..." buttons that do nothing
+  yet.
+- **Graph** (`colorScopesGraph`). A black plot with a gold graticule that follows the
+  mode, and the message "No frame" in the center. Waveform and Parade draw level
+  lines labeled 0, 128, 256, 384, 512, 640, 768, 896 and 1023; Parade adds two dashed
+  lane separators for Red, Green and Blue. Histogram draws a vertical grid and a
+  baseline. Vectorscope draws concentric circles and a crosshair. The graph exposes
+  the selected mode as the `mode` property (0 Waveform, 1 Parade, 2 Histogram, 3
+  Vectorscope).
+
+No frame is analyzed and no scope data is drawn. The meaning of the settings button is
+*Pending*.
+
+**Behavior (stage 2).** *Pending.* Intended: reuse the existing scope computation and
+frame request path, draw the scope data on the graticule, keep the work off the
+interface thread, and support the 10-bit level scale shown here. Settings (for
+example intensity or channel selection) are *Pending*.
+
 ## Verification
 
 - Stage 1: the Color workspace test checks that button 1 of the dock opens the page,
   the filter, zoom slider and collapse button, the Master row, each track's four
   controls and their defaults, the starting keyframes and timecode, the playhead and
   timecode following a click, the diamond adding without duplicating, the Master
-  union, and that toggles hold their values.
+  union, and that toggles hold their values; button 2 opens Scopes, where the buttons,
+  the Parade default, four kinds and switching the graticule mode are checked.
 - Stage 2: round-trip tests with the project's animation data, Undo/Redo coverage and
   a manual visual check recorded in the [regression guide](../validation/REGRESSION_TESTING.md).

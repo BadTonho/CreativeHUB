@@ -15,6 +15,7 @@
 #include "workspaces/color/ui/primaries_bars_page.h"
 #include "workspaces/color/ui/qualifier_page.h"
 #include "workspaces/color/ui/rgb_mixer_page.h"
+#include "workspaces/color/ui/scopes_page.h"
 #include "workspaces/color/ui/smart_mask_page.h"
 #include "workspaces/color/ui/tracker_page.h"
 #include "workspaces/color/ui/window_page.h"
@@ -1442,9 +1443,16 @@ ColorWorkspace::ColorWorkspace(QWidget* parent) : QWidget(parent) {
                     // Slice, Chroma Warp, Qualifier, Window, Tracker, Smart
                     // Mask, Blur, Key and Input Sizing.
                     if (keyframes_dock) {
-                        // Keyframes dock: page 1 is Keyframes; the others are
-                        // still empty placeholders.
-                        if (i == 0) {
+                        // Keyframes dock: page 1 is Keyframes and page 2 is
+                        // Scopes; the last one is still an empty placeholder.
+                        if (i == 1) {
+                            auto* scroll = new QScrollArea(pages);
+                            scroll->setObjectName("colorScopesScroll");
+                            scroll->setFrameShape(QFrame::NoFrame);
+                            scroll->setWidgetResizable(true);
+                            scroll->setWidget(new ScopesPage(scroll));
+                            page = scroll;
+                        } else if (i == 0) {
                             auto* scroll = new QScrollArea(pages);
                             scroll->setObjectName("colorKeyframesScroll");
                             scroll->setFrameShape(QFrame::NoFrame);
