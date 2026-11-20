@@ -1,8 +1,8 @@
 # Color Sizing Dock
 
-Status: **Stage 1 (visual only) is implemented for pages 1 (Curves - Custom) and 2 (Color
-Slice). Pages 3 to 11 are not yet specified; their buttons select empty placeholder
-pages.** Control
+Status: **Stage 1 (visual only) is implemented for pages 1 (Curves - Custom), 2 (Color
+Slice) and 3 (Color Warp - Chroma Warp). Pages 4 to 11 are not yet specified; their
+buttons select empty placeholder pages.** Control
 names, ranges and defaults are taken from the maintainer's layout reference
 screenshots and are proposals until implemented and recorded as decisions.
 Behavior marked *Pending* has not been decided.
@@ -32,7 +32,8 @@ Delivery stages:
 | --- | --- | --- |
 | 1 | Curves - Custom | Visual stage implemented |
 | 2 | Color Slice | Visual stage implemented |
-| 3 to 11 | *To be specified by the maintainer* | Empty placeholder page |
+| 3 | Color Warp - Chroma Warp | Visual stage implemented |
+| 4 to 11 | *To be specified by the maintainer* | Empty placeholder page |
 
 ## 1. Curves - Custom
 
@@ -110,12 +111,57 @@ support exists today.
 and hue changes with soft falloff, and a CSP schema bump. Evaluation must be
 measured on CPU, OpenGL and Vulkan.
 
+## 3. Color Warp - Chroma Warp
+
+**Purpose.** Move colors on a chroma plane by placing pins and dragging them,
+with per-pin range, exposure and tonal-range controls. The page is titled "Color
+Warp - Chroma Warp"; the reference layout's own feature name is not used in the
+interface.
+
+**Applies to.** A new color-warp effect on the selected Color node. No engine
+support exists today.
+
+**Implemented (stage 1, visual only).** Button 3 shows the page
+(`colorChromaWarpPage`, controls named `colorChromaWarp*`, inside a scroll area).
+
+- **Header.** Title; two exclusive mode buttons (Chroma Warp, selected, and
+  Hue-Saturation Warp, which only changes the highlight); a grid toggle (on by
+  default) that shows or hides the plane's grid; an expand button and a "..."
+  button that do nothing yet; and a page reset.
+- **Plane** (`colorChromaWarpGraph`). A square painted approximation of a color
+  gamut (an inverse-distance blend of three primaries with a pale center), not a
+  color-managed chromaticity diagram, with an optional grid. It starts with one
+  pin near the center, no pin selected. The graph exposes `pinCount` and
+  `selectedPin` as properties.
+- **Tools.** Four exclusive tool buttons and a Delete button. Tool 1 (Add pin,
+  default) adds a pin when the plane is clicked inside the gamut and selects it;
+  tools 1 and 4 (Select) select and drag existing pins, and Select never adds.
+  Tools 2 (add pin pair) and 3 (pick) do nothing yet. Delete removes the selected
+  pin and is enabled only while a pin is selected.
+- **Pin.** A reset and five parameters, each with a field and a thin slider that
+  mirror each other: Chroma Range 0.040 (0 to 0.2), Exposure 0.000 (-1 to 1),
+  Tonal Range Low 1.000, Tonal Range High 1.000 and Tonal Range Pivot 0.500 (0 to
+  1). Ranges are proposed. They are disabled until a pin is selected. They hold one
+  shared set of values, not values per pin. The two link buttons below stay
+  disabled.
+- **Page reset** restores one unselected pin, the Add pin tool, Chroma Warp mode,
+  the grid and all parameter defaults.
+
+Nothing warps colors, edits a grade or touches project data.
+
+**Behavior (stage 2).** *Pending.* Intended: a pin maps a source chroma position
+to its dragged position; the range, exposure and tonal controls shape its
+falloff; pins live per node and persist (CSP schema bump), with per-pin values.
+The plane must be drawn from a defined color space and the warp evaluated on
+CPU, OpenGL and Vulkan with measured cost.
+
 ## Verification
 
 - Stage 1: the Color workspace test checks that button 1 opens the page, the
   documented defaults, strength slider/field linking, resets, and graph point
   add/remove; button 2 opens Color Slice, whose seven columns, defaults, bar/field
-  linking and resets are checked.
+  linking and resets are checked; button 3 opens Chroma Warp, where pin
+  adding, selecting, deleting, tool behavior, pin controls and resets are checked.
 - Stage 2: evaluator parity with the existing Curves node, persistence and
   older-version compatibility, and a manual visual check recorded in the
   [regression guide](../validation/REGRESSION_TESTING.md).

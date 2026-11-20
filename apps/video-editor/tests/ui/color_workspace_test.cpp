@@ -1133,6 +1133,78 @@ int main(int argc, char** argv) {
             require(qFuzzyIsNull(slice_red_center->value()) &&
                         qFuzzyCompare(slice_page->findChild<QDoubleSpinBox*>("colorSliceSat")->value(), 1.0),
                     "The Color Slice page reset must restore every control.");
+            // Sizing dock, page 3: Color Warp - Chroma Warp (visual stage).
+            workspace.findChild<QPushButton*>("colorToolButton9")->click();
+            auto* warp_page = workspace.findChild<QWidget*>("colorChromaWarpPage");
+            require(warp_page && sizing_pages->currentWidget()->isAncestorOf(warp_page) &&
+                        !sizing_pages->currentWidget()->isAncestorOf(slice_page),
+                    "Sizing dock button 3 must open the Chroma Warp page.");
+            for (const char* name : {"colorChromaWarpChromaModeButton", "colorChromaWarpHueSatModeButton",
+                     "colorChromaWarpGridButton", "colorChromaWarpExpandButton", "colorChromaWarpResetButton",
+                     "colorChromaWarpTool1", "colorChromaWarpTool2", "colorChromaWarpTool3",
+                     "colorChromaWarpTool4", "colorChromaWarpDeleteButton", "colorChromaWarpPinResetButton",
+                     "colorChromaWarpLinkButton", "colorChromaWarpUnlinkButton"})
+                require(warp_page->findChild<QPushButton*>(name),
+                        "Chroma Warp must expose its mode, tool, pin and link buttons.");
+            auto* warp_graph = warp_page->findChild<QWidget*>("colorChromaWarpGraph");
+            auto* warp_range = warp_page->findChild<QDoubleSpinBox*>("colorChromaWarpChromaRange");
+            auto* warp_range_slider = warp_page->findChild<QSlider*>("colorChromaWarpChromaRangeSlider");
+            auto* warp_delete = warp_page->findChild<QPushButton*>("colorChromaWarpDeleteButton");
+            require(warp_graph && warp_range && warp_range_slider &&
+                        warp_graph->property("pinCount").toInt() == 1 &&
+                        warp_graph->property("selectedPin").toInt() == -1,
+                    "Chroma Warp must start with one unselected pin.");
+            require(qFuzzyCompare(warp_range->value(), 0.04) &&
+                        qFuzzyCompare(warp_page->findChild<QDoubleSpinBox*>("colorChromaWarpTonalLow")->value(), 1.0) &&
+                        qFuzzyCompare(warp_page->findChild<QDoubleSpinBox*>("colorChromaWarpTonalHigh")->value(), 1.0) &&
+                        qFuzzyCompare(warp_page->findChild<QDoubleSpinBox*>("colorChromaWarpTonalPivot")->value(), 0.5) &&
+                        qFuzzyIsNull(warp_page->findChild<QDoubleSpinBox*>("colorChromaWarpExposure")->value()),
+                    "Chroma Warp pin parameters must start at their documented defaults.");
+            require(!warp_range->isEnabled() && !warp_range_slider->isEnabled() && !warp_delete->isEnabled(),
+                    "Chroma Warp pin controls must be disabled until a pin is selected.");
+            warp_graph->resize(400, 400);
+            // Plane geometry mirrors WarpGraph::planeRect (square, 6 px margin).
+            const double warp_side = std::min(warp_graph->width(), warp_graph->height()) - 12.0;
+            const double warp_left = (warp_graph->width() - warp_side) / 2.0;
+            const double warp_top = (warp_graph->height() - warp_side) / 2.0;
+            const auto warp_point = [&](double x, double y) {
+                return QPointF(warp_left + x * warp_side, warp_top + y * warp_side);
+            };
+            const auto warp_click = [&](const QPointF& at) {
+                QMouseEvent press(QEvent::MouseButtonPress, at, at, Qt::LeftButton, Qt::LeftButton,
+                    Qt::NoModifier);
+                QApplication::sendEvent(warp_graph, &press);
+                QMouseEvent release(QEvent::MouseButtonRelease, at, at, Qt::LeftButton, Qt::NoButton,
+                    Qt::NoModifier);
+                QApplication::sendEvent(warp_graph, &release);
+            };
+            warp_click(warp_point(0.5, 0.5));
+            require(warp_graph->property("selectedPin").toInt() == 0 && warp_range->isEnabled() &&
+                        warp_range_slider->isEnabled() && warp_delete->isEnabled(),
+                    "Clicking a pin must select it and enable the pin controls.");
+            warp_range->setValue(0.1);
+            require(warp_range_slider->value() == 100, "Typing a pin value must move its slider.");
+            warp_page->findChild<QPushButton*>("colorChromaWarpPinResetButton")->click();
+            require(qFuzzyCompare(warp_range->value(), 0.04), "The pin reset must restore the defaults.");
+            warp_click(warp_point(0.35, 0.5));
+            require(warp_graph->property("pinCount").toInt() == 2 &&
+                        warp_graph->property("selectedPin").toInt() == 1,
+                    "With the Add pin tool, clicking empty plane must add and select a pin.");
+            warp_delete->click();
+            require(warp_graph->property("pinCount").toInt() == 1 &&
+                        warp_graph->property("selectedPin").toInt() == -1 && !warp_range->isEnabled(),
+                    "Delete must remove the selected pin and disable the pin controls.");
+            warp_page->findChild<QPushButton*>("colorChromaWarpTool4")->click();
+            warp_click(warp_point(0.35, 0.5));
+            require(warp_graph->property("pinCount").toInt() == 1,
+                    "With the Select tool, clicking empty plane must not add a pin.");
+            warp_page->findChild<QPushButton*>("colorChromaWarpTool1")->click();
+            warp_click(warp_point(0.35, 0.5));
+            warp_page->findChild<QPushButton*>("colorChromaWarpResetButton")->click();
+            require(warp_graph->property("pinCount").toInt() == 1 &&
+                        warp_graph->property("selectedPin").toInt() == -1 &&
+                        warp_page->findChild<QPushButton*>("colorChromaWarpTool1")->isChecked(),
+                    "The Chroma Warp page reset must restore one unselected pin and the Add pin tool.");
             workspace.findChild<QPushButton*>("colorToolButton1")->click();
         }
         auto* capture_button = workspace.findChild<QPushButton*>("colorCaptureStillButton");

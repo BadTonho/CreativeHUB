@@ -233,6 +233,8 @@ set(MAIN_EDITOR_CORE_SOURCES
     src/workspaces/color/ui/curves_page.h
     src/workspaces/color/ui/color_slice_page.cpp
     src/workspaces/color/ui/color_slice_page.h
+    src/workspaces/color/ui/chroma_warp_page.cpp
+    src/workspaces/color/ui/chroma_warp_page.h
     src/workspaces/color/ui/color_workspace.cpp
     src/workspaces/color/ui/color_workspace.h
     src/workspaces/audio/ui/audio_workspace.h
