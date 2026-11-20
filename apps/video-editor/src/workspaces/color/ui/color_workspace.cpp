@@ -11,6 +11,7 @@
 #include "workspaces/color/ui/primaries_bars_page.h"
 #include "workspaces/color/ui/qualifier_page.h"
 #include "workspaces/color/ui/rgb_mixer_page.h"
+#include "workspaces/color/ui/tracker_page.h"
 #include "workspaces/color/ui/window_page.h"
 #include "ui/preview/preview_widget.h"
 #include "workspaces/color/evaluation/color_graph_evaluator.h"
@@ -1430,9 +1431,17 @@ ColorWorkspace::ColorWorkspace(QWidget* parent) : QWidget(parent) {
                 page_buttons->addButton(button, i);
                 QWidget* page = nullptr;
                 if (!motion_dock) {
-                    // Sizing dock: page 1 is Curves - Custom, page 2 is
-                    // Color Slice and page 3 is Chroma Warp and page 4 is Qualifier and page 5 is Window; the others are still empty placeholders.
-                    if (i == 4) {
+                    // Sizing dock: pages 1 to 6 are Curves - Custom, Color
+                    // Slice, Chroma Warp, Qualifier, Window and Tracker; the
+                    // others are still empty placeholders.
+                    if (i == 5) {
+                        auto* scroll = new QScrollArea(pages);
+                        scroll->setObjectName("colorTrackerScroll");
+                        scroll->setFrameShape(QFrame::NoFrame);
+                        scroll->setWidgetResizable(true);
+                        scroll->setWidget(new TrackerPage(scroll));
+                        page = scroll;
+                    } else if (i == 4) {
                         auto* scroll = new QScrollArea(pages);
                         scroll->setObjectName("colorWindowScroll");
                         scroll->setFrameShape(QFrame::NoFrame);

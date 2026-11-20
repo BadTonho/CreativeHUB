@@ -1,8 +1,8 @@
 # Color Sizing Dock
 
 Status: **Stage 1 (visual only) is implemented for pages 1 (Curves - Custom), 2 (Color
-Slice), 3 (Color Warp - Chroma Warp), 4 (Qualifier - HSL) and 5 (Window). Pages 6 to 11 are
-not yet specified; their buttons select empty placeholder pages.** Control
+Slice), 3 (Color Warp - Chroma Warp), 4 (Qualifier - HSL), 5 (Window) and 6 (Tracker - Window). Pages 7
+to 11 are not yet specified; their buttons select empty placeholder pages.** Control
 names, ranges and defaults are taken from the maintainer's layout reference
 screenshots and are proposals until implemented and recorded as decisions.
 Behavior marked *Pending* has not been decided.
@@ -35,7 +35,8 @@ Delivery stages:
 | 3 | Color Warp - Chroma Warp | Visual stage implemented |
 | 4 | Qualifier - HSL | Visual stage implemented |
 | 5 | Window | Visual stage implemented |
-| 6 to 11 | *To be specified by the maintainer* | Empty placeholder page |
+| 6 | Tracker - Window | Visual stage implemented |
+| 7 to 11 | *To be specified by the maintainer* | Empty placeholder page |
 
 ## 1. Curves - Custom
 
@@ -242,6 +243,50 @@ model (shapes, ordered Add/Subtract/Intersect coverage, animation and tracking).
 Polygon, curve and gradient windows, per-window values, persistence (CSP schema
 bump) and CPU, OpenGL and Vulkan evaluation are *Pending*.
 
+## 6. Tracker - Window
+
+**Purpose.** Track motion for a window or stabilization: transport controls, the
+motion channels to track, a timeline of the tracking data and the tracker method.
+The Color workspace already tracks Power Windows (asynchronous 2D similarity
+tracking, CSP v40); this page is separate from it and binding the two is stage 2.
+
+**Applies to.** The selected window of the selected Color node (stage 2).
+
+**Implemented (stage 1, visual only).** Button 6 shows the page
+(`colorTrackerPage`, controls named `colorTracker*`, inside a scroll area).
+
+- **Header.** Title; three exclusive tracker-kind buttons (Window, selected, 3D and
+  Effects, which only change the highlight); a page reset and a "..." button that
+  does nothing yet.
+- **Transport.** Six buttons: go to start, track backward, stop, loop (a toggle) and
+  track forward, go to end. Only the loop toggle holds state; nothing plays or
+  tracks.
+- **Channels.** Checkboxes Pan, Tilt, Zoom, Rotate and 3D, all on by default, each
+  labeled in its own color.
+- **Scope.** Clip (selected) and Frame, exclusive, appearance only.
+- **Timeline** (`colorTrackerGraph`). A ruler with six fixed notional timecodes
+  (00:00:00:00, 00:00:06:38, 00:00:13:16, 00:00:19:55, 00:00:26:33, 00:00:33:11), an
+  empty plot, a keyframe diamond near the top right and four channel readouts, all
+  0.00 (Pan, Tilt, Zoom, Rotate). A red playhead with a flag can be placed by
+  clicking or dragging along the timeline; it starts at the beginning and is exposed
+  as the `playhead` property (0 to 1). A vertical slider (graph zoom, handle at the
+  bottom) and a horizontal slider (timeline position, handle at the left) beside and
+  below the graph hold local values and do not move the graph.
+- **Footer.** Interactive Mode (off by default); two tool buttons (region, points)
+  that are disabled until Interactive Mode is on and then do nothing yet; and a
+  method dropdown, Cloud Tracker (default) or Point Tracker, with no effect.
+- **Page reset** restores the channels to on, Clip, the Window kind, Loop off,
+  Interactive Mode off, the first method, both sliders and the playhead.
+
+Nothing is tracked, played or persisted. The meaning of the two footer tools and the
+exact behavior of the Frame scope are *Pending*.
+
+**Behavior (stage 2).** *Pending.* Intended: track the selected window through the
+clip forward or backward with the chosen channels, write the result as animated
+window geometry, show the tracking curves in the timeline, and reuse the existing
+Power Window tracker where possible. The 3D and Effects kinds, per-channel curves,
+persistence (CSP schema bump), cancellation and error logging are *Pending*.
+
 ## Verification
 
 - Stage 1: the Color workspace test checks that button 1 opens the page, the
@@ -252,7 +297,8 @@ bump) and CPU, OpenGL and Vulkan evaluation are *Pending*.
   button 4 opens Qualifier - HSL, where defaults, the Hue/Saturation range bars and
   handle dragging, Matte Finesse sliders and resets are checked; button 5 opens
   Window, where the sample rows, selection, add, Delete, field enabling and reset are
-  checked.
+  checked; button 6 opens Tracker - Window, where the channel toggles, Interactive Mode
+  enabling of the tools, Clip/Frame, the clickable playhead and the reset are checked.
 - Stage 2: evaluator parity with the existing Curves node, persistence and
   older-version compatibility, and a manual visual check recorded in the
   [regression guide](../validation/REGRESSION_TESTING.md).

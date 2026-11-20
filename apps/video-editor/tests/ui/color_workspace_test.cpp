@@ -1342,6 +1342,64 @@ int main(int argc, char** argv) {
                         window_list->property("selectedRow").toInt() == -1 &&
                         qFuzzyCompare(window_page->findChild<QDoubleSpinBox*>("colorWindowOpacity")->value(), 100.0),
                     "The Window page reset must restore the five rows, no selection and the defaults.");
+            // Sizing dock, page 6: Tracker - Window (visual stage).
+            workspace.findChild<QPushButton*>("colorToolButton12")->click();
+            auto* tracker_page = workspace.findChild<QWidget*>("colorTrackerPage");
+            require(tracker_page && sizing_pages->currentWidget()->isAncestorOf(tracker_page) &&
+                        !sizing_pages->currentWidget()->isAncestorOf(window_page),
+                    "Sizing dock button 6 must open the Tracker - Window page.");
+            for (const char* name : {"colorTrackerWindowModeButton", "colorTrackerThreeDModeButton",
+                     "colorTrackerFxModeButton", "colorTrackerResetButton", "colorTrackerToStartButton",
+                     "colorTrackerTrackBackwardButton", "colorTrackerStopButton", "colorTrackerLoopButton",
+                     "colorTrackerTrackForwardButton", "colorTrackerToEndButton", "colorTrackerClipButton",
+                     "colorTrackerFrameButton", "colorTrackerRegionButton", "colorTrackerPointsButton"})
+                require(tracker_page->findChild<QPushButton*>(name),
+                        "Tracker must expose its mode, transport, scope and tool buttons.");
+            for (const char* name : {"colorTrackerPan", "colorTrackerTilt", "colorTrackerZoom",
+                     "colorTrackerRotate", "colorTrackerThreeD"})
+                require(tracker_page->findChild<QCheckBox*>(name) &&
+                            tracker_page->findChild<QCheckBox*>(name)->isChecked(),
+                        "Tracker channel toggles must start on.");
+            auto* tracker_interactive = tracker_page->findChild<QCheckBox*>("colorTrackerInteractiveMode");
+            auto* tracker_region = tracker_page->findChild<QPushButton*>("colorTrackerRegionButton");
+            auto* tracker_method = tracker_page->findChild<QComboBox*>("colorTrackerMethod");
+            require(tracker_interactive && !tracker_interactive->isChecked() && !tracker_region->isEnabled() &&
+                        !tracker_page->findChild<QPushButton*>("colorTrackerPointsButton")->isEnabled() &&
+                        tracker_page->findChild<QPushButton*>("colorTrackerClipButton")->isChecked() &&
+                        tracker_page->findChild<QPushButton*>("colorTrackerWindowModeButton")->isChecked() &&
+                        tracker_method && tracker_method->currentIndex() == 0,
+                    "Tracker must start with Interactive Mode off, its tools disabled and Clip selected.");
+            tracker_interactive->setChecked(true);
+            require(tracker_region->isEnabled() &&
+                        tracker_page->findChild<QPushButton*>("colorTrackerPointsButton")->isEnabled(),
+                    "Interactive Mode must enable the tracker tools.");
+            tracker_page->findChild<QPushButton*>("colorTrackerFrameButton")->click();
+            require(!tracker_page->findChild<QPushButton*>("colorTrackerClipButton")->isChecked(),
+                    "Choosing Frame must deselect Clip.");
+            tracker_page->findChild<QCheckBox*>("colorTrackerZoom")->setChecked(false);
+            // The playhead follows clicks on the timeline: 8 px margin on both sides.
+            auto* tracker_graph = tracker_page->findChild<QWidget*>("colorTrackerGraph");
+            require(tracker_graph && qFuzzyIsNull(tracker_graph->property("playhead").toDouble()),
+                    "The Tracker playhead must start at the beginning.");
+            tracker_graph->resize(400, 200);
+            const QPointF playhead_at(8.0 + (400.0 - 16.0) * 0.5, 60.0);
+            QMouseEvent playhead_press(QEvent::MouseButtonPress, playhead_at, playhead_at, Qt::LeftButton,
+                Qt::LeftButton, Qt::NoModifier);
+            QApplication::sendEvent(tracker_graph, &playhead_press);
+            require(std::abs(tracker_graph->property("playhead").toDouble() - 0.5) < 0.01,
+                    "Clicking the Tracker timeline must move the playhead.");
+            tracker_page->findChild<QSlider*>("colorTrackerVerticalSlider")->setValue(40);
+            tracker_page->findChild<QPushButton*>("colorTrackerLoopButton")->setChecked(true);
+            tracker_method->setCurrentIndex(1);
+            tracker_page->findChild<QPushButton*>("colorTrackerResetButton")->click();
+            require(qFuzzyIsNull(tracker_graph->property("playhead").toDouble()) &&
+                        tracker_page->findChild<QCheckBox*>("colorTrackerZoom")->isChecked() &&
+                        !tracker_interactive->isChecked() && !tracker_region->isEnabled() &&
+                        tracker_page->findChild<QPushButton*>("colorTrackerClipButton")->isChecked() &&
+                        !tracker_page->findChild<QPushButton*>("colorTrackerLoopButton")->isChecked() &&
+                        tracker_method->currentIndex() == 0 &&
+                        tracker_page->findChild<QSlider*>("colorTrackerVerticalSlider")->value() == 0,
+                    "The Tracker page reset must restore every control and the playhead.");
             workspace.findChild<QPushButton*>("colorToolButton1")->click();
         }
         auto* capture_button = workspace.findChild<QPushButton*>("colorCaptureStillButton");
