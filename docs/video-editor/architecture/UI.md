@@ -33,6 +33,19 @@ discarded, and the scope shows an empty state when there is no frame. Leaving
 Color restores the previous dock arrangement. See the
 [Color roadmap](../COLOR_WORKSPACE_ROADMAP.md).
 
+A bottom dock area sits above the lower controls and scopes area of the Color
+page: an embedded `QMainWindow` (`colorBottomDockHost`) with three child docks.
+Each dock owns its row of unlabeled placeholder buttons
+(`colorToolButton1`–`colorToolButton20`), so the buttons travel with the dock:
+Motion Effects (6 buttons, left), Sizing - Input Sizing (11, centered) and
+Keyframes (3, right). The docks are movable, closable and floatable;
+right-clicking a dock title bar reopens closed ones. Buttons and docks have no
+behavior or content yet; they will be assigned individually. Dock arrangement
+is not persisted yet. The primary-grade controls and the scope panel are
+currently hidden; they are planned to move into these docks. The six planned
+Motion Effects dock pages are specified in
+[Color Panels Dock](../features/COLOR_PANELS_DOCK.md).
+
 The upper Color area is a horizontal splitter with the shared Viewer, node
 canvas, and a right-side Effects catalog panel. The top Effects action toggles
 that panel; it occupies only the upper Color area and can be resized with the

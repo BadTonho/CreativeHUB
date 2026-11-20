@@ -18,7 +18,9 @@
 #include <QGridLayout>
 #include <QHBoxLayout>
 #include <QIcon>
+#include <QDockWidget>
 #include <QLabel>
+#include <QMainWindow>
 #include <QListWidget>
 #include <QMetaObject>
 #include <QMenu>
@@ -1353,6 +1355,65 @@ ColorWorkspace::ColorWorkspace(QWidget* parent) : QWidget(parent) {
     connect(comparison_wipe_slider_, &QSlider::valueChanged, this,
         [this](int) { applyPreviewComparison(); });
 
+    // Bottom dock area: an embedded QMainWindow hosting three child docks.
+    // Each dock carries its own row of unlabeled placeholder buttons (6, 11
+    // and 3; no behavior yet) so the buttons travel with their dock.
+    auto* dock_host = new QMainWindow(this);
+    // QMainWindow always adds Qt::Window; embed it as a plain child widget.
+    dock_host->setWindowFlags(Qt::Widget);
+    dock_host->setObjectName("colorBottomDockHost");
+    dock_host->setDockNestingEnabled(true);
+    dock_host->setMinimumHeight(180);
+    // The empty central widget collapses so the child docks fill the host.
+    auto* dock_central = new QWidget(dock_host);
+    dock_central->setMaximumSize(0, 0);
+    dock_host->setCentralWidget(dock_central);
+    QDockWidget* previous_dock = nullptr;
+    int tool_index = 0;
+    enum class ButtonAlign { Left, Center, Right };
+    const struct {
+        const char* object_name;
+        const char* title;
+        int button_count;
+        ButtonAlign align;
+    } child_docks[] = {
+        {"colorMotionEffectsDock", "Motion Effects", 6, ButtonAlign::Left},
+        {"colorSizingDock", "Sizing - Input Sizing", 11, ButtonAlign::Center},
+        {"colorKeyframesDock", "Keyframes", 3, ButtonAlign::Right},
+    };
+    for (const auto& entry : child_docks) {
+        auto* dock = new QDockWidget(
+            QCoreApplication::translate("ColorWorkspace", entry.title), dock_host);
+        dock->setObjectName(QString::fromLatin1(entry.object_name));
+        dock->setFeatures(QDockWidget::DockWidgetClosable |
+                          QDockWidget::DockWidgetMovable |
+                          QDockWidget::DockWidgetFloatable);
+        auto* content = new QWidget(dock);
+        auto* content_layout = new QVBoxLayout(content);
+        content_layout->setContentsMargins(4, 4, 4, 4);
+        content_layout->setSpacing(4);
+        auto* button_row = new QHBoxLayout;
+        button_row->setSpacing(4);
+        if (entry.align != ButtonAlign::Left) button_row->addStretch();
+        for (int i = 0; i < entry.button_count; ++i) {
+            auto* button = new QPushButton(content);
+            button->setObjectName(QStringLiteral("colorToolButton%1").arg(++tool_index));
+            button->setFixedSize(40, 32);
+            button->setFocusPolicy(Qt::NoFocus);
+            button_row->addWidget(button);
+        }
+        if (entry.align != ButtonAlign::Right) button_row->addStretch();
+        content_layout->addLayout(button_row);
+        content_layout->addStretch(1);
+        dock->setWidget(content);
+        if (previous_dock == nullptr) {
+            dock_host->addDockWidget(Qt::TopDockWidgetArea, dock);
+        } else {
+            dock_host->splitDockWidget(previous_dock, dock, Qt::Horizontal);
+        }
+        previous_dock = dock;
+    }
+    root->addWidget(dock_host, 2);
     auto* lower = new QHBoxLayout;
     controls_ = new QWidget(this);
     controls_->setObjectName("colorPrimaryControls");
@@ -1397,7 +1458,11 @@ ColorWorkspace::ColorWorkspace(QWidget* parent) : QWidget(parent) {
     waveform_->setScaledContents(true);
     scope_layout->addWidget(waveform_, 1);
     lower->addWidget(scope_panel, 1);
-    root->addLayout(lower, 2);
+    // Hidden for now: these controls and the scope will move into the child
+    // docks above. The widgets stay alive so their wiring keeps working.
+    controls_scroll->hide();
+    scope_panel->hide();
+    root->addLayout(lower, 0);
 
     connect(clips_, &QListWidget::currentRowChanged, this, [this](int row) {
         if (row < 0 || !clip_selected_handler_) return;

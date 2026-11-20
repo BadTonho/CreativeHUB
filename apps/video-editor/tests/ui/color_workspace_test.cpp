@@ -18,7 +18,9 @@
 #include <QInputDialog>
 #include <QKeyEvent>
 #include <QLabel>
+#include <QDockWidget>
 #include <QListWidget>
+#include <QMainWindow>
 #include <QMenu>
 #include <QMimeData>
 #include <QMessageBox>
@@ -118,6 +120,16 @@ int main(int argc, char** argv) {
             window_workspace.setActive(true);
             window_workspace.show();
             application.processEvents();
+            {
+                auto* host = window_workspace.findChild<QMainWindow*>("colorBottomDockHost");
+                require(host && !host->isWindow() && host->isVisible(),
+                        "Color bottom dock host must be embedded and visible, not a separate window.");
+                for (const char* dock_name : {"colorMotionEffectsDock", "colorSizingDock", "colorKeyframesDock"}) {
+                    auto* dock = window_workspace.findChild<QDockWidget*>(dock_name);
+                    require(dock && dock->isVisible() && dock->width() > 40 && dock->height() > 20,
+                            "Color child docks must be visible with a usable size.");
+                }
+            }
 
             auto* window_canvas = static_cast<ui::ColorNodeCanvas*>(
                 window_workspace.findChild<QWidget*>("colorNodeCanvas"));
@@ -714,6 +726,30 @@ int main(int argc, char** argv) {
             renamed_value = name;
         });
         workspace.setRemoveStillHandler([&](const QString& id) { removed_id = id; });
+        for (int i = 1; i <= 20; ++i)
+            require(workspace.findChild<QPushButton*>(QStringLiteral("colorToolButton%1").arg(i)),
+                    "Color tool bar must expose its 20 placeholder buttons.");
+        require(!workspace.findChild<QPushButton*>("colorToolButton21"),
+                "Color tool bar must contain exactly 20 placeholder buttons.");
+        for (const char* dock_name : {"colorMotionEffectsDock", "colorSizingDock", "colorKeyframesDock"}) {
+            auto* dock = workspace.findChild<QDockWidget*>(dock_name);
+            require(dock && dock->features().testFlag(QDockWidget::DockWidgetClosable) &&
+                        dock->features().testFlag(QDockWidget::DockWidgetMovable) &&
+                        dock->features().testFlag(QDockWidget::DockWidgetFloatable),
+                    "Color bottom dock group must expose its three movable, closable child docks.");
+        }
+        const std::pair<const char*, std::pair<int, int>> dock_buttons[] = {
+            {"colorMotionEffectsDock", {1, 6}},
+            {"colorSizingDock", {7, 17}},
+            {"colorKeyframesDock", {18, 20}},
+        };
+        for (const auto& [dock_name, range] : dock_buttons) {
+            auto* dock = workspace.findChild<QDockWidget*>(dock_name);
+            for (int i = range.first; i <= range.second; ++i)
+                require(dock && dock->findChild<QPushButton*>(
+                                    QStringLiteral("colorToolButton%1").arg(i)),
+                        "Each Color child dock must own its row of placeholder buttons.");
+        }
         auto* capture_button = workspace.findChild<QPushButton*>("colorCaptureStillButton");
         auto* rename_button = workspace.findChild<QPushButton*>("colorRenameStillButton");
         auto* remove_button = workspace.findChild<QPushButton*>("colorRemoveStillButton");
