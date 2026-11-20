@@ -75,14 +75,37 @@ also requires Autoconf, Autoconf Archive, Automake, and Libtool on Linux and
 macOS. GitHub Actions installs these host build tools with `apt` on Linux and,
 when the macOS job is enabled, with Homebrew on macOS; Linux also installs
 NASM for FFmpeg, `libdrm-dev` for the vcpkg `libva` build, and `libltdl-dev`
-for the vcpkg `libxcrypt` build. If the vcpkg feature selection or port
-dependencies change, revisit these prerequisites against a clean build on
-both platforms.
+for the vcpkg `libxcrypt` build. Local Ubuntu contributors also need `bison`
+and `flex` for the vcpkg `libpq` port (enabled by the Qt SQL driver) and the
+`libxcb*-dev` family (the CI workflow installs `'^libxcb.*-dev'`) together
+with `libx11-xcb-dev` for the vcpkg `qtbase` XCB feature; without them the
+configure fails in `libpq` or `qtbase` respectively. If the vcpkg feature
+selection or port dependencies change, revisit these prerequisites against a
+clean build on both platforms.
 
 The CI matrix currently runs Windows and Ubuntu 24.04 only. Ubuntu 26.04
 (the version some contributors use) is not covered: the vcpkg `libsystemd`
-port fails to build there with `-Werror=override-init`, so Linux validation on
-26.04 is **pending**.
+port v257.8 fails to build there with `-Werror=override-init`, so Linux
+validation on 26.04 is **pending**. Reproduction on a real Ubuntu 26.04.1
+host refined the original diagnosis: the same failure occurs with GCC 13.4,
+so it is not specific to the GCC 15 toolchain. Current system headers define
+`EFSBADCRC` as an alias of `EBADMSG` and `EFSCORRUPTED` as an alias of
+`EUCLEAN`; the generated `src/basic/errno-to-name.h` initializes both indices,
+which triggers the duplicate-designated-initializer diagnostic. A local vcpkg
+overlay that extends `generate-errno-list.sh` to filter those two aliases
+(like the existing parisc aliases) let the `libsystemd` port build, but the
+full four-application build from that overlay is **not validated yet**.
+Treat this as a provisional workaround, not a supported build configuration.
+The upstream fix is known: systemd PR
+[#40806](https://github.com/systemd/systemd/pull/40806) added those two aliases
+to the `generate-errno-list.sh` filter and landed in systemd 260.0. In vcpkg,
+PR [#51570](https://github.com/microsoft/vcpkg/pull/51570) removed the
+`-Werror=override-init` flag for `libsystemd` 257.8#2, and the current port is
+260.2#1; vcpkg issue [#52642](https://github.com/microsoft/vcpkg/issues/52642)
+tracks the older-baseline reports and recommends updating the baseline. Moving
+this repository's pinned baseline to a fixed `libsystemd` version is therefore
+the likely durable resolution, but that decision belongs to the maintainers
+and is not made here.
 
 The macOS job is paused because no macOS environment is available to reproduce
 its failures (the vcpkg `qtbase` build fails on `__yield`). macOS build and test validation
