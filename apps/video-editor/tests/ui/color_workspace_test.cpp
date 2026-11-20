@@ -1400,6 +1400,80 @@ int main(int argc, char** argv) {
                         tracker_method->currentIndex() == 0 &&
                         tracker_page->findChild<QSlider*>("colorTrackerVerticalSlider")->value() == 0,
                     "The Tracker page reset must restore every control and the playhead.");
+            // Sizing dock, page 7: Smart Mask (visual stage).
+            workspace.findChild<QPushButton*>("colorToolButton13")->click();
+            auto* mask_page = workspace.findChild<QWidget*>("colorSmartMaskPage");
+            require(mask_page && sizing_pages->currentWidget()->isAncestorOf(mask_page) &&
+                        !sizing_pages->currentWidget()->isAncestorOf(tracker_page),
+                    "Sizing dock button 7 must open the Smart Mask page.");
+            for (const char* name : {"colorSmartMaskSetInButton", "colorSmartMaskSetOutButton",
+                     "colorSmartMaskToStartButton", "colorSmartMaskTrackBackwardButton",
+                     "colorSmartMaskStopButton", "colorSmartMaskLoopButton",
+                     "colorSmartMaskTrackForwardButton", "colorSmartMaskToEndButton",
+                     "colorSmartMaskViewButton", "colorSmartMaskOverlayButton",
+                     "colorSmartMaskSettingsButton", "colorSmartMaskResetButton",
+                     "colorSmartMaskQualityResetButton", "colorSmartMaskQualityFaster",
+                     "colorSmartMaskQualityBetter"})
+                require(mask_page->findChild<QPushButton*>(name),
+                        "Smart Mask must expose its toolbar, quality and reset buttons.");
+            require(mask_page->findChild<QPushButton*>("colorSmartMaskTool1")->isChecked() &&
+                        mask_page->findChild<QPushButton*>("colorSmartMaskTool1")->isEnabled() &&
+                        mask_page->findChild<QPushButton*>("colorSmartMaskTool2")->isEnabled() &&
+                        !mask_page->findChild<QPushButton*>("colorSmartMaskTool3")->isEnabled() &&
+                        !mask_page->findChild<QPushButton*>("colorSmartMaskTool4")->isEnabled() &&
+                        !mask_page->findChild<QPushButton*>("colorSmartMaskTool5")->isEnabled(),
+                    "Smart Mask must start with the point tools on and the stroke tools disabled.");
+            const std::pair<const char*, double> mask_defaults[] = {
+                {"colorSmartMaskSmartRefine", 30.0}, {"colorSmartMaskRadius", 0.0},
+                {"colorSmartMaskIterations", 1.0}, {"colorSmartMaskSmoothing", 0.0},
+                {"colorSmartMaskDenoise", 0.0}, {"colorSmartMaskBlurRadius", 0.0},
+                {"colorSmartMaskInOutRatio", 0.0}, {"colorSmartMaskCleanBlack", 0.0},
+                {"colorSmartMaskBlackClip", 0.0}, {"colorSmartMaskCleanWhite", 0.0},
+                {"colorSmartMaskWhiteClip", 100.0}, {"colorSmartMaskPostFilter", 0.0},
+            };
+            for (const auto& [name, value] : mask_defaults) {
+                auto* box = mask_page->findChild<QDoubleSpinBox*>(name);
+                require(box && qFuzzyCompare(box->value() + 1.0, value + 1.0),
+                        "Smart Mask refinement fields must start at their documented defaults.");
+            }
+            require(mask_page->findChild<QComboBox*>("colorSmartMaskMode")->currentText() == "Shrink" &&
+                        mask_page->findChild<QComboBox*>("colorSmartMaskShape")->currentText() == "Circle" &&
+                        mask_page->findChild<QPushButton*>("colorSmartMaskQualityFaster")->isChecked(),
+                    "Smart Mask must start with Shrink, Circle and the Faster quality.");
+            auto* mask_refine = mask_page->findChild<QDoubleSpinBox*>("colorSmartMaskSmartRefine");
+            auto* mask_refine_slider = mask_page->findChild<QSlider*>("colorSmartMaskSmartRefineSlider");
+            require(!mask_refine->isEnabled() && !mask_refine_slider->isEnabled(),
+                    "Smart Refine must be disabled while the quality is Faster.");
+            mask_page->findChild<QPushButton*>("colorSmartMaskQualityBetter")->click();
+            require(mask_refine->isEnabled() && mask_refine_slider->isEnabled(),
+                    "Smart Refine must enable once the quality is Better.");
+            auto* mask_white_clip = mask_page->findChild<QDoubleSpinBox*>("colorSmartMaskWhiteClip");
+            auto* mask_white_clip_slider = mask_page->findChild<QSlider*>("colorSmartMaskWhiteClipSlider");
+            mask_white_clip->setValue(75.0);
+            require(mask_white_clip_slider->value() == 750, "Typing a Smart Mask value must move its slider.");
+            mask_white_clip_slider->setValue(400);
+            require(qFuzzyCompare(mask_white_clip->value(), 40.0),
+                    "Moving a Smart Mask slider must update its value.");
+            // The playhead follows clicks on the timeline: 8 px margin on both sides.
+            auto* mask_timeline = mask_page->findChild<QWidget*>("colorSmartMaskTimeline");
+            require(mask_timeline && qFuzzyIsNull(mask_timeline->property("playhead").toDouble()),
+                    "The Smart Mask playhead must start at the beginning.");
+            mask_timeline->resize(400, 200);
+            const QPointF mask_playhead_at(8.0 + (400.0 - 16.0) * 0.25, 60.0);
+            QMouseEvent mask_press(QEvent::MouseButtonPress, mask_playhead_at, mask_playhead_at,
+                Qt::LeftButton, Qt::LeftButton, Qt::NoModifier);
+            QApplication::sendEvent(mask_timeline, &mask_press);
+            require(std::abs(mask_timeline->property("playhead").toDouble() - 0.25) < 0.01,
+                    "Clicking the Smart Mask timeline must move the playhead.");
+            mask_page->findChild<QPushButton*>("colorSmartMaskTool2")->click();
+            mask_page->findChild<QComboBox*>("colorSmartMaskMode")->setCurrentIndex(1);
+            mask_page->findChild<QPushButton*>("colorSmartMaskQualityResetButton")->click();
+            require(mask_page->findChild<QPushButton*>("colorSmartMaskQualityFaster")->isChecked() &&
+                        !mask_refine->isEnabled() && qFuzzyCompare(mask_white_clip->value(), 100.0) &&
+                        mask_page->findChild<QPushButton*>("colorSmartMaskTool1")->isChecked() &&
+                        mask_page->findChild<QComboBox*>("colorSmartMaskMode")->currentIndex() == 0 &&
+                        qFuzzyIsNull(mask_timeline->property("playhead").toDouble()),
+                    "The Smart Mask reset must restore the quality, fields, tool and playhead.");
             workspace.findChild<QPushButton*>("colorToolButton1")->click();
         }
         auto* capture_button = workspace.findChild<QPushButton*>("colorCaptureStillButton");

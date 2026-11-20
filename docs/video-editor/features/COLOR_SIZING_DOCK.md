@@ -1,8 +1,8 @@
 # Color Sizing Dock
 
 Status: **Stage 1 (visual only) is implemented for pages 1 (Curves - Custom), 2 (Color
-Slice), 3 (Color Warp - Chroma Warp), 4 (Qualifier - HSL), 5 (Window) and 6 (Tracker - Window). Pages 7
-to 11 are not yet specified; their buttons select empty placeholder pages.** Control
+Slice), 3 (Color Warp - Chroma Warp), 4 (Qualifier - HSL), 5 (Window), 6 (Tracker - Window) and 7 (Smart Mask).
+Pages 8 to 11 are not yet specified; their buttons select empty placeholder pages.** Control
 names, ranges and defaults are taken from the maintainer's layout reference
 screenshots and are proposals until implemented and recorded as decisions.
 Behavior marked *Pending* has not been decided.
@@ -36,7 +36,8 @@ Delivery stages:
 | 4 | Qualifier - HSL | Visual stage implemented |
 | 5 | Window | Visual stage implemented |
 | 6 | Tracker - Window | Visual stage implemented |
-| 7 to 11 | *To be specified by the maintainer* | Empty placeholder page |
+| 7 | Smart Mask | Visual stage implemented |
+| 8 to 11 | *To be specified by the maintainer* | Empty placeholder page |
 
 ## 1. Curves - Custom
 
@@ -287,6 +288,53 @@ window geometry, show the tracking curves in the timeline, and reuse the existin
 Power Window tracker where possible. The 3D and Effects kinds, per-channel curves,
 persistence (CSP schema bump), cancellation and error logging are *Pending*.
 
+## 7. Smart Mask
+
+**Purpose.** Create a mask by marking points on the image, track it through the clip
+and refine its edges. The page is titled "Smart Mask"; the reference layout's own
+feature name is not used in the interface.
+
+**Applies to.** The selected clip's current frame and range (stage 2).
+
+**Important.** The reference feature is model-based. Whether this project implements
+mask generation with a local model, a classical algorithm or not at all is an
+open decision, and any model, runtime or dataset would need licensing and
+distribution tracking and local execution without online services. Stage 1 contains
+no model, inference or media processing.
+
+**Implemented (stage 1, visual only).** Button 7 shows the page
+(`colorSmartMaskPage`, controls named `colorSmartMask*`, inside a scroll area).
+
+- **Header.** Title, a page reset and a "..." button that does nothing yet.
+- **Toolbar.** Set in and set out buttons; six transport buttons (go to start, track
+  backward, stop, loop (a toggle), track forward, go to end); five mask tools in an
+  exclusive group (Add point, selected, Subtract point, and three stroke tools that
+  are disabled because they need an existing mask); two toggles (show mask, show
+  overlay); and a settings button. Only the toggles and the tool selection hold state;
+  nothing plays, tracks or draws.
+- **Timeline** (`colorSmartMaskTimeline`). A ruler with three notional timecodes
+  (00:00:00:00, 00:00:13:26, 00:00:26:52), the message "No Mask" with "Draw a point in
+  the viewer to create a mask.", and a red playhead that can be placed by clicking or
+  dragging (exposed as the `playhead` property, 0 to 1).
+- **Quality.** A reset and a Faster (selected) / Better segmented pair. Smart Refine
+  (30, 0 to 100) is disabled until Better is chosen.
+- **Refinement.** Mode (Shrink, Grow) and Shape (Circle, Square) dropdowns and two
+  columns of fields, each with a thin slider that mirrors it: Radius 0, Smoothing 0,
+  Blur Radius 0.0, Clean Black 0.0, Clean White 0.0, Post Filter 0.0 (left); Iterations
+  1 (1 to 20), Denoise 0.0, In/Out Ratio 0.0 (-100 to 100), Black Clip 0.0, White Clip
+  100.0 (right). Ranges are proposed; the dropdown options are proposed.
+- **Resets.** The Quality reset and the page reset both restore everything: quality,
+  fields, dropdowns, tool, the toggles and the playhead.
+
+Nothing creates or tracks a mask or edits project data. The meaning of the two
+transport range marks and of the settings button is *Pending*.
+
+**Behavior (stage 2).** *Pending.* Intended: points added in the Viewer seed a mask,
+tracking propagates it through the range, and the refinement controls shape the
+matte, which can feed the selected node as a qualifier. See the decision above.
+Persistence (CSP schema bump), cancellation, error logging and CPU, OpenGL and Vulkan
+cost are *Pending*.
+
 ## Verification
 
 - Stage 1: the Color workspace test checks that button 1 opens the page, the
@@ -298,7 +346,9 @@ persistence (CSP schema bump), cancellation and error logging are *Pending*.
   handle dragging, Matte Finesse sliders and resets are checked; button 5 opens
   Window, where the sample rows, selection, add, Delete, field enabling and reset are
   checked; button 6 opens Tracker - Window, where the channel toggles, Interactive Mode
-  enabling of the tools, Clip/Frame, the clickable playhead and the reset are checked.
+  enabling of the tools, Clip/Frame, the clickable playhead and the reset are checked;
+  button 7 opens Smart Mask, where the toolbar, disabled stroke tools, Smart Refine
+  enabling by quality, slider/field linking, the playhead and the reset are checked.
 - Stage 2: evaluator parity with the existing Curves node, persistence and
   older-version compatibility, and a manual visual check recorded in the
   [regression guide](../validation/REGRESSION_TESTING.md).

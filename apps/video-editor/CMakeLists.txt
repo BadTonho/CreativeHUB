@@ -241,6 +241,8 @@ set(MAIN_EDITOR_CORE_SOURCES
     src/workspaces/color/ui/window_page.h
     src/workspaces/color/ui/tracker_page.cpp
     src/workspaces/color/ui/tracker_page.h
+    src/workspaces/color/ui/smart_mask_page.cpp
+    src/workspaces/color/ui/smart_mask_page.h
     src/workspaces/color/ui/color_workspace.cpp
     src/workspaces/color/ui/color_workspace.h
     src/workspaces/audio/ui/audio_workspace.h
