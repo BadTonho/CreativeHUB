@@ -1535,6 +1535,50 @@ int main(int argc, char** argv) {
             require(qFuzzyCompare(blur_scaling_r->value(), 0.25) &&
                         blur_page->findChild<QPushButton*>("colorBlurBlurModeButton")->isChecked(),
                     "The Blur page reset must restore every group and the Blur kind.");
+            // Sizing dock, page 9: Key (visual stage).
+            workspace.findChild<QPushButton*>("colorToolButton15")->click();
+            auto* key_page = workspace.findChild<QWidget*>("colorKeyPage");
+            require(key_page && sizing_pages->currentWidget()->isAncestorOf(key_page) &&
+                        !sizing_pages->currentWidget()->isAncestorOf(blur_page),
+                    "Sizing dock button 9 must open the Key page.");
+            require(key_page->findChild<QWidget*>("colorKeyPreview") &&
+                        key_page->findChild<QPushButton*>("colorKeyResetButton") &&
+                        key_page->findChild<QLabel*>("colorKeyNodeLabel"),
+                    "Key must expose its matte preview, node label and reset button.");
+            const std::pair<const char*, double> key_defaults[] = {
+                {"colorKeyInputGain", 1.0}, {"colorKeyInputOffset", 0.0},
+                {"colorKeyInputBlurRadius", 0.0}, {"colorKeyInputBlurHV", 0.0},
+                {"colorKeyOutputGain", 1.0}, {"colorKeyOutputOffset", 0.0},
+                {"colorKeyQualifierGain", 1.0}, {"colorKeyQualifierOffset", 0.0},
+            };
+            for (const auto& [name, value] : key_defaults) {
+                auto* box = key_page->findChild<QDoubleSpinBox*>(name);
+                require(box && qFuzzyCompare(box->value() + 1.0, value + 1.0),
+                        "Key fields must start at their documented defaults.");
+            }
+            const std::pair<const char*, bool> key_toggles[] = {
+                {"colorKeyInputEnable", true}, {"colorKeyInputView", true}, {"colorKeyOutputEnable", false},
+                {"colorKeyQualifierEnable", false}, {"colorKeyQualifierView", true},
+            };
+            for (const auto& [name, checked] : key_toggles) {
+                auto* toggle = key_page->findChild<QPushButton*>(name);
+                require(toggle && toggle->isChecked() == checked,
+                        "Key toggles must start at their documented states.");
+            }
+            key_page->findChild<QDoubleSpinBox*>("colorKeyInputGain")->setValue(2.5);
+            key_page->findChild<QDoubleSpinBox*>("colorKeyOutputOffset")->setValue(-0.25);
+            key_page->findChild<QPushButton*>("colorKeyOutputEnable")->click();
+            key_page->findChild<QPushButton*>("colorKeyInputEnable")->click();
+            require(qFuzzyCompare(key_page->findChild<QDoubleSpinBox*>("colorKeyInputGain")->value(), 2.5) &&
+                        key_page->findChild<QPushButton*>("colorKeyOutputEnable")->isChecked() &&
+                        !key_page->findChild<QPushButton*>("colorKeyInputEnable")->isChecked(),
+                    "Key fields and toggles must hold the values set on them.");
+            key_page->findChild<QPushButton*>("colorKeyResetButton")->click();
+            require(qFuzzyCompare(key_page->findChild<QDoubleSpinBox*>("colorKeyInputGain")->value(), 1.0) &&
+                        qFuzzyIsNull(key_page->findChild<QDoubleSpinBox*>("colorKeyOutputOffset")->value()) &&
+                        !key_page->findChild<QPushButton*>("colorKeyOutputEnable")->isChecked() &&
+                        key_page->findChild<QPushButton*>("colorKeyInputEnable")->isChecked(),
+                    "The Key reset must restore every field and toggle.");
             workspace.findChild<QPushButton*>("colorToolButton1")->click();
         }
         auto* capture_button = workspace.findChild<QPushButton*>("colorCaptureStillButton");

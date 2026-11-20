@@ -1,8 +1,8 @@
 # Color Sizing Dock
 
 Status: **Stage 1 (visual only) is implemented for pages 1 (Curves - Custom), 2 (Color
-Slice), 3 (Color Warp - Chroma Warp), 4 (Qualifier - HSL), 5 (Window), 6 (Tracker - Window), 7 (Smart Mask) and 8 (Blur - Blur).
-Pages 9 to 11 are not yet specified; their buttons select empty placeholder pages.** Control
+Slice), 3 (Color Warp - Chroma Warp), 4 (Qualifier - HSL), 5 (Window), 6 (Tracker - Window), 7 (Smart Mask), 8 (Blur - Blur) and 9 (Key).
+Pages 10 and 11 are not yet specified; their buttons select empty placeholder pages.** Control
 names, ranges and defaults are taken from the maintainer's layout reference
 screenshots and are proposals until implemented and recorded as decisions.
 Behavior marked *Pending* has not been decided.
@@ -38,7 +38,8 @@ Delivery stages:
 | 6 | Tracker - Window | Visual stage implemented |
 | 7 | Smart Mask | Visual stage implemented |
 | 8 | Blur - Blur | Visual stage implemented |
-| 9 to 11 | *To be specified by the maintainer* | Empty placeholder page |
+| 9 | Key | Visual stage implemented |
+| 10 to 11 | *To be specified by the maintainer* | Empty placeholder page |
 
 ## 1. Curves - Custom
 
@@ -370,6 +371,39 @@ under the handle.
 H/V aspect and scaling, with Sharpen and Mist as further kinds, evaluated on CPU,
 OpenGL and Vulkan with measured cost, persisted in the Color graph (CSP schema bump).
 
+## 9. Key
+
+**Purpose.** Adjust how a node's key (alpha) is built and combined: gain and offset
+on the key input, on the key output and on the qualifier's contribution, plus a
+blur on the key input. The Color graph already has qualifier matte refinement and
+node connections; this page is separate from them and binding is stage 2.
+
+**Applies to.** The selected Color node (stage 2). The header shows the node name;
+it is the fixed text "Node Key" in stage 1.
+
+**Implemented (stage 1, visual only).** Button 9 shows the page
+(`colorKeyPage`, controls named `colorKey*`, inside a scroll area).
+
+- **Header.** Title "Key", the "Node Key" label and a page reset.
+- **Matte preview** (`colorKeyPreview`). A fixed full-white 16:9 frame between black
+  bars, representing a key with nothing applied. It does not react to the controls.
+- **Key Input.** An enable toggle and a view toggle (both on by default); Gain 1.000
+  (0 to 10), Offset 0.000 (-1 to 1), Blur R. 0.000 and Blur H/V 0.000 (0 to 100).
+- **Key Output.** An enable toggle (off by default); Gain 1.000 and Offset 0.000.
+- **Qualifier.** An enable toggle (off by default) and a view toggle (on by default);
+  Gain 1.000 and Offset 0.000.
+- **Page reset** restores every field and toggle to the defaults above.
+
+Ranges are proposed. The toggles and fields hold local state only; nothing keys an
+image, edits a node or touches project data. The exact meaning of the enable and
+view toggles is *Pending*.
+
+**Behavior (stage 2).** *Pending.* Intended: the gains, offsets and blur shape the
+selected node's key; the matte preview shows the resulting key; the qualifier section
+combines with the Qualifier page's matte. The relation to the existing qualifier
+matte refinement, persistence (CSP schema bump) and CPU, OpenGL and Vulkan evaluation
+are *Pending*.
+
 ## Verification
 
 - Stage 1: the Color workspace test checks that button 1 opens the page, the
@@ -385,7 +419,8 @@ OpenGL and Vulkan with measured cost, persisted in the Color graph (CSP schema b
   button 7 opens Smart Mask, where the toolbar, disabled stroke tools, Smart Refine
   enabling by quality, slider/field linking, the playhead and the reset are checked;
   button 8 opens Blur - Blur, where the defaults, channel linking, the disabled footer,
-  group resets and the page reset are checked.
+  group resets and the page reset are checked; button 9 opens Key, where the preview,
+  field and toggle defaults, held values and the reset are checked.
 - Stage 2: evaluator parity with the existing Curves node, persistence and
   older-version compatibility, and a manual visual check recorded in the
   [regression guide](../validation/REGRESSION_TESTING.md).
