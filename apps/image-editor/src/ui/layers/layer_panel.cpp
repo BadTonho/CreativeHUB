@@ -522,12 +522,12 @@ LayerPanel::LayerPanel(QWidget* parent) : QWidget(parent) {
 
     move_up_button_ = new QToolButton(this);
     move_up_button_->setObjectName(QStringLiteral("moveImageLayerUpButton"));
-    move_up_button_->setText(QCoreApplication::translate("ImageEditorUI", "â†‘"));
+    move_up_button_->setText(QCoreApplication::translate("ImageEditorUI", "\u2191"));
     move_up_button_->setToolTip(QCoreApplication::translate("ImageEditorUI", "Move item up"));
     actions->addWidget(move_up_button_);
     move_down_button_ = new QToolButton(this);
     move_down_button_->setObjectName(QStringLiteral("moveImageLayerDownButton"));
-    move_down_button_->setText(QCoreApplication::translate("ImageEditorUI", "â†“"));
+    move_down_button_->setText(QCoreApplication::translate("ImageEditorUI", "\u2193"));
     move_down_button_->setToolTip(QCoreApplication::translate("ImageEditorUI", "Move item down"));
     actions->addWidget(move_down_button_);
     layout->addLayout(actions);

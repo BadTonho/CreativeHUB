@@ -5367,6 +5367,11 @@ int main(int argc, char* argv[]) {
         std::cerr << "The layer panel controls were not created.\n";
         return 1;
     }
+    if (move_layer_up_button->text() != QStringLiteral("\u2191") ||
+        move_layer_down_button->text() != QStringLiteral("\u2193")) {
+        std::cerr << "The layer move buttons must show valid up and down arrow glyphs.\n";
+        return 1;
+    }
     add_layer_button->click();
     if (layerRowCount(layer_list) != 3 || layer_list->currentItem() == nullptr ||
         layer_list->currentItem()->text(0) != QStringLiteral("Layer 2")) {
