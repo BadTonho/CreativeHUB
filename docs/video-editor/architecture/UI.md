@@ -35,22 +35,21 @@ Color restores the previous dock arrangement. See the
 
 A bottom dock area sits above the lower controls and scopes area of the Color
 page: an embedded `QMainWindow` (`colorBottomDockHost`) with three child docks.
-Each dock owns its row of unlabeled placeholder buttons
-(`colorToolButton1`–`colorToolButton20`), so the buttons travel with the dock:
-Motion Effects (6 buttons, left), Sizing - Input Sizing (11, centered) and
-Keyframes (3, right). The docks are movable, closable and floatable;
-right-clicking a dock title bar reopens closed ones. Buttons and docks have no
-behavior or content yet; they will be assigned individually. Dock arrangement
-is not persisted yet. The primary-grade controls and the scope panel are
-currently hidden; they are planned to move into these docks. The Motion Effects dock selects its pages with its six buttons (pages 1,
-Camera Raw, 2, Color Match, and 3, Primaries - Color Bars, 4, High Dynamic Range - Color Wheels, and 5, RGB Mixer, and 6, Motion Effects, are
-implemented visually; all six pages are visual only). The Sizing - Input Sizing
-dock uses the same button-and-page scheme: its first ten buttons open visual
-Curves - Custom, Color Slice, Color Warp, Qualifier, Window, Tracker, Smart Mask, Blur,
-Key and Input Sizing pages and the eleventh is empty (see
-[Color Sizing Dock](../features/COLOR_SIZING_DOCK.md)). The six
-pages are specified in
-[Color Panels Dock](../features/COLOR_PANELS_DOCK.md).
+Each dock owns its row of buttons (`colorToolButton1` to `colorToolButton19`), so
+the buttons travel with the dock: Motion Effects (6 buttons, left), Sizing - Input
+Sizing (10, centered) and Keyframes (3, right). The docks are movable, closable
+and floatable; right-clicking a dock title bar reopens closed ones. Dock
+arrangement is not persisted yet. The primary-grade controls and the scope panel
+are currently hidden; they are planned to move into these docks.
+
+The Motion Effects dock selects one of six pages with its buttons: Camera Raw,
+Color Match, Primaries - Color Bars, High Dynamic Range - Color Wheels, RGB Mixer
+and Motion Effects. The Sizing - Input Sizing dock uses the same button-and-page
+scheme with ten pages: Curves - Custom, Color Slice, Color Warp, Qualifier, Window,
+Tracker, Smart Mask, Blur, Key and Input Sizing. All of these pages are visual only
+for now. They are specified in [Color Panels Dock](../features/COLOR_PANELS_DOCK.md)
+and [Color Sizing Dock](../features/COLOR_SIZING_DOCK.md). The Keyframes dock's three
+buttons have no pages yet.
 
 The upper Color area is a horizontal splitter with the shared Viewer, node
 canvas, and a right-side Effects catalog panel. The top Effects action toggles

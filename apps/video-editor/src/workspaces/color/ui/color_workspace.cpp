@@ -1399,7 +1399,7 @@ ColorWorkspace::ColorWorkspace(QWidget* parent) : QWidget(parent) {
         ButtonAlign align;
     } child_docks[] = {
         {"colorMotionEffectsDock", "Motion Effects", 6, ButtonAlign::Left},
-        {"colorSizingDock", "Sizing - Input Sizing", 11, ButtonAlign::Center},
+        {"colorSizingDock", "Sizing - Input Sizing", 10, ButtonAlign::Center},
         {"colorKeyframesDock", "Keyframes", 3, ButtonAlign::Right},
     };
     for (const auto& entry : child_docks) {
@@ -1437,8 +1437,7 @@ ColorWorkspace::ColorWorkspace(QWidget* parent) : QWidget(parent) {
                 if (!motion_dock) {
                     // Sizing dock: pages 1 to 10 are Curves - Custom, Color
                     // Slice, Chroma Warp, Qualifier, Window, Tracker, Smart
-                    // Mask, Blur, Key and Input Sizing; the last one is still
-                    // an empty placeholder.
+                    // Mask, Blur, Key and Input Sizing.
                     if (i == 9) {
                         auto* scroll = new QScrollArea(pages);
                         scroll->setObjectName("colorInputSizingScroll");

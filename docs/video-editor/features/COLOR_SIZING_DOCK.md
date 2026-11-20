@@ -1,8 +1,9 @@
 # Color Sizing Dock
 
-Status: **Stage 1 (visual only) is implemented for pages 1 (Curves - Custom), 2 (Color
-Slice), 3 (Color Warp - Chroma Warp), 4 (Qualifier - HSL), 5 (Window), 6 (Tracker - Window), 7 (Smart Mask), 8 (Blur - Blur), 9 (Key) and 10 (Sizing - Input Sizing).
-Page 11 is not yet specified; its button selects an empty placeholder page.** Control
+Status: **Stage 1 (visual only) is implemented for all ten pages: 1 (Curves - Custom),
+2 (Color Slice), 3 (Color Warp - Chroma Warp), 4 (Qualifier - HSL), 5 (Window), 6
+(Tracker - Window), 7 (Smart Mask), 8 (Blur - Blur), 9 (Key) and 10 (Sizing - Input
+Sizing).** Control
 names, ranges and defaults are taken from the maintainer's layout reference
 screenshots and are proposals until implemented and recorded as decisions.
 Behavior marked *Pending* has not been decided.
@@ -11,7 +12,9 @@ Behavior marked *Pending* has not been decided.
 
 The middle child dock of the Color bottom dock area is titled **Sizing - Input
 Sizing** (`colorSizingDock`; see [UI](../architecture/UI.md#color-workspace)). Its
-header carries a row of 11 buttons (`colorToolButton7` to `colorToolButton17`).
+header carries a row of 10 buttons (`colorToolButton7` to `colorToolButton16`). A
+eleventh button, intended for a 3D page, was removed because the reference
+application does not offer it.
 Each button selects a page that replaces the dock body, in the same way as the
 Motion Effects dock described in [Color Panels Dock](COLOR_PANELS_DOCK.md); the
 stages, the shared rules (original icons, disabled rather than hidden controls,
@@ -40,7 +43,6 @@ Delivery stages:
 | 8 | Blur - Blur | Visual stage implemented |
 | 9 | Key | Visual stage implemented |
 | 10 | Sizing - Input Sizing | Visual stage implemented |
-| 11 | *To be specified by the maintainer* | Empty placeholder page |
 
 ## 1. Curves - Custom
 

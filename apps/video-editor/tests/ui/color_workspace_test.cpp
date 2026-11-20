@@ -728,11 +728,11 @@ int main(int argc, char** argv) {
             renamed_value = name;
         });
         workspace.setRemoveStillHandler([&](const QString& id) { removed_id = id; });
-        for (int i = 1; i <= 20; ++i)
+        for (int i = 1; i <= 19; ++i)
             require(workspace.findChild<QPushButton*>(QStringLiteral("colorToolButton%1").arg(i)),
-                    "Color tool bar must expose its 20 placeholder buttons.");
-        require(!workspace.findChild<QPushButton*>("colorToolButton21"),
-                "Color tool bar must contain exactly 20 placeholder buttons.");
+                    "Color tool bar must expose its 19 buttons.");
+        require(!workspace.findChild<QPushButton*>("colorToolButton20"),
+                "Color tool bar must contain exactly 19 buttons.");
         for (const char* dock_name : {"colorMotionEffectsDock", "colorSizingDock", "colorKeyframesDock"}) {
             auto* dock = workspace.findChild<QDockWidget*>(dock_name);
             require(dock && dock->features().testFlag(QDockWidget::DockWidgetClosable) &&
@@ -742,8 +742,8 @@ int main(int argc, char** argv) {
         }
         const std::pair<const char*, std::pair<int, int>> dock_buttons[] = {
             {"colorMotionEffectsDock", {1, 6}},
-            {"colorSizingDock", {7, 17}},
-            {"colorKeyframesDock", {18, 20}},
+            {"colorSizingDock", {7, 16}},
+            {"colorKeyframesDock", {17, 19}},
         };
         for (const auto& [dock_name, range] : dock_buttons) {
             auto* dock = workspace.findChild<QDockWidget*>(dock_name);
