@@ -1,5 +1,6 @@
 #include "workspaces/color/ui/color_workspace.h"
 #include "workspaces/color/ui/color_node_canvas.h"
+#include "workspaces/color/ui/info_page.h"
 #include "workspaces/color/evaluation/color_graph_evaluator.h"
 #include "ui/media_browser/media_drag_mime.h"
 #include "ui/preview/preview_widget.h"
@@ -1718,6 +1719,50 @@ int main(int argc, char** argv) {
                     "Choosing a scope kind must switch the graticule.");
             scopes_mode->setCurrentIndex(0);
             require(scopes_graph->property("mode").toInt() == 0, "Waveform must be selectable.");
+            // Keyframes dock, page 3: Info (visual stage).
+            workspace.findChild<QPushButton*>("colorToolButton19")->click();
+            auto* info_page = workspace.findChild<QWidget*>("colorInfoPage");
+            require(info_page && keyframes_pages->currentWidget()->isAncestorOf(info_page) &&
+                        !keyframes_pages->currentWidget()->isAncestorOf(scopes_page),
+                    "Keyframes dock button 3 must open the Info page.");
+            require(info_page->findChild<QLabel*>("colorInfoTitle") &&
+                        info_page->findChild<QLabel*>("colorInfoTitle")->text() == "Info",
+                    "The Info page must show its title.");
+            const std::pair<const char*, const char*> info_fields[] = {
+                {"ClipFileName", "File Name"}, {"ClipReelName", "Reel Name"}, {"ClipStartTC", "Start T/C"},
+                {"ClipEndTC", "End T/C"}, {"ClipDuration", "Duration"}, {"ClipFrames", "Frames"},
+                {"ClipVersion", "Version"}, {"ClipFrameRate", "Frame Rate"},
+                {"ClipSourceRes", "Source Res"}, {"ClipCodec", "Codec"}, {"SystemClips", "Clips"},
+                {"SystemProxy", "Proxy"}, {"SystemClipCache", "Clip Cache"},
+                {"SystemRefTransform", "Ref Transform"}, {"SystemRefMode", "Ref Mode"},
+                {"SystemWipeStyle", "Wipe Style"}, {"SystemConvergence", "Convergence"},
+                {"SystemStereoGrade", "Stereo Grade"}, {"SystemStereoDisplay", "Stereo Display"},
+            };
+            for (const auto& [key, label] : info_fields) {
+                auto* name = info_page->findChild<QLabel*>(QStringLiteral("colorInfo%1Label").arg(QLatin1String(key)));
+                require(name && name->text() == QLatin1String(label) &&
+                            info_page->findChild<QLabel*>(QStringLiteral("colorInfo%1Value").arg(QLatin1String(key))),
+                        "Each Info field must have its label and value.");
+            }
+            const auto info_text = [&](const char* key) {
+                return info_page->findChild<QLabel*>(QStringLiteral("colorInfo%1Value").arg(QLatin1String(key)))->text();
+            };
+            require(info_text("ClipFileName") == QString::fromUtf8("–") &&
+                        info_text("ClipFrameRate") == QString::fromUtf8("–") &&
+                        info_text("SystemProxy") == "Off" && info_text("SystemClipCache") == "Off" &&
+                        info_text("SystemRefTransform") == "Off" && info_text("SystemRefMode") == "Gallery" &&
+                        info_text("SystemWipeStyle") == "Wipe-H" && info_text("SystemConvergence") == "Opposite" &&
+                        info_text("SystemStereoGrade") == "Left - Solo" && info_text("SystemStereoDisplay") == "Mono",
+                    "Info must start with placeholder clip values and the documented system defaults.");
+            auto* info_widget = dynamic_cast<ui::InfoPage*>(info_page);
+            require(info_widget, "The Info page must be an InfoPage.");
+            info_widget->setValue("ClipFrameRate", "60.000 fps");
+            info_widget->setValue("NoSuchField", "ignored");
+            require(info_text("ClipFrameRate") == "60.000 fps",
+                    "InfoPage::setValue must update the value of a known field.");
+            info_widget->restoreDefaults();
+            require(info_text("ClipFrameRate") == QString::fromUtf8("–"),
+                    "InfoPage::restoreDefaults must restore the placeholders.");
             workspace.findChild<QPushButton*>("colorToolButton1")->click();
         }
         auto* capture_button = workspace.findChild<QPushButton*>("colorCaptureStillButton");

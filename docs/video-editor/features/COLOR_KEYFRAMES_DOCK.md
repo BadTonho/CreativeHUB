@@ -1,7 +1,7 @@
 # Color Keyframes Dock
 
-Status: **Stage 1 (visual only) is implemented for pages 1 (Keyframes) and 2 (Scopes).
-Page 3 is not yet specified; its button selects an empty placeholder page.** Control names
+Status: **Stage 1 (visual only) is implemented for all three pages: 1 (Keyframes), 2 (Scopes)
+and 3 (Info).** Control names
 and defaults are taken from the maintainer's layout reference screenshots and are
 proposals until implemented and recorded as decisions. Behavior marked *Pending* has
 not been decided.
@@ -33,7 +33,7 @@ Delivery stages:
 | --- | --- | --- |
 | 1 | Keyframes | Visual stage implemented |
 | 2 | Scopes | Visual stage implemented |
-| 3 | *To be specified by the maintainer* | Empty placeholder page |
+| 3 | Info | Visual stage implemented |
 
 ## 1. Keyframes
 
@@ -114,6 +114,47 @@ frame request path, draw the scope data on the graticule, keep the work off the
 interface thread, and support the 10-bit level scale shown here. Settings (for
 example intensity or channel selection) are *Pending*.
 
+## 3. Info
+
+**Purpose.** Show read-only details of the selected clip and of the Color
+workspace's system state, as label and value pairs.
+
+**Applies to.** The selected clip and the project (stage 2).
+
+**Implemented (stage 1, visual only).** Button 3 shows the page
+(`colorInfoPage`, inside a scroll area) with the title "Info" and two columns
+separated by a line. Every field has a label (`colorInfo<Key>Label`) and a value
+(`colorInfo<Key>Value`) stacked in a two-column grid; long values are clipped, not
+widened, and the full text is the tooltip.
+
+- **Clip** (ten fields): File Name, Reel Name, Start T/C, End T/C, Duration, Frames,
+  Version, Frame Rate, Source Res and Codec (keys `ClipFileName`, `ClipReelName`,
+  `ClipStartTC`, `ClipEndTC`, `ClipDuration`, `ClipFrames`, `ClipVersion`,
+  `ClipFrameRate`, `ClipSourceRes`, `ClipCodec`). No clip data is read, so every value
+  is the placeholder dash.
+- **System** (nine fields): Clips, Proxy, Clip Cache, Ref Transform, Ref Mode, Wipe
+  Style, Convergence, Stereo Grade and Stereo Display (keys `SystemClips`,
+  `SystemProxy`, `SystemClipCache`, `SystemRefTransform`, `SystemRefMode`,
+  `SystemWipeStyle`, `SystemConvergence`, `SystemStereoGrade`,
+  `SystemStereoDisplay`). Clips shows the placeholder dash; the others show their
+  default settings: Off, Off, Off, Gallery, Wipe-H, Opposite, Left - Solo and Mono.
+  These are the layout reference's defaults, not values read from the project.
+- **API for stage 2.** `InfoPage::setValue(key, text)` sets one value by key and
+  ignores unknown keys; `restoreDefaults()` restores the placeholders and defaults.
+
+The reference screenshot's own clip values (file name, timecodes and so on) are
+deliberately not used: they belong to a real project file and would be misleading
+data. Which system fields are real settings in this project (stereo, wipe, reference
+mode) and which should be dropped is *Pending*, because the editor does not have
+stereo grading.
+
+**Behavior (stage 2).** *Pending.* Intended: the Color workspace feeds the Clip fields
+from the selected clip through `setValue` (file name from the media path, timecodes,
+duration, frame count and rate from the project, resolution, bit depth and codec from
+the media probe), shows real system state (proxy, clip cache), and refreshes when the
+selection changes, without blocking the interface thread. Fields that have no
+equivalent in this project are removed rather than left as dead text.
+
 ## Verification
 
 - Stage 1: the Color workspace test checks that button 1 of the dock opens the page,
@@ -121,6 +162,8 @@ example intensity or channel selection) are *Pending*.
   controls and their defaults, the starting keyframes and timecode, the playhead and
   timecode following a click, the diamond adding without duplicating, the Master
   union, and that toggles hold their values; button 2 opens Scopes, where the buttons,
-  the Parade default, four kinds and switching the graticule mode are checked.
+  the Parade default, four kinds and switching the graticule mode are checked; button 3
+  opens Info, where the title, all 19 labels and values, the placeholder and default
+  values, and `setValue` / `restoreDefaults` are checked.
 - Stage 2: round-trip tests with the project's animation data, Undo/Redo coverage and
   a manual visual check recorded in the [regression guide](../validation/REGRESSION_TESTING.md).

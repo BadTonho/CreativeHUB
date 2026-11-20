@@ -47,8 +47,8 @@ Color Match, Primaries - Color Bars, High Dynamic Range - Color Wheels, RGB Mixe
 and Motion Effects. The Sizing - Input Sizing dock uses the same button-and-page
 scheme with ten pages: Curves - Custom, Color Slice, Color Warp, Qualifier, Window,
 Tracker, Smart Mask, Blur, Key and Input Sizing. All of these pages are visual only
-for now. The Keyframes dock has three pages; the first two, Keyframes and Scopes, are
-implemented visually and the third is empty. The pages are specified in
+for now. The Keyframes dock has three pages, Keyframes, Scopes and Info, all implemented
+visually. The pages are specified in
 [Color Panels Dock](../features/COLOR_PANELS_DOCK.md),
 [Color Sizing Dock](../features/COLOR_SIZING_DOCK.md) and
 [Color Keyframes Dock](../features/COLOR_KEYFRAMES_DOCK.md).

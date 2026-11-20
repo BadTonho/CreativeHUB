@@ -253,6 +253,8 @@ set(MAIN_EDITOR_CORE_SOURCES
     src/workspaces/color/ui/keyframes_page.h
     src/workspaces/color/ui/scopes_page.cpp
     src/workspaces/color/ui/scopes_page.h
+    src/workspaces/color/ui/info_page.cpp
+    src/workspaces/color/ui/info_page.h
     src/workspaces/color/ui/color_workspace.cpp
     src/workspaces/color/ui/color_workspace.h
     src/workspaces/audio/ui/audio_workspace.h
