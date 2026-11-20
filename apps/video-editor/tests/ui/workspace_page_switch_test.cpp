@@ -526,10 +526,9 @@ int main(int argc, char* argv[]) {
         require(!add_to_queue->isEnabled(),
                 "Render must require an output path before adding a job.");
         auto* hardware_decode = render_workspace->settingsPanel()->findChild<QCheckBox*>("renderHardwareDecodingCheck");
-        require(hardware_decode && !hardware_decode->isChecked() &&
+        require(hardware_decode && hardware_decode->isChecked() &&
             !video_encoder_combo->currentData(Qt::UserRole + 1).toBool(),
-            "Experimental decoding and encoders must remain off by default.");
-        hardware_decode->setChecked(true);
+            "Hardware decoding must default on while hardware encoders stay off by default.");
         quality_preset->setCurrentIndex(2);
         require(std::abs(video_bitrate->value() - 16.0) < 0.11 &&
                     audio_bitrate->value() == 320,

@@ -10,7 +10,7 @@
 namespace settings {
 
 bool hardwareDecodingEnabled() {
-    return QSettings().value(kHardwareDecodingEnabledKey, false).toBool();
+    return QSettings().value(kHardwareDecodingEnabledKey, true).toBool();
 }
 
 void setHardwareDecodingEnabled(bool enabled) {
@@ -18,7 +18,7 @@ void setHardwareDecodingEnabled(bool enabled) {
 }
 
 bool gpuCompositionEnabled() {
-    return QSettings().value(kGpuCompositionEnabledKey, false).toBool();
+    return QSettings().value(kGpuCompositionEnabledKey, true).toBool();
 }
 
 void setGpuCompositionEnabled(bool enabled) {

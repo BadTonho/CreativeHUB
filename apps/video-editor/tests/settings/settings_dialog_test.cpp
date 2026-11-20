@@ -62,10 +62,10 @@ int main(int argc, char* argv[]) {
         require(settings::rendererPreference() == Backend::Automatic, "Invalid stored renderer must recover to Automatic.");
         settings.remove(settings::kRendererBackendKey); settings.remove(settings::kAskRendererKey);
 
-        require(!settings::hardwareDecodingEnabled(), "Hardware decoding must default to disabled.");
-        settings::setHardwareDecodingEnabled(true);
-        require(settings::hardwareDecodingEnabled(), "Hardware decode preference must persist.");
+        require(settings::hardwareDecodingEnabled(), "Hardware decoding must default to enabled.");
         settings::setHardwareDecodingEnabled(false);
+        require(!settings::hardwareDecodingEnabled(), "Hardware decode preference must persist.");
+        settings.remove(settings::kHardwareDecodingEnabledKey);
 
         require(settings::workspacePageTransitionsEnabled() &&
                     settings::workspacePageTransitionStyle() ==
@@ -494,8 +494,8 @@ int main(int argc, char* argv[]) {
                 "Preview metrics must be enabled by default.");
 
         auto* gpu_check = dialog.findChild<QCheckBox*>("gpuCompositionCheckBox");
-        require(gpu_check && !gpu_check->isChecked() && !settings::gpuCompositionEnabled(),
-                "GPU composition must be disabled by default.");
+        require(gpu_check && gpu_check->isChecked() && settings::gpuCompositionEnabled(),
+                "GPU composition must be enabled by default.");
         require(gpu_check->text() == "Use GPU for timeline preview (Experimental)" &&
                 !gpu_check->accessibleDescription().isEmpty(), "GPU setting label/accessibility missing.");
         int gpu_changes = 0;
@@ -505,32 +505,32 @@ int main(int argc, char* argv[]) {
                 require(settings::gpuCompositionEnabled() == enabled,
                         "GPU signal preceded persistence.");
             });
-        gpu_check->setChecked(true);
+        gpu_check->setChecked(false);
         settings.sync();
-        require(gpu_changes == 1 && settings.value(settings::kGpuCompositionEnabledKey).toBool(),
+        require(gpu_changes == 1 && !settings.value(settings::kGpuCompositionEnabledKey).toBool(),
                 "GPU preference was not applied/persisted immediately.");
         {
             settings::SettingsDialog reopened(nullptr, shortcut_manager);
-            require(reopened.findChild<QCheckBox*>("gpuCompositionCheckBox")->isChecked(),
-                    "Reopened Settings lost the GPU preference.");
+            require(!reopened.findChild<QCheckBox*>("gpuCompositionCheckBox")->isChecked(),
+                    "Reopened Settings lost the disabled GPU preference.");
         }
-        gpu_check->setChecked(false);
-        require(gpu_changes == 2 && !settings::gpuCompositionEnabled(), "GPU preference did not disable.");
+        gpu_check->setChecked(true);
+        require(gpu_changes == 2 && settings::gpuCompositionEnabled(), "GPU preference did not re-enable.");
 
         auto* hardware_check = dialog.findChild<QCheckBox*>("hardwareDecodingCheckBox");
-        require(hardware_check && !hardware_check->isChecked(), "Hardware decoding checkbox must default off.");
+        require(hardware_check && hardware_check->isChecked(), "Hardware decoding checkbox must default on.");
         int hardware_changes = 0;
         QObject::connect(&dialog, &settings::SettingsDialog::hardwareDecodingEnabledChanged, [&](bool enabled) {
             ++hardware_changes;
             require(settings::hardwareDecodingEnabled() == enabled, "Hardware decode signal preceded persistence.");
         });
-        hardware_check->setChecked(true); settings.sync();
-        require(hardware_changes == 1 && settings::hardwareDecodingEnabled(), "Hardware decode preference did not apply.");
+        hardware_check->setChecked(false); settings.sync();
+        require(hardware_changes == 1 && !settings::hardwareDecodingEnabled(), "Hardware decode preference did not apply.");
         { settings::SettingsDialog reopened(nullptr, shortcut_manager);
-          require(reopened.findChild<QCheckBox*>("hardwareDecodingCheckBox")->isChecked(),
-              "Reopened Settings lost the hardware decode preference."); }
-        hardware_check->setChecked(false);
-        require(hardware_changes == 2 && !settings::hardwareDecodingEnabled(), "Hardware decoding did not disable.");
+          require(!reopened.findChild<QCheckBox*>("hardwareDecodingCheckBox")->isChecked(),
+              "Reopened Settings lost the disabled hardware decode preference."); }
+        hardware_check->setChecked(true);
+        require(hardware_changes == 2 && settings::hardwareDecodingEnabled(), "Hardware decoding did not re-enable.");
 
         auto* autosave_check = dialog.findChild<QCheckBox*>(
             "projectAutosaveCheckBox");

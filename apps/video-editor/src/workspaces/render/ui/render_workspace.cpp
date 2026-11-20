@@ -466,10 +466,12 @@ void RenderWorkspace::createSettingsPanel() {
         "The selected video encoder is unchanged.");
     gpu_composition_check_->setAccessibleDescription(gpu_description);
     gpu_composition_check_->setToolTip(gpu_description);
+    gpu_composition_check_->setChecked(true);
     video_form->addRow(gpu_composition_check_);
     hardware_decoding_check_ = new QCheckBox(QCoreApplication::translate("RenderWorkspace", "Use hardware video decoding (Experimental)"), video_group);
     hardware_decoding_check_->setObjectName("renderHardwareDecodingCheck");
     hardware_decoding_check_->setToolTip(QCoreApplication::translate("RenderWorkspace", "Accelerates supported video sources for this queued export. Uses CPU automatically when needed."));
+    hardware_decoding_check_->setChecked(true);
     video_form->addRow(hardware_decoding_check_);
     gpu_warning_ = new QLabel(video_group);
     gpu_warning_->setObjectName("renderGpuWarning");

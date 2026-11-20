@@ -3,8 +3,9 @@
 Status: **Windows/NVIDIA implemented and native integration verified;
 human acceptance and other native platforms pending**.
 This extends the original composition, texture-delivery, and export experiments.
-Implementation and hardware acceptance are separate gates. Experimental options
-remain disabled by default; project formats, history, audio, and handoffs retain
+Implementation and hardware acceptance are separate gates. GPU composition and hardware
+decoding are enabled by default (2026-11-20 decision, see the
+[staged plan](GPU_ACCELERATION_PLAN.md)); hardware encoders and Vulkan remain opt-in; project formats, history, audio, and handoffs retain
 their current contracts.
 
 ## Implemented boundaries

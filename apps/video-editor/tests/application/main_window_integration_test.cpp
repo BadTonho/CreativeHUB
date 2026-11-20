@@ -1985,6 +1985,7 @@ public:
                 auto* dialog = qobject_cast<settings::SettingsDialog*>(QApplication::activeModalWidget());
                 auto* checkbox = dialog ? dialog->findChild<QCheckBox*>("gpuCompositionCheckBox") : nullptr;
                 if (checkbox) {
+                    checkbox->setChecked(false);
                     checkbox->setChecked(true);
                     gpu_ui_forwarded = settings::gpuCompositionEnabled() &&
                         render_window.playback_controller_->gpuCompositionEnabled();
@@ -3249,9 +3250,8 @@ public:
             auto* cancel_render_queue = window.render_workspace_->centralPage()
                 ->findChild<QPushButton*>("renderCancelQueueButton");
             auto* gpu_export = render_settings_panel->findChild<QCheckBox*>("renderGpuCompositionCheck");
-            require(gpu_export && !gpu_export->isChecked() && !gpu_export->accessibleDescription().isEmpty(),
-                "Render GPU option must default off and describe fallback accessibly.");
-            gpu_export->setChecked(true);
+            require(gpu_export && gpu_export->isChecked() && !gpu_export->accessibleDescription().isEmpty(),
+                "Render GPU option must default on and describe fallback accessibly.");
             require(render_settings_panel != nullptr &&
                         window.render_settings_dock_->widget() == render_settings_panel &&
                         window.dockWidgetArea(window.render_settings_dock_) ==

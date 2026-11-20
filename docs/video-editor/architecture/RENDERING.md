@@ -637,8 +637,8 @@ timeline frame, generation and active clip context before a five-second status
 message. Fallback does not emit a playback error or stop the audio clock. If CPU
 also fails, existing playback error handling retains the previous valid preview.
 Motion Studio remains on CPU; it can adopt the shared adapter later. Offline
-export defaults to CPU and independently offers per-job GPU composition with
-RGBA readback. See the [staged GPU plan](../gpu/GPU_ACCELERATION_PLAN.md).
+export independently offers per-job GPU composition with RGBA readback, checked
+by default and falling back to CPU automatically. See the [staged GPU plan](../gpu/GPU_ACCELERATION_PLAN.md).
 
 The Video Editor and Motion Studio use the shared, Qt-independent CPU
 compositor in `libs/composition/` for layer transforms and RGBA frame blending.

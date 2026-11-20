@@ -2,8 +2,8 @@
 
 Status: **implemented experimental stage 2, 2026-10-02; platform acceptance pending**.
 Video Editor is the first consumer. The preference remains **Settings > General >
-Use GPU for timeline preview (Experimental)**, default off. Export independently
-offers default-off per-job [GPU composition](GPU_EXPORT.md); it uses RGBA readback.
+Use GPU for timeline preview (Experimental)**, default **on** (since 2026-11-20).
+Export independently offers per-job, default-on [GPU composition](GPU_EXPORT.md); it uses RGBA readback.
 Formats, application versions and shortcuts are unchanged.
 
 ## Public shared backend

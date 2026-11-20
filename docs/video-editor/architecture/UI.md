@@ -120,15 +120,15 @@ does not change export settings or project data. See
 [the composition boundary](RENDERING.md#timeline-composition).
 
 **Use hardware video decoding for preview (Experimental)** is a separate global
-preference, off by default. It requests compatible hardware decoding and preserves
-software recovery. Render has an independent **Use hardware video decoding
+preference, **on by default** (stored `false` choices are kept). It requests compatible
+hardware decoding and preserves software recovery. Render has an independent **Use hardware video decoding
 (Experimental)** checkbox captured in each item. Hardware encoders display
 **Hardware, Experimental** in the export selector and are never chosen implicitly
 as the initial encoder. See [the pipeline contract](../gpu/GPU_PIPELINE.md).
 
 Render > Video independently offers **Use GPU for export (Experimental)** with
 an accessible description of composition acceleration and automatic CPU fallback.
-It starts unchecked on launch and retains its current choice for subsequent items
+It starts checked on launch and retains its current choice for subsequent items
 in the session. Add to Render Queue captures the choice in each item's settings;
 changing the panel never changes prepared items, history or dirty state. Queue
 tooltips show the requested composition mode. A fallback warning appears in the
@@ -1083,7 +1083,7 @@ menu actions, and worker communication.
 The existing GPU-composition preference also covers compatible built-in visual
 effects and Fusion graphs. Both its tooltip and the independent export GPU
 checkbox explain this scope. Hardware video decoding has a separate global
-preview checkbox and a separate, default-off per-export checkbox. New hardware
+preview checkbox and a separate per-export checkbox, checked on launch. New hardware
 encoders remain labeled experimental and are never selected implicitly.
 
 ## Audio dialogue processing and ducking

@@ -38,7 +38,7 @@ under `docs/video-editor/architecture/` so each document can remain focused and 
 | Media | [Media Boundary](MEDIA.md) | FFmpeg probing, decoding, playback sessions, and ownership |
 | Timeline | [Timeline Boundary](TIMELINE.md) | Timeline model, visual timeline, seeking, and media insertion |
 | Audio | [Audio Boundary](AUDIO.md) | Shared Preview/export mixing, track routes, buses, sends, and Audio workspace behavior |
-| Rendering | [Rendering Boundary](RENDERING.md) | CPU default, shared experimental GPU preview/export, texture delivery, 4K geometry and resource ownership |
+| Rendering | [Rendering Boundary](RENDERING.md) | CPU fallback, GPU preview/export on by default, texture delivery, 4K geometry and resource ownership |
 | Logging | [Logging Boundary](LOGGING.md) | Structured diagnostics, retention, and error policy |
 | Build | [Build and Dependencies](BUILD_AND_DEPENDENCIES.md) | CMake, vcpkg, deployment, and licensing tracking |
 | Scope | [Current Scope and Non-goals](SCOPE.md) | Implemented capabilities and intentionally deferred work |

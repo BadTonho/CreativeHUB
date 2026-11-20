@@ -13,12 +13,12 @@ shared compositor; Image Editor adoption follows its separate plan.
 
 Timeline playback collects ordered decoded layers and evaluated transforms on
 the worker, then uses the shared CPU compositor by default. Settings > General
-offers **Use GPU for timeline preview (Experimental)**, disabled by default,
-stored globally as `performance/gpu_composition_enabled`. The separate public
+offers **Use GPU for timeline preview (Experimental)**, **enabled by default**
+(see the 2026-11-20 decision below), stored globally as `performance/gpu_composition_enabled`. The separate public
 Qt/OpenGL 3.2 Core adapter composes those layers on the worker and automatically
 delivers shared textures when supported, retaining RGBA readback as fallback.
-Export defaults to CPU and offers independent per-job GPU composition through
-Render > Video. Its RGBA readback path supports 1080p, 1440p and 4K UHD; see
+Export offers independent per-job GPU composition through
+Render > Video, checked by default. Its RGBA readback path supports 1080p, 1440p and 4K UHD; see
 [the export contract](GPU_EXPORT.md) and [results](GPU_EXPORT_RESULTS.md).
 See [the rendering boundary](../architecture/RENDERING.md).
 
@@ -106,7 +106,7 @@ and delivery/fallback behave correctly under real-driver lifecycle checks.
 
 ## Stage 3 — GPU offline export (implemented; acceptance pending)
 
-Render > Video exposes **Use GPU for export (Experimental)**, default off on
+Render > Video exposes **Use GPU for export (Experimental)**, default on at
 application launch, retained in the panel during the session and captured in each
 queue item. It is independent of the global preview setting. The queue creates a
 GUI-owned surface; each job owns an isolated worker compositor/context. Shared
@@ -233,6 +233,17 @@ Read `AGENTS.md`, this plan, the rendering architecture and regression guide;
 inspect the current shared backend and repository before the next stage.
 After each delivery, record implemented items, build/test results, platform
 evidence, unresolved issues, and the next stage here.
+
+- 2026-11-20: **maintainer decision (provisional): GPU acceleration is on by
+  default.** Settings > General GPU timeline preview, Settings > General hardware
+  decoding, and the Render > Video GPU-export and hardware-decoding checkboxes now
+  default to enabled. Explicit stored `false` choices are preserved. Automatic
+  still selects OpenGL; Vulkan, hardware encoders and the Windows/NVIDIA native
+  export stay opt-in. CPU recovery is unchanged, so unsupported contexts, limits
+  and driver failures fall back per frame or per job. **Risk/pending:** the Stage 5
+  gate (parity plus gains on more GPUs/OSes) is not met; AMD/Intel, Linux and macOS
+  native acceptance remain pending, and the labels keep "Experimental" until then.
+  Revisit the default if field reports show regressions.
 
 - 2026-10-02: documentation saved; implementation and GPU composition acceptance
   remain planned. Existing GPU presentation remains in place. Coordinate shared
