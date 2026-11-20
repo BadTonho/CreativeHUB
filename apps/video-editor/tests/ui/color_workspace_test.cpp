@@ -963,6 +963,55 @@ int main(int argc, char** argv) {
             mixer_page->findChild<QPushButton*>("colorRgbMixerResetButton")->click();
             require(qFuzzyIsNull(green_red->value()) && !mixer_mono->isChecked() && mixer_preserve->isChecked(),
                     "The page reset must restore every output and the options.");
+            // Motion Effects page (visual stage): sections, enabling and linking.
+            workspace.findChild<QPushButton*>("colorToolButton6")->click();
+            auto* effects_page = workspace.findChild<QWidget*>("colorMotionEffectsPage");
+            require(effects_page && motion_pages->currentWidget()->isAncestorOf(effects_page),
+                    "Motion Effects button 6 must select the Motion Effects page.");
+            for (const char* section : {"TemporalNR", "TemporalThreshold", "SpatialNR",
+                     "SpatialThreshold", "MotionBlur"})
+                require(effects_page->findChild<QPushButton*>(
+                            QStringLiteral("colorMotionEffects%1ResetButton").arg(QLatin1String(section))),
+                        "Each Motion Effects section must have its own reset button.");
+            auto* frames = effects_page->findChild<QComboBox*>("colorMotionEffectsTemporalFrames");
+            auto* temporal_range = effects_page->findChild<QComboBox*>("colorMotionEffectsTemporalRange");
+            auto* temporal_motion = effects_page->findChild<QDoubleSpinBox*>("colorMotionEffectsTemporalMotion");
+            auto* temporal_luma = effects_page->findChild<QDoubleSpinBox*>("colorMotionEffectsTemporalLuma");
+            auto* temporal_chroma = effects_page->findChild<QDoubleSpinBox*>("colorMotionEffectsTemporalChroma");
+            auto* spatial_luma = effects_page->findChild<QDoubleSpinBox*>("colorMotionEffectsSpatialLuma");
+            auto* spatial_chroma = effects_page->findChild<QDoubleSpinBox*>("colorMotionEffectsSpatialChroma");
+            auto* spatial_link = effects_page->findChild<QPushButton*>("colorMotionEffectsSpatialLink");
+            auto* blur_amount = effects_page->findChild<QDoubleSpinBox*>("colorMotionEffectsBlurAmount");
+            require(frames && temporal_range && temporal_motion && temporal_luma && temporal_chroma &&
+                        spatial_luma && spatial_chroma && spatial_link && blur_amount,
+                    "Motion Effects must expose its temporal, spatial and blur controls.");
+            require(frames->currentIndex() == 0 && temporal_range->currentText() == "Medium" &&
+                        qFuzzyCompare(temporal_motion->value(), 50.0) && qFuzzyIsNull(blur_amount->value()) &&
+                        effects_page->findChild<QComboBox*>("colorMotionEffectsSpatialMode")->currentText() == "Faster" &&
+                        effects_page->findChild<QComboBox*>("colorMotionEffectsSpatialRadius")->currentText() == "Small",
+                    "Motion Effects must start at its documented defaults.");
+            require(!temporal_range->isEnabled() && !temporal_luma->isEnabled() &&
+                        !temporal_motion->isEnabled() && spatial_luma->isEnabled(),
+                    "Temporal controls must be disabled while Frames is 0; spatial stays enabled.");
+            frames->setCurrentIndex(2);
+            require(temporal_range->isEnabled() && temporal_luma->isEnabled() && temporal_motion->isEnabled(),
+                    "Temporal controls must enable once Frames is above 0.");
+            spatial_luma->setValue(12.0);
+            require(qFuzzyCompare(spatial_chroma->value(), 12.0),
+                    "Linked Luma and Chroma must mirror each other.");
+            spatial_link->click();
+            spatial_luma->setValue(30.0);
+            require(qFuzzyCompare(spatial_chroma->value(), 12.0),
+                    "Unlinked Luma and Chroma must be independent.");
+            blur_amount->setValue(8.0);
+            effects_page->findChild<QPushButton*>("colorMotionEffectsSpatialThresholdResetButton")->click();
+            require(qFuzzyIsNull(spatial_luma->value()) && qFuzzyIsNull(spatial_chroma->value()) &&
+                        qFuzzyCompare(blur_amount->value(), 8.0) && frames->currentIndex() == 2,
+                    "A section reset must restore only that section.");
+            effects_page->findChild<QPushButton*>("colorMotionEffectsResetButton")->click();
+            require(frames->currentIndex() == 0 && qFuzzyIsNull(blur_amount->value()) &&
+                        spatial_link->isChecked() && !temporal_range->isEnabled(),
+                    "The page reset must restore every section and re-link Luma and Chroma.");
             workspace.findChild<QPushButton*>("colorToolButton1")->click();
         }
         auto* capture_button = workspace.findChild<QPushButton*>("colorCaptureStillButton");

@@ -227,6 +227,8 @@ set(MAIN_EDITOR_CORE_SOURCES
     src/workspaces/color/ui/hdr_wheels_page.h
     src/workspaces/color/ui/rgb_mixer_page.cpp
     src/workspaces/color/ui/rgb_mixer_page.h
+    src/workspaces/color/ui/motion_effects_page.cpp
+    src/workspaces/color/ui/motion_effects_page.h
     src/workspaces/color/ui/color_workspace.cpp
     src/workspaces/color/ui/color_workspace.h
     src/workspaces/audio/ui/audio_workspace.h

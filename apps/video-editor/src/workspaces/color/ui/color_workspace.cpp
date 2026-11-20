@@ -4,6 +4,7 @@
 #include "workspaces/color/ui/camera_raw_page.h"
 #include "workspaces/color/ui/color_match_page.h"
 #include "workspaces/color/ui/hdr_wheels_page.h"
+#include "workspaces/color/ui/motion_effects_page.h"
 #include "workspaces/color/ui/primaries_bars_page.h"
 #include "workspaces/color/ui/rgb_mixer_page.h"
 #include "ui/preview/preview_widget.h"
@@ -1405,9 +1406,9 @@ ColorWorkspace::ColorWorkspace(QWidget* parent) : QWidget(parent) {
         auto* button_row = new QHBoxLayout;
         button_row->setSpacing(4);
         if (entry.align != ButtonAlign::Left) button_row->addStretch();
-        // The Motion Effects dock's buttons select its pages; its first page
-        // are Camera Raw, Color Match, Primaries - Color Bars, HDR Color Wheels and RGB Mixer; the others are still
-        // empty placeholders.
+        // The Motion Effects dock's buttons select its six pages, in order:
+        // Camera Raw, Color Match, Primaries - Color Bars, HDR Color Wheels,
+        // RGB Mixer and Motion Effects (all visual only for now).
         const bool has_pages = QLatin1String(entry.object_name) == QLatin1String("colorMotionEffectsDock");
         QStackedWidget* pages = has_pages ? new QStackedWidget(content) : nullptr;
         auto* page_buttons = has_pages ? new QButtonGroup(content) : nullptr;
@@ -1446,6 +1447,14 @@ ColorWorkspace::ColorWorkspace(QWidget* parent) : QWidget(parent) {
                     scroll->setFrameShape(QFrame::NoFrame);
                     scroll->setWidgetResizable(true);
                     scroll->setWidget(new RgbMixerPage(scroll));
+                    page = scroll;
+                }
+                else if (i == 5) {
+                    auto* scroll = new QScrollArea(pages);
+                    scroll->setObjectName("colorMotionEffectsScroll");
+                    scroll->setFrameShape(QFrame::NoFrame);
+                    scroll->setWidgetResizable(true);
+                    scroll->setWidget(new MotionEffectsPage(scroll));
                     page = scroll;
                 }
                 else page = new QWidget(pages);

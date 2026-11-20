@@ -1,8 +1,9 @@
 # Color Panels Dock
 
 Status: **Stage 1 (visual only) is implemented for pages 1 (Camera Raw), 2 (Color Match),
-3 (Primaries - Color Bars), 4 (High Dynamic Range - Color Wheels) and 5 (RGB Mixer).
-Page 6 is planned; its button selects an empty placeholder page.**
+3 (Primaries - Color Bars), 4 (High Dynamic Range - Color Wheels), 5 (RGB Mixer)
+and 6 (Motion Effects). All six pages are visual only; none edits an image, grade or
+project.**
 The pages described below are not implemented. Control names, ranges and
 defaults are taken from the maintainer's layout reference screenshots and are
 proposals until implemented and recorded as decisions. Behavior marked
@@ -303,7 +304,21 @@ need neighboring frames.
 | Motion Blur | Motion Blur | Number | 0 (off) upward | 0.0 |
 | Per section | Reset | Button | Restores section defaults | n/a |
 
-**Behavior.** *Pending.* Temporal NR averages aligned neighboring frames and
+**Implemented (stage 1, visual only).** Button 6 shows the page
+(`colorMotionEffectsPage`, controls named `colorMotionEffects*`, inside a scroll
+area) in three columns separated by lines: Temporal NR and Temporal Threshold;
+Spatial NR and Spatial Threshold; Motion Blur. Frames offers 0 to 3 and the
+estimation, mode, range and radius dropdowns offer the options in the table
+above. While Frames is 0, the other Temporal NR controls and every Temporal
+Threshold control are disabled; the spatial and blur controls are always
+enabled. In each threshold block a link toggle (on by default) makes Luma and
+Chroma mirror each other; turning it off makes them independent. Each of the five
+sections has its own reset, and the header reset restores everything and
+re-links Luma and Chroma. Number fields use one decimal; Blend is limited to 0 to
+1 (proposed). The "Mo. Est. Type" label is abbreviated as in the reference.
+Nothing is estimated, denoised or blurred.
+
+**Behavior (stage 2).** *Pending.* Temporal NR averages aligned neighboring frames and
 therefore needs motion estimation and frame look-ahead; Spatial NR denoises
 within a frame; Motion Blur synthesizes blur from estimated motion. All three
 are heavy: implementation must be measured on small, medium and heavy projects,
