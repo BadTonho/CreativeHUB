@@ -1,7 +1,7 @@
 # Color Panels Dock
 
-Status: **Stage 1 (visual only) is implemented for page 1, Camera Raw. Pages 2 to 6 are
-planned; their buttons select empty placeholder pages.**
+Status: **Stage 1 (visual only) is implemented for pages 1 (Camera Raw) and 2 (Color
+Match). Pages 3 to 6 are planned; their buttons select empty placeholder pages.**
 The pages described below are not implemented. Control names, ranges and
 defaults are taken from the maintainer's layout reference screenshots and are
 proposals until implemented and recorded as decisions. Behavior marked
@@ -113,17 +113,27 @@ reference values.
 
 | Group | Control | Type | Range | Default |
 | --- | --- | --- | --- | --- |
-| Chart | Chart preset | Dropdown (title bar) | Supported 24-patch charts | First preset |
+| Chart | Chart preset | Dropdown (title bar) | 24-patch chart, 24-patch chart - Legacy | 24-patch chart |
 | Chart | 24 color patches | 4 x 6 grid of swatches | n/a | Reference sRGB values of the preset |
-| Source | Source Gamma | Dropdown | Gamma 2.4, others | Gamma 2.4 |
-| Target | Target Gamma | Dropdown | Gamma 2.4, others | Gamma 2.4 |
-| Target | Target Color Space | Dropdown | Rec.709, others | Rec.709 |
-| Target | Color Temp | Number with unit K | Kelvin | 2000 K |
-| Target | White Level | Number, with enable checkbox | 0 to 1 | 0.1, disabled |
+| Source | Source Gamma | Dropdown | Auto, Gamma 2.2/2.4/2.6, sRGB, Rec.709, Linear | Auto |
+| Target | Target Gamma | Dropdown | Same as Source Gamma | Auto |
+| Target | Target Color Space | Dropdown | Auto, Rec.709, Rec.2020, DCI-P3 D65, sRGB | Auto |
+| Target | Color Temp | Number with unit K | 1000 to 20000 K (proposed) | 6500 K |
+| Target | White Level | Number, with enable checkbox | 0 to 1 | 0.9, disabled until checked |
 | Action | Match | Button | n/a | n/a |
-| Title bar | Reset | Button | n/a | n/a |
+| Title bar | Reset, More actions ("...") | Buttons | n/a | n/a |
 
-**Behavior.** *Pending.* Intended: the user aligns a chart overlay on the
+**Implemented (stage 1, visual only).** Button 2 shows the page
+(`colorColorMatchPage`, controls named `colorColorMatch*`). The 4 x 6 chart
+shows the 24 reference patches (approximate sRGB display values, standard patch
+order) in two layouts selected by the preset: the second preset is the standard
+row-major order and the first mirrors rows 1 and 3. Preset names are generic;
+no vendor name or trademark is used. Reset (the history button) restores the
+preset, dropdowns, 6500 K and White Level 0.9 unchecked. The White Level
+checkbox enables its value. **Match** and "..." do nothing yet. Patches are not
+sampled or editable.
+
+**Behavior (stage 2).** *Pending.* Intended: the user aligns a chart overlay on the
 Viewer frame; **Match** samples the patches, compares them with the preset's
 reference values in the chosen gamma and color space, and writes the result as
 a grade node (Primary Grade values) so it stays editable. Chart overlay

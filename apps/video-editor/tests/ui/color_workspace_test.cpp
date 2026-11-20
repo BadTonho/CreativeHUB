@@ -21,6 +21,8 @@
 #include <QDockWidget>
 #include <QListWidget>
 #include <QMainWindow>
+#include <QSpinBox>
+#include <QStackedWidget>
 #include <QMenu>
 #include <QMimeData>
 #include <QMessageBox>
@@ -790,11 +792,46 @@ int main(int argc, char** argv) {
             require(qFuzzyIsNull(lift->value()) && qFuzzyIsNull(tint->value()) && !mono->isChecked() &&
                         decode_using->currentIndex() == 0,
                     "Camera Raw Use Settings must restore the documented defaults.");
-            // Pages 2-6 are still empty placeholders: selecting one hides Camera Raw.
-            auto* second = workspace.findChild<QPushButton*>("colorToolButton2");
-            second->click();
-            require(!raw_page->isVisibleTo(&workspace) || !raw_page->isVisible(),
-                    "Selecting another Motion Effects page must hide Camera Raw.");
+            // Color Match page (visual stage): chart, presets and defaults.
+            workspace.findChild<QPushButton*>("colorToolButton2")->click();
+            auto* match_page = workspace.findChild<QWidget*>("colorColorMatchPage");
+            auto* motion_pages = workspace.findChild<QStackedWidget*>("colorMotionEffectsPages");
+            require(match_page && motion_pages && motion_pages->currentWidget() == match_page &&
+                        motion_pages->currentWidget() != raw_page,
+                    "Motion Effects button 2 must select the Color Match page.");
+            for (int i = 1; i <= 24; ++i)
+                require(match_page->findChild<QWidget*>(
+                            QStringLiteral("colorColorMatchPatch%1").arg(i)),
+                        "Color Match must show 24 chart patches.");
+            require(!match_page->findChild<QWidget*>("colorColorMatchPatch25"),
+                    "Color Match must show exactly 24 chart patches.");
+            auto* match_preset = match_page->findChild<QComboBox*>("colorColorMatchPreset");
+            auto* match_temp = match_page->findChild<QSpinBox*>("colorColorMatchTemperature");
+            auto* match_white = match_page->findChild<QDoubleSpinBox*>("colorColorMatchWhiteLevel");
+            auto* match_white_on = match_page->findChild<QCheckBox*>("colorColorMatchWhiteLevelEnabled");
+            auto* match_reset = match_page->findChild<QPushButton*>("colorColorMatchResetButton");
+            require(match_preset && match_temp && match_white && match_white_on && match_reset &&
+                        match_page->findChild<QPushButton*>("colorColorMatchMatchButton") &&
+                        match_page->findChild<QComboBox*>("colorColorMatchSourceGamma") &&
+                        match_page->findChild<QComboBox*>("colorColorMatchTargetGamma") &&
+                        match_page->findChild<QComboBox*>("colorColorMatchTargetColorSpace"),
+                    "Color Match must expose its preset, gamma, color space and action controls.");
+            require(match_temp->value() == 6500 && qFuzzyCompare(match_white->value(), 0.9) &&
+                        !match_white->isEnabled(),
+                    "Color Match must start at 6500 K with White Level 0.9 disabled.");
+            const auto patch_before = match_page->findChild<QWidget*>("colorColorMatchPatch1")
+                                          ->styleSheet();
+            match_preset->setCurrentIndex(1);
+            require(match_page->findChild<QWidget*>("colorColorMatchPatch1")->styleSheet() !=
+                        patch_before,
+                    "Changing the Color Match preset must relayout the chart patches.");
+            match_white_on->setChecked(true);
+            require(match_white->isEnabled(), "White Level checkbox must enable the value.");
+            match_temp->setValue(5000);
+            match_reset->click();
+            require(match_preset->currentIndex() == 0 && match_temp->value() == 6500 &&
+                        !match_white_on->isChecked() && !match_white->isEnabled(),
+                    "Color Match reset must restore the documented defaults.");
             workspace.findChild<QPushButton*>("colorToolButton1")->click();
         }
         auto* capture_button = workspace.findChild<QPushButton*>("colorCaptureStillButton");

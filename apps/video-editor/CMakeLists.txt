@@ -219,6 +219,8 @@ set(MAIN_EDITOR_CORE_SOURCES
     src/workspaces/audio/ui/audio_effect_chain_dialog.h
     src/workspaces/color/ui/camera_raw_page.cpp
     src/workspaces/color/ui/camera_raw_page.h
+    src/workspaces/color/ui/color_match_page.cpp
+    src/workspaces/color/ui/color_match_page.h
     src/workspaces/color/ui/color_workspace.cpp
     src/workspaces/color/ui/color_workspace.h
     src/workspaces/audio/ui/audio_workspace.h
