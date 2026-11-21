@@ -4,6 +4,8 @@
 #include <QHBoxLayout>
 #include <QImageReader>
 #include <QLabel>
+#include <QListWidget>
+#include <QListWidgetItem>
 #include <QMouseEvent>
 #include <QStyle>
 #include <QToolButton>
@@ -117,6 +119,15 @@ QString compactMediaBrowserName(std::string_view display_name) {
     const auto name = fromUtf8(std::string(display_name));
     if (name.size() <= kMaximumVisibleCharacters) return name;
     return name.left(kMaximumVisibleCharacters) + QStringLiteral("...");
+}
+
+QListWidgetItem* createMediaBrowserItem(
+    const QString& compact_name,
+    const QString& full_name,
+    QListWidget* parent) {
+    auto* item = new QListWidgetItem(compact_name, parent);
+    item->setToolTip(full_name);
+    return item;
 }
 
 QStringList stillImageFilePatterns() {

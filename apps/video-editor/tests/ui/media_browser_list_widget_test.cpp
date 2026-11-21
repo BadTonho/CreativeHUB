@@ -66,6 +66,23 @@ int main(int argc, char* argv[]) {
                 "Origina... [Offline]",
             "Offline status must remain visible in the compact item label.");
 
+        QListWidget tooltip_host;
+        const auto* tooltip_bin_item = main_window_detail::createMediaBrowserItem(
+            QStringLiteral("Unsorte..."),
+            QStringLiteral("Unsorted"),
+            &tooltip_host);
+        require(tooltip_bin_item->text() == QStringLiteral("Unsorte..."),
+                "Compact bin labels must remain unchanged.");
+        require(tooltip_bin_item->toolTip() == QStringLiteral("Unsorted"),
+                "Compacted bin labels must expose the full name in the tooltip.");
+        const auto* tooltip_media_item = main_window_detail::createMediaBrowserItem(
+            main_window_detail::compactMediaItemListText(
+                metadata, "OriginalMediaName.mp4", false),
+            QStringLiteral("OriginalMediaName.mp4"),
+            &tooltip_host);
+        require(tooltip_media_item->toolTip() == QStringLiteral("OriginalMediaName.mp4"),
+                "Compacted media labels must expose the full name in the tooltip.");
+
         MediaBrowserListWidget widget;
         widget.resize(420, 240);
         widget.show();
