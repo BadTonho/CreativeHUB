@@ -521,8 +521,10 @@ void MainWindow::populateMediaBrowser(
             const auto relative = active_bin.empty() ? bin : bin.substr(prefix.size());
             if (relative.empty() || relative.find('/') != std::string::npos) continue;
 
-            auto* bin_item = new QListWidgetItem(
-                compactMediaBrowserName(relative), media_list_);
+            auto* bin_item = createMediaBrowserItem(
+                compactMediaBrowserName(relative),
+                QString::fromStdString(relative),
+                media_list_);
             bin_item->setIcon(style()->standardIcon(QStyle::SP_DirIcon));
             bin_item->setData(
                 media_browser_ui::kMediaFullDisplayNameRole,
@@ -548,9 +550,13 @@ void MainWindow::populateMediaBrowser(
                 item.bin_path.rfind(active_bin + '/', 0) != 0) {
                 continue;
             }
-            auto* list_item = new QListWidgetItem(
+            const auto full_name = item.display_name.empty()
+                ? std::string_view(item.metadata.display_name)
+                : std::string_view(item.display_name);
+            auto* list_item = createMediaBrowserItem(
                 compactMediaItemListText(
                     item.metadata, item.display_name, item.offline),
+                fromUtf8(std::string(full_name)),
                 media_list_);
             if (!item.offline) {
                 if (item.metadata.kind == media::MediaKind::Audio) {
