@@ -2,12 +2,16 @@
 #include "workspaces/audio/ui/audio_effect_chain_dialog.h"
 #include "workspaces/audio/ui/audio_ducking_dialog.h"
 
+#include <QApplication>
 #include <QCheckBox>
 #include <QComboBox>
 #include <QCoreApplication>
 #include <QDialog>
 #include <QDialogButtonBox>
 #include <QDoubleSpinBox>
+#include <QDrag>
+#include <QDragEnterEvent>
+#include <QDropEvent>
 #include <QFormLayout>
 #include <QFrame>
 #include <QGridLayout>
@@ -18,6 +22,8 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
+#include <QMimeData>
+#include <QMouseEvent>
 #include <QPainter>
 #include <QPaintEvent>
 #include <QProgressBar>
@@ -108,9 +114,27 @@ public:
         : QWidget(parent), kind_(kind) {
         setFixedHeight(kind_ == Kind::Dynamics ? 38 : 26);
         setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+        setCursor(Qt::PointingHandCursor);
     }
 
+    void setActive(bool active) {
+        if (active_ == active) return;
+        active_ = active;
+        update();
+    }
+
+    std::function<void()> on_click;
+
 protected:
+    void mousePressEvent(QMouseEvent* event) override {
+        if (event->button() == Qt::LeftButton && on_click) {
+            on_click();
+            event->accept();
+            return;
+        }
+        QWidget::mousePressEvent(event);
+    }
+
     void paintEvent(QPaintEvent*) override {
         QPainter p(this);
         p.fillRect(rect(), QColor("#0f1115"));
@@ -124,16 +148,101 @@ protected:
 
         p.setRenderHint(QPainter::Antialiasing, true);
         if (kind_ == Kind::Dynamics) {
-            p.setPen(QPen(QColor("#9cb048"), 1.3));
+            p.setPen(QPen(QColor(active_ ? "#b7cc52" : "#5e6835"), active_ ? 1.6 : 1.1));
             p.drawLine(QPointF(2, h - 2), QPointF(w - 2, 2));
         } else {
-            p.setPen(QPen(QColor("#3bb2c7"), 1.4));
+            p.setPen(QPen(QColor(active_ ? "#3bb2c7" : "#2b5c66"), active_ ? 1.6 : 1.1));
             p.drawLine(QPointF(2, h / 2.0), QPointF(w - 2, h / 2.0));
         }
     }
 
 private:
     Kind kind_;
+    bool active_ = false;
+};
+
+class AudioFxCard final : public QFrame {
+public:
+    explicit AudioFxCard(QString fx_id, QWidget* parent = nullptr)
+        : QFrame(parent), fx_id_(std::move(fx_id)) {
+        setCursor(Qt::OpenHandCursor);
+    }
+
+    std::function<void(const QString&)> on_activate;
+
+protected:
+    void mousePressEvent(QMouseEvent* event) override {
+        if (event->button() == Qt::LeftButton) {
+            drag_start_ = event->pos();
+        }
+        QFrame::mousePressEvent(event);
+    }
+
+    void mouseMoveEvent(QMouseEvent* event) override {
+        if ((event->buttons() & Qt::LeftButton) &&
+            (event->pos() - drag_start_).manhattanLength() >= QApplication::startDragDistance()) {
+            auto* drag = new QDrag(this);
+            auto* mime = new QMimeData();
+            mime->setData(QStringLiteral("application/x-creative-suite-audio-fx"),
+                          fx_id_.toUtf8());
+            drag->setMimeData(mime);
+            drag->exec(Qt::CopyAction);
+            return;
+        }
+        QFrame::mouseMoveEvent(event);
+    }
+
+    void mouseDoubleClickEvent(QMouseEvent* event) override {
+        if (event->button() == Qt::LeftButton && on_activate) {
+            on_activate(fx_id_);
+            event->accept();
+            return;
+        }
+        QFrame::mouseDoubleClickEvent(event);
+    }
+
+private:
+    QString fx_id_;
+    QPoint drag_start_;
+};
+
+class MixerStripFrame final : public QFrame {
+public:
+    explicit MixerStripFrame(QWidget* parent = nullptr) : QFrame(parent) {
+        setAcceptDrops(true);
+    }
+
+    std::function<void()> on_select;
+    std::function<void(const QString&)> on_drop_fx;
+
+protected:
+    void mousePressEvent(QMouseEvent* event) override {
+        if (event->button() == Qt::LeftButton && on_select) {
+            on_select();
+        }
+        QFrame::mousePressEvent(event);
+    }
+
+    void dragEnterEvent(QDragEnterEvent* event) override {
+        if (event->mimeData() != nullptr &&
+            event->mimeData()->hasFormat(QStringLiteral("application/x-creative-suite-audio-fx"))) {
+            event->acceptProposedAction();
+            return;
+        }
+        QFrame::dragEnterEvent(event);
+    }
+
+    void dropEvent(QDropEvent* event) override {
+        if (event->mimeData() != nullptr &&
+            event->mimeData()->hasFormat(QStringLiteral("application/x-creative-suite-audio-fx"))) {
+            const auto fx_id = QString::fromUtf8(
+                event->mimeData()->data(QStringLiteral("application/x-creative-suite-audio-fx")));
+            if (on_drop_fx) on_drop_fx(fx_id);
+            event->acceptProposedAction();
+            return;
+        }
+        QFrame::dropEvent(event);
+    }
 };
 
 class LoudnessScaleWidget final : public QWidget {
@@ -543,29 +652,31 @@ void AudioWorkspace::createPanels(QWidget* parent) {
     fx_grid->setSpacing(5);
     fx_scroll->grid = fx_grid;
 
-    struct FxEntry { const char* badge; const char* name; };
+    struct FxEntry { const char* id; const char* badge; const char* name; };
     static constexpr FxEntry kStudioFx[] = {
-        {"FX", "Chain FX"}, {"CH", "Chorus"},
-        {"SS", "De-Esser"}, {"MM", "De-Hummer"},
-        {"DL", "Delay"}, {"DP", "Dialogue Processor"},
-        {"DS", "Distortion"}, {"EC", "Echo"},
-        {"EQ", "Studio EQ"}, {"FL", "Flanger"},
-        {"FS", "Foley Sampler"}, {"FA", "Frequency Analyzer"},
-        {"GN", "Gain"}, {"LF", "LFE Filter"},
-        {"LM", "Limiter"}, {"LU", "Loudness Meter"},
-        {"MT", "Meter"}, {"MD", "Modulation"},
-        {"MN", "Monitor"}, {"MB", "Multiband Compressor"},
-        {"NR", "Noise Reduction"}, {"PM", "Phase Meter"},
-        {"PT", "Pitch"}, {"RV", "Reverb"},
-        {"SC", "Soft Clipper"}, {"SF", "Stereo Fixer"},
-        {"SW", "Stereo Width"}, {"SA", "Surround Analyzer"},
-        {"VC", "Vocal Channel"}
+        {"chain_fx", "FX", "Chain FX"}, {"chorus", "CH", "Chorus"},
+        {"de_esser", "SS", "De-Esser"}, {"de_hummer", "MM", "De-Hummer"},
+        {"delay", "DL", "Delay"}, {"dialogue_processor", "DP", "Dialogue Processor"},
+        {"distortion", "DS", "Distortion"}, {"echo", "EC", "Echo"},
+        {"studio_eq", "EQ", "Studio EQ"}, {"flanger", "FL", "Flanger"},
+        {"foley_sampler", "FS", "Foley Sampler"}, {"frequency_analyzer", "FA", "Frequency Analyzer"},
+        {"gain", "GN", "Gain"}, {"lfe_filter", "LF", "LFE Filter"},
+        {"limiter", "LM", "Limiter"}, {"loudness_meter", "LU", "Loudness Meter"},
+        {"meter", "MT", "Meter"}, {"modulation", "MD", "Modulation"},
+        {"monitor", "MN", "Monitor"}, {"multiband_compressor", "MB", "Multiband Compressor"},
+        {"noise_reduction", "NR", "Noise Reduction"}, {"phase_meter", "PM", "Phase Meter"},
+        {"pitch", "PT", "Pitch"}, {"reverb", "RV", "Reverb"},
+        {"soft_clipper", "SC", "Soft Clipper"}, {"stereo_fixer", "SF", "Stereo Fixer"},
+        {"stereo_width", "SW", "Stereo Width"}, {"surround_analyzer", "SA", "Surround Analyzer"},
+        {"vocal_channel", "VC", "Vocal Channel"}
     };
     for (const auto& entry : kStudioFx) {
-        auto* card = new QFrame(fx_content);
+        auto* card = new AudioFxCard(QString::fromLatin1(entry.id), fx_content);
         card->setObjectName("audioFxCard");
         card->setFixedHeight(26);
         card->setMinimumWidth(0);
+        card->setToolTip(translated("Double-click or drag onto a track to apply"));
+        card->on_activate = [this](const QString& fx_id) { applyAudioFx(fx_id); };
         auto* card_layout = new QHBoxLayout(card);
         card_layout->setContentsMargins(0, 0, 6, 0);
         card_layout->setSpacing(0);
@@ -1140,7 +1251,13 @@ void AudioWorkspace::refreshTracks(
             strip.meter_name = strip.meter_card->findChild<QLabel*>("audioMeterBadge");
             meter_layout_->addWidget(strip.meter_card);
 
-            strip.mixer_card = new QFrame(mixer_panel_);
+            auto* strip_frame = new MixerStripFrame(mixer_panel_);
+            strip_frame->on_select = [this, id = strip.id] { selected_track_id_ = id; };
+            strip_frame->on_drop_fx = [this, id = strip.id](const QString& fx_id) {
+                selected_track_id_ = id;
+                applyAudioFx(fx_id, id);
+            };
+            strip.mixer_card = strip_frame;
             strip.mixer_card->setObjectName("audioTrackMixerCard");
             strip.mixer_card->setFixedWidth(84);
             auto* layout = new QVBoxLayout(strip.mixer_card);
@@ -1173,14 +1290,14 @@ void AudioWorkspace::refreshTracks(
             auto* tfx_layout = new QVBoxLayout(track_fx_box);
             tfx_layout->setContentsMargins(0, 0, 0, 0);
             tfx_layout->setSpacing(2);
-            auto* voice_iso_pill = new QPushButton(QStringLiteral("Voice Iso"), track_fx_box);
-            voice_iso_pill->setCheckable(true);
-            voice_iso_pill->setFixedHeight(19);
-            auto* dial_lev_pill = new QPushButton(QStringLiteral("Dial Lev"), track_fx_box);
-            dial_lev_pill->setCheckable(true);
-            dial_lev_pill->setFixedHeight(19);
-            tfx_layout->addWidget(voice_iso_pill);
-            tfx_layout->addWidget(dial_lev_pill);
+            strip.voice_iso_btn = new QPushButton(QStringLiteral("Voice Iso"), track_fx_box);
+            strip.voice_iso_btn->setCheckable(true);
+            strip.voice_iso_btn->setFixedHeight(19);
+            strip.dial_lev_btn = new QPushButton(QStringLiteral("Dial Lev"), track_fx_box);
+            strip.dial_lev_btn->setCheckable(true);
+            strip.dial_lev_btn->setFixedHeight(19);
+            tfx_layout->addWidget(strip.voice_iso_btn);
+            tfx_layout->addWidget(strip.dial_lev_btn);
             layout->addWidget(track_fx_box);
 
             auto* order_label = new QLabel(
@@ -1196,6 +1313,7 @@ void AudioWorkspace::refreshTracks(
             fx_btn->setToolTip(translated("Track audio effects"));
             layout->addWidget(fx_btn);
             connect(fx_btn, &QPushButton::clicked, this, [this, id = strip.id] {
+                selected_track_id_ = id;
                 for (const auto& row : track_effects_rows_) {
                     if (row.id == id && row.edit != nullptr) {
                         row.edit->click();
@@ -1204,17 +1322,64 @@ void AudioWorkspace::refreshTracks(
                 }
             });
 
-            auto* fx_in_btn = new QPushButton(QStringLiteral("In"), strip.mixer_card);
-            fx_in_btn->setCheckable(true);
-            fx_in_btn->setFixedHeight(20);
-            layout->addWidget(fx_in_btn);
+            strip.effects_in_btn = new QPushButton(QStringLiteral("In"), strip.mixer_card);
+            strip.effects_in_btn->setCheckable(true);
+            strip.effects_in_btn->setFixedHeight(20);
+            layout->addWidget(strip.effects_in_btn);
 
             auto* dyn_w = new MiniCurveWidget(MiniCurveWidget::Kind::Dynamics, strip.mixer_card);
             dyn_w->setFixedHeight(42);
+            dyn_w->on_click = [this, id = strip.id] { applyAudioFx(QStringLiteral("multiband_compressor"), id); };
+            strip.dyn_widget = dyn_w;
             layout->addWidget(dyn_w);
             auto* eq_w = new MiniCurveWidget(MiniCurveWidget::Kind::Eq, strip.mixer_card);
             eq_w->setFixedHeight(28);
+            eq_w->on_click = [this, id = strip.id] { applyAudioFx(QStringLiteral("studio_eq"), id); };
+            strip.eq_widget = eq_w;
             layout->addWidget(eq_w);
+
+            connect(strip.voice_iso_btn, &QPushButton::clicked, this, [this, id = strip.id](bool checked) {
+                for (const auto& row : track_effects_rows_) {
+                    if (row.id == id && row.isolation != nullptr) {
+                        auto settings = row.isolation->settings();
+                        settings.enabled = checked;
+                        emit voiceIsolationChanged(false, id, std::move(settings));
+                        break;
+                    }
+                }
+            });
+            connect(strip.dial_lev_btn, &QPushButton::clicked, this, [this, id = strip.id](bool checked) {
+                for (const auto& row : track_effects_rows_) {
+                    if (row.id != id) continue;
+                    auto effects = row.effects;
+                    auto it = std::find_if(effects.begin(), effects.end(), [](const auto& fx) {
+                        return std::holds_alternative<timeline::AudioDialogueCleanupParameters>(fx.parameters);
+                    });
+                    if (it != effects.end()) {
+                        it->enabled = checked;
+                    } else if (checked) {
+                        timeline::AudioEffectInstance fx;
+                        fx.parameters = timeline::AudioDialogueCleanupParameters{};
+                        fx.enabled = true;
+                        effects.push_back(std::move(fx));
+                    }
+                    emit trackAudioEffectsChanged(id, std::move(effects));
+                    break;
+                }
+            });
+            connect(strip.effects_in_btn, &QPushButton::clicked, this, [this, id = strip.id](bool checked) {
+                for (const auto& row : track_effects_rows_) {
+                    if (row.id != id) continue;
+                    if (row.effects.empty()) {
+                        if (row.edit) row.edit->click();
+                        break;
+                    }
+                    auto effects = row.effects;
+                    for (auto& fx : effects) fx.enabled = checked;
+                    emit trackAudioEffectsChanged(id, std::move(effects));
+                    break;
+                }
+            });
 
             auto* sends_header = new QHBoxLayout;
             sends_header->setSpacing(2);
@@ -1575,6 +1740,31 @@ void AudioWorkspace::refreshTracks(
         { const QSignalBlocker blocker(found->solo); found->solo->setChecked(
             std::find(solo_track_ids_.begin(), solo_track_ids_.end(), track->track_id) !=
                 solo_track_ids_.end()); }
+        if (found->voice_iso_btn != nullptr) {
+            const QSignalBlocker blocker(found->voice_iso_btn);
+            found->voice_iso_btn->setChecked(track->voice_isolation.enabled);
+        }
+        bool has_enabled_fx = false;
+        bool has_dial_lev = false;
+        bool has_dyn = false;
+        bool has_eq = false;
+        for (const auto& fx : track->audio_effects) {
+            if (!fx.enabled) continue;
+            has_enabled_fx = true;
+            if (std::holds_alternative<timeline::AudioDialogueCleanupParameters>(fx.parameters)) has_dial_lev = true;
+            if (std::holds_alternative<timeline::AudioCompressorParameters>(fx.parameters)) has_dyn = true;
+            if (std::holds_alternative<timeline::AudioEqualizerParameters>(fx.parameters)) has_eq = true;
+        }
+        if (found->dial_lev_btn != nullptr) {
+            const QSignalBlocker blocker(found->dial_lev_btn);
+            found->dial_lev_btn->setChecked(has_dial_lev);
+        }
+        if (found->effects_in_btn != nullptr) {
+            const QSignalBlocker blocker(found->effects_in_btn);
+            found->effects_in_btn->setChecked(has_enabled_fx);
+        }
+        if (auto* dyn = static_cast<MiniCurveWidget*>(found->dyn_widget)) dyn->setActive(has_dyn);
+        if (auto* eq = static_cast<MiniCurveWidget*>(found->eq_widget)) eq->setActive(has_eq);
         fillBusCombo(found->output, buses, track->output_bus_id);
         {
             const QSignalBlocker blocker(found->send_destination);
@@ -1928,6 +2118,81 @@ void AudioWorkspace::setSelectedClip(const timeline::TimelineClip* clip) {
         selected_clip_effects_->setEnabled(valid);
         selected_clip_effects_->setText(valid ? translated("Clip audio effects — %1").arg(selected_clip_name_) :
             translated("Select an audio clip to edit its effects"));
+    }
+}
+
+void AudioWorkspace::applyAudioFx(
+    const QString& fx_id,
+    std::optional<timeline::TrackId> track_id,
+    std::optional<timeline::ClipId> clip_id) {
+    if (clip_id.has_value() && *clip_id != 0 && *clip_id == selected_clip_id_) {
+        auto chain = selected_clip_chain_;
+        timeline::AudioEffectInstance effect;
+        bool has_effect = true;
+        if (fx_id == QStringLiteral("studio_eq")) effect.parameters = timeline::AudioEqualizerParameters{};
+        else if (fx_id == QStringLiteral("multiband_compressor") || fx_id == QStringLiteral("limiter") || fx_id == QStringLiteral("soft_clipper")) effect.parameters = timeline::AudioCompressorParameters{};
+        else if (fx_id == QStringLiteral("de_esser") || fx_id == QStringLiteral("dialogue_processor")) effect.parameters = timeline::AudioDialogueCleanupParameters{};
+        else if (fx_id == QStringLiteral("noise_reduction")) effect.parameters = timeline::AudioNoiseReductionParameters{};
+        else if (fx_id == QStringLiteral("de_hummer")) effect.parameters = timeline::AudioRepairParameters{};
+        else has_effect = false;
+        if (has_effect) {
+            effect.enabled = true;
+            const bool exists = std::any_of(chain.begin(), chain.end(), [&effect](const auto& item) {
+                return item.parameters.index() == effect.parameters.index();
+            });
+            if (!exists) {
+                chain.push_back(std::move(effect));
+                emit clipAudioEffectsChanged(*clip_id, chain);
+            }
+        }
+        AudioEffectChainDialog dialog(
+            translated("Clip audio effects — %1").arg(selected_clip_name_),
+            chain, mixer_panel_);
+        if (dialog.exec() == QDialog::Accepted) {
+            emit clipAudioEffectsChanged(*clip_id, dialog.effects());
+        }
+        return;
+    }
+
+    timeline::TrackId target_track = track_id.value_or(selected_track_id_);
+    if (target_track == 0 && !strips_.empty()) {
+        target_track = strips_.front().id;
+    }
+    if (target_track == 0) return;
+
+    auto found = std::find_if(track_effects_rows_.begin(), track_effects_rows_.end(),
+        [target_track](const TrackEffectsRow& row) { return row.id == target_track; });
+    if (found == track_effects_rows_.end()) return;
+
+    auto effects = found->effects;
+    timeline::AudioEffectInstance effect;
+    bool has_effect = true;
+    if (fx_id == QStringLiteral("studio_eq")) effect.parameters = timeline::AudioEqualizerParameters{};
+    else if (fx_id == QStringLiteral("multiband_compressor") || fx_id == QStringLiteral("limiter") || fx_id == QStringLiteral("soft_clipper")) effect.parameters = timeline::AudioCompressorParameters{};
+    else if (fx_id == QStringLiteral("de_esser") || fx_id == QStringLiteral("dialogue_processor")) effect.parameters = timeline::AudioDialogueCleanupParameters{};
+    else if (fx_id == QStringLiteral("noise_reduction")) effect.parameters = timeline::AudioNoiseReductionParameters{};
+    else if (fx_id == QStringLiteral("de_hummer")) effect.parameters = timeline::AudioRepairParameters{};
+    else has_effect = false;
+
+    if (has_effect) {
+        effect.enabled = true;
+        const bool exists = std::any_of(effects.begin(), effects.end(), [&effect](const auto& item) {
+            return item.parameters.index() == effect.parameters.index();
+        });
+        if (!exists) {
+            effects.push_back(std::move(effect));
+            if (timeline::validAudioEffectChain(effects)) {
+                emit trackAudioEffectsChanged(target_track, effects);
+            }
+        }
+    }
+
+    AudioEffectChainDialog dialog(
+        translated("Track audio effects — %1").arg(found->name->text()),
+        effects, mixer_panel_);
+    if (dialog.exec() == QDialog::Accepted &&
+        timeline::validAudioEffectChain(dialog.effects())) {
+        emit trackAudioEffectsChanged(target_track, dialog.effects());
     }
 }
 

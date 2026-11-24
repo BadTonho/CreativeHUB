@@ -632,6 +632,11 @@ void MainWindow::createWorkspace() {
             this, &MainWindow::removeAudioBus);
     connect(audio_workspace_, &ui::AudioWorkspace::soloStateChanged,
             this, &MainWindow::setAudioSoloState);
+    connect(editUi().timeline, &timeline::TimelineWidget::audioFxDropRequested,
+            audio_workspace_, [this](const QString& fx_id, timeline::TrackId track_id,
+                                     std::optional<timeline::ClipId> clip_id) {
+                audio_workspace_->applyAudioFx(fx_id, track_id, clip_id);
+            });
     applyMonitorVolumePercent(edit_workspace_->ui().monitor_volume->value());
 
     auto* preview_dock_contents = new QWidget(this);

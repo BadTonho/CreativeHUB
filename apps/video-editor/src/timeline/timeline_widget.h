@@ -143,6 +143,10 @@ signals:
         const QString& effect_id,
         timeline::TrackId track_id,
         qint64 timeline_frame);
+    void audioFxDropRequested(
+        const QString& fx_id,
+        timeline::TrackId track_id,
+        std::optional<timeline::ClipId> clip_id);
     void transitionSelected(
         timeline::TrackId track_id,
         timeline::ClipId from_clip_id,

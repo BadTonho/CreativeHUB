@@ -43,6 +43,9 @@ public:
         float master_peak);
     void clearPeaks();
     void setSelectedClip(const timeline::TimelineClip* clip);
+    void applyAudioFx(const QString& fx_id,
+                      std::optional<timeline::TrackId> track_id = std::nullopt,
+                      std::optional<timeline::ClipId> clip_id = std::nullopt);
     void clearSoloState();
     void setIsolationState(bool clip, quint64 id, QString state, int progress);
 
@@ -96,6 +99,11 @@ private:
         QLabel* pan_value = nullptr;
         QCheckBox* mute = nullptr;
         QCheckBox* solo = nullptr;
+        QPushButton* voice_iso_btn = nullptr;
+        QPushButton* dial_lev_btn = nullptr;
+        QPushButton* effects_in_btn = nullptr;
+        QWidget* dyn_widget = nullptr;
+        QWidget* eq_widget = nullptr;
         QComboBox* output = nullptr;
         QComboBox* send_destination = nullptr;
         QPushButton* add_send = nullptr;
@@ -139,6 +147,7 @@ private:
     timeline::VoiceIsolationSettings selected_clip_isolation_settings_;
     std::map<std::pair<bool, quint64>, std::pair<QString, int>> isolation_states_;
     timeline::ClipId selected_clip_id_ = 0;
+    timeline::TrackId selected_track_id_ = 0;
     QString selected_clip_name_;
     std::vector<timeline::AudioEffectInstance> selected_clip_chain_;
     QWidget* meter_page_ = nullptr;

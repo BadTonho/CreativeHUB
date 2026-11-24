@@ -2306,6 +2306,8 @@ void TimelineWidget::dropEvent(QDropEvent* event) {
 }
 
 bool TimelineWidget::isSupportedDrop(const QMimeData* mime_data) const noexcept {
+    if (mime_data && mime_data->hasFormat(QStringLiteral("application/x-creative-suite-audio-fx")))
+        return true;
     if (mime_data && mime_data->hasFormat(ui::kEffectIdMimeType))
         return effects::isDraggable(QString::fromUtf8(mime_data->data(ui::kEffectIdMimeType)),
                                     effects::Workspace::Edit);
@@ -2385,6 +2387,11 @@ bool TimelineWidget::updateDropHover(
              (tracks_[*track].kind == TrackKind::Video ||
               tracks_[*track].kind == TrackKind::Audio)));
         preview.valid = media_target_valid;
+    } else if (supported && mime_data->hasFormat(QStringLiteral("application/x-creative-suite-audio-fx"))) {
+        const bool compatible = track.has_value() && tracks_[*track].kind == TrackKind::Audio;
+        preview.valid = compatible;
+        media_target_valid = compatible;
+        accepted = compatible;
     } else if (supported && mime_data->hasFormat(ui::kEffectIdMimeType)) {
         const auto effect_id = QString::fromUtf8(
             mime_data->data(ui::kEffectIdMimeType));
@@ -2447,10 +2454,25 @@ bool TimelineWidget::processDrop(
     const bool is_external_file_drop = !external_paths.isEmpty();
     const bool is_effect_drop = mime_data != nullptr &&
         mime_data->hasFormat(ui::kEffectIdMimeType);
+    const bool is_audio_fx_drop = mime_data != nullptr &&
+        mime_data->hasFormat(QStringLiteral("application/x-creative-suite-audio-fx"));
     if (is_effect_drop && !isSupportedDrop(mime_data)) return false;
-    if ((!is_media_drop && !is_external_file_drop && !is_effect_drop) ||
+    if ((!is_media_drop && !is_external_file_drop && !is_effect_drop && !is_audio_fx_drop) ||
         (!track.has_value() && !empty_group.has_value()) || !frame.has_value()) {
         return false;
+    }
+
+    if (is_audio_fx_drop) {
+        if (!track.has_value() || tracks_[*track].kind != TrackKind::Audio) return false;
+        const auto fx_id = QString::fromUtf8(
+            mime_data->data(QStringLiteral("application/x-creative-suite-audio-fx")));
+        const auto clip = clipAt(position.x(), position.y());
+        const std::optional<ClipId> clip_id = clip.has_value()
+            ? std::optional<ClipId>{tracks_[*track].clips[clip->clip_index].clip_id}
+            : std::nullopt;
+        clearDropHover();
+        emit audioFxDropRequested(fx_id, tracks_[*track].track_id, clip_id);
+        return true;
     }
 
     if (is_external_file_drop) {

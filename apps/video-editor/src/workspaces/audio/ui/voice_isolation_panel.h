@@ -46,6 +46,7 @@ public:
         setState("Off", 0);
     }
     void setSettings(timeline::VoiceIsolationSettings settings) { settings_ = std::move(settings); regenerate_->setEnabled(settings_.enabled); }
+    [[nodiscard]] const timeline::VoiceIsolationSettings& settings() const noexcept { return settings_; }
     void setState(const QString& state, int progress) {
         state_->setText(tr(state.toUtf8().constData())); progress_->setValue(state == "Ready" ? 100 : progress);
         progress_->setVisible(state == "Processing"); cancel_->setEnabled(state == "Processing");
