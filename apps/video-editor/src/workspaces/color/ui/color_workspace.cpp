@@ -89,6 +89,10 @@ QString labelFor(std::string_view id) {
     if (id == "video.contrast") return QCoreApplication::translate("ColorWorkspace", "Contrast");
     if (id == "video.saturation") return QCoreApplication::translate("ColorWorkspace", "Saturation");
     if (id == "video.grayscale") return QCoreApplication::translate("ColorWorkspace", "Grayscale");
+    if (id == "video.color_blur") return QCoreApplication::translate("ColorWorkspace", "Color Blur");
+    if (id == "video.color_key") return QCoreApplication::translate("ColorWorkspace", "Color Key");
+    if (id == "video.input_sizing") return QCoreApplication::translate("ColorWorkspace", "Input Sizing");
+    if (id == "video.color_slice") return QCoreApplication::translate("ColorWorkspace", "Color Slice");
     return QString::fromStdString(std::string(id));
 }
 
@@ -1666,7 +1670,7 @@ ColorWorkspace::ColorWorkspace(QWidget* parent) : QWidget(parent) {
             if (has_pages) {
                 button->setCheckable(true);
                 page_buttons->addButton(button, i);
-                auto build_page = [pages, i, motion_dock, keyframes_dock]() -> QWidget* {
+                auto build_page = [this, pages, i, motion_dock, keyframes_dock]() -> QWidget* {
                 QWidget* page = nullptr;
                 if (!motion_dock) {
                     // Sizing dock: pages 1 to 10 are Curves - Custom, Color
@@ -1704,22 +1708,40 @@ ColorWorkspace::ColorWorkspace(QWidget* parent) : QWidget(parent) {
                         scroll->setObjectName("colorInputSizingScroll");
                         scroll->setFrameShape(QFrame::NoFrame);
                         scroll->setWidgetResizable(true);
-                        scroll->setWidget(new InputSizingPage(scroll));
+                        auto* w = new InputSizingPage(scroll);
+                        input_sizing_page_ = w;
+                        w->setEffectChangedHandler([this](const creative_suite::effects::EffectInstance& eff) {
+                            upsertEffectNode(eff);
+                        });
+                        scroll->setWidget(w);
                         page = scroll;
+                        syncSizingDockPages();
                     } else if (i == 8) {
                         auto* scroll = new QScrollArea(pages);
                         scroll->setObjectName("colorKeyScroll");
                         scroll->setFrameShape(QFrame::NoFrame);
                         scroll->setWidgetResizable(true);
-                        scroll->setWidget(new KeyPage(scroll));
+                        auto* w = new KeyPage(scroll);
+                        key_page_ = w;
+                        w->setEffectChangedHandler([this](const creative_suite::effects::EffectInstance& eff) {
+                            upsertEffectNode(eff);
+                        });
+                        scroll->setWidget(w);
                         page = scroll;
+                        syncSizingDockPages();
                     } else if (i == 7) {
                         auto* scroll = new QScrollArea(pages);
                         scroll->setObjectName("colorBlurScroll");
                         scroll->setFrameShape(QFrame::NoFrame);
                         scroll->setWidgetResizable(true);
-                        scroll->setWidget(new BlurPage(scroll));
+                        auto* w = new BlurPage(scroll);
+                        blur_page_ = w;
+                        w->setEffectChangedHandler([this](const creative_suite::effects::EffectInstance& eff) {
+                            upsertEffectNode(eff);
+                        });
+                        scroll->setWidget(w);
                         page = scroll;
+                        syncSizingDockPages();
                     } else if (i == 6) {
                         auto* scroll = new QScrollArea(pages);
                         scroll->setObjectName("colorSmartMaskScroll");
@@ -1732,22 +1754,123 @@ ColorWorkspace::ColorWorkspace(QWidget* parent) : QWidget(parent) {
                         scroll->setObjectName("colorTrackerScroll");
                         scroll->setFrameShape(QFrame::NoFrame);
                         scroll->setWidgetResizable(true);
-                        scroll->setWidget(new TrackerPage(scroll));
+                        auto* w = new TrackerPage(scroll);
+                        tracker_page_ = w;
+                        w->setHandlers(
+                            [this](int dir) {
+                                if (selected_power_window_) requestPowerWindowTrack(*selected_power_window_, dir);
+                            },
+                            [this] { cancelPowerWindowTracking(); },
+                            [this] {
+                                const auto nid = targetWindowNode();
+                                if (!nid || !selected_power_window_) return;
+                                auto graph = graph_;
+                                if (color::clearPowerWindowTrack(graph, *nid, *selected_power_window_)) {
+                                    if (grade_edit_started_handler_) grade_edit_started_handler_();
+                                    submit(std::move(graph), *nid, true);
+                                    if (grade_edit_finished_handler_) grade_edit_finished_handler_();
+                                }
+                            });
+                        scroll->setWidget(w);
                         page = scroll;
+                        syncSizingDockPages();
                     } else if (i == 4) {
                         auto* scroll = new QScrollArea(pages);
                         scroll->setObjectName("colorWindowScroll");
                         scroll->setFrameShape(QFrame::NoFrame);
                         scroll->setWidgetResizable(true);
-                        scroll->setWidget(new WindowPage(scroll));
+                        auto* w = new WindowPage(scroll);
+                        window_page_ = w;
+                        w->setHandlers(
+                            [this](creative_suite::composition::ShapeMaskKind kind) {
+                                auto nid = targetWindowNode();
+                                auto graph = graph_;
+                                if (!nid) {
+                                    const auto anchor = color::findNode(graph, 1) ? color::NodeId{1} : color::NodeId{};
+                                    if (anchor != 0) {
+                                        (void)color::insertEffectAfter(graph, anchor,
+                                            creative_suite::effects::makeDefaultInstance("video.primary_grade"));
+                                        const auto order = color::effectNodesInOrder(graph);
+                                        if (!order.empty()) nid = order.back();
+                                    }
+                                }
+                                if (!nid) return;
+                                if (const auto wid = color::addPowerWindow(graph, *nid, kind)) {
+                                    if (grade_edit_started_handler_) grade_edit_started_handler_();
+                                    selected_power_window_ = *wid;
+                                    submit(std::move(graph), *nid, true);
+                                    if (grade_edit_finished_handler_) grade_edit_finished_handler_();
+                                }
+                            },
+                            [this](color::PowerWindowId wid) {
+                                const auto nid = targetWindowNode();
+                                if (!nid) return;
+                                auto graph = graph_;
+                                if (color::removePowerWindow(graph, *nid, wid)) {
+                                    if (grade_edit_started_handler_) grade_edit_started_handler_();
+                                    if (selected_power_window_ == wid) selected_power_window_.reset();
+                                    submit(std::move(graph), *nid, true);
+                                    if (grade_edit_finished_handler_) grade_edit_finished_handler_();
+                                }
+                            },
+                            [this](std::optional<color::PowerWindowId> wid) {
+                                selected_power_window_ = wid;
+                                refreshPowerWindowOverlay();
+                                refreshControls();
+                            },
+                            [this](color::PowerWindowId wid, double soft, bool inv, color::WindowCombineMode mode) {
+                                const auto nid = targetWindowNode();
+                                if (!nid) return;
+                                auto graph = graph_;
+                                if (color::setPowerWindowSettings(graph, *nid, wid, soft, inv, mode)) {
+                                    if (grade_edit_started_handler_) grade_edit_started_handler_();
+                                    submit(std::move(graph), *nid, false);
+                                    if (grade_edit_finished_handler_) grade_edit_finished_handler_();
+                                }
+                            },
+                            [this](color::PowerWindowId wid, double cx, double cy, double width, double height, double rot) {
+                                const auto nid = targetWindowNode();
+                                if (!nid) return;
+                                auto graph = graph_;
+                                const auto* node = color::findNode(graph, *nid);
+                                if (!node) return;
+                                const auto found = std::find_if(node->power_windows.begin(), node->power_windows.end(),
+                                    [wid](const auto& win) { return win.id == wid; });
+                                if (found == node->power_windows.end()) return;
+                                auto geom = found->parameters;
+                                geom.center_x = cx;
+                                geom.center_y = cy;
+                                geom.width = width;
+                                geom.height = height;
+                                geom.rotation = rot;
+                                const auto local_frame = std::max<qint64>(0, playhead_frame_ - selected_clip_start_frame_);
+                                if (color::setPowerWindowGeometry(graph, *nid, wid, local_frame, geom)) {
+                                    if (grade_edit_started_handler_) grade_edit_started_handler_();
+                                    submit(std::move(graph), *nid, false);
+                                    if (grade_edit_finished_handler_) grade_edit_finished_handler_();
+                                }
+                            });
+                        scroll->setWidget(w);
                         page = scroll;
+                        syncSizingDockPages();
                     } else if (i == 3) {
                         auto* scroll = new QScrollArea(pages);
                         scroll->setObjectName("colorQualifierScroll");
                         scroll->setFrameShape(QFrame::NoFrame);
                         scroll->setWidgetResizable(true);
-                        scroll->setWidget(new QualifierPage(scroll));
+                        auto* w = new QualifierPage(scroll);
+                        qualifier_page_ = w;
+                        w->setQualifierChangedHandler([this](const creative_suite::effects::TonalQualifier& q) {
+                            auto graph = graph_;
+                            const auto nid = ensureCurvesNode(graph);
+                            if (!nid) return;
+                            if (color::setCurvesQualifier(graph, *nid, q)) {
+                                submit(std::move(graph), *nid, false);
+                            }
+                        });
+                        scroll->setWidget(w);
                         page = scroll;
+                        syncSizingDockPages();
                     } else if (i == 2) {
                         auto* scroll = new QScrollArea(pages);
                         scroll->setObjectName("colorChromaWarpScroll");
@@ -1760,15 +1883,36 @@ ColorWorkspace::ColorWorkspace(QWidget* parent) : QWidget(parent) {
                         scroll->setObjectName("colorSliceScroll");
                         scroll->setFrameShape(QFrame::NoFrame);
                         scroll->setWidgetResizable(true);
-                        scroll->setWidget(new ColorSlicePage(scroll));
+                        auto* w = new ColorSlicePage(scroll);
+                        color_slice_page_ = w;
+                        w->setEffectChangedHandler([this](const creative_suite::effects::EffectInstance& eff) {
+                            upsertEffectNode(eff);
+                        });
+                        scroll->setWidget(w);
                         page = scroll;
+                        syncSizingDockPages();
                     } else if (i == 0) {
                         auto* scroll = new QScrollArea(pages);
                         scroll->setObjectName("colorCurvesScroll");
                         scroll->setFrameShape(QFrame::NoFrame);
                         scroll->setWidgetResizable(true);
-                        scroll->setWidget(new CurvesPage(scroll));
+                        auto* w = new CurvesPage(scroll);
+                        curves_page_ = w;
+                        w->setHandlers(
+                            [this] { if (grade_edit_started_handler_) grade_edit_started_handler_(); },
+                            [this] { if (grade_edit_finished_handler_) grade_edit_finished_handler_(); },
+                            [this](color::CurveKind kind, creative_suite::effects::CurvesPointList pts) {
+                                auto graph = graph_;
+                                const auto nid = ensureCurvesNode(graph);
+                                if (!nid) return;
+                                if (color::setCurvePoints(graph, *nid, kind, std::move(pts))) {
+                                    submit(std::move(graph), *nid, false);
+                                }
+                            },
+                            [this](color::CurveKind) { syncSizingDockPages(); });
+                        scroll->setWidget(w);
                         page = scroll;
+                        syncSizingDockPages();
                     } else {
                         page = new QWidget(pages);
                     }
@@ -3539,6 +3683,148 @@ void ColorWorkspace::refreshControls() {
             "Tracker"), power_window_status_);
     }
     refreshPowerWindowOverlay();
+    syncSizingDockPages();
+}
+
+std::optional<color::NodeId> ColorWorkspace::targetWindowNode() const {
+    if (selected_node_) {
+        const auto* n = color::findNode(graph_, *selected_node_);
+        if (n && (n->type == color::NodeType::Effect || n->type == color::NodeType::Curves)) {
+            return n->id;
+        }
+    }
+    const auto order = color::effectNodesInOrder(graph_);
+    return order.empty() ? std::optional<color::NodeId>{} : std::optional<color::NodeId>{order.front()};
+}
+
+std::optional<color::NodeId> ColorWorkspace::ensureCurvesNode(color::Graph& graph) {
+    if (selected_node_) {
+        const auto* n = color::findNode(graph, *selected_node_);
+        if (n && n->type == color::NodeType::Curves && n->curves) return n->id;
+    }
+    for (const auto& n : graph.nodes) {
+        if (n.type == color::NodeType::Curves && n.curves) return n.id;
+    }
+    color::NodeId anchor = 0;
+    for (const auto& n : graph.nodes) {
+        if (n.type == color::NodeType::Input) { anchor = n.id; break; }
+    }
+    if (anchor == 0) return std::nullopt;
+    if (!color::insertCurvesAfter(graph, anchor)) return std::nullopt;
+    for (const auto& n : graph.nodes) {
+        if (n.type == color::NodeType::Curves && n.curves) return n.id;
+    }
+    return std::nullopt;
+}
+
+void ColorWorkspace::upsertEffectNode(const creative_suite::effects::EffectInstance& effect) {
+    auto graph = graph_;
+    std::optional<color::NodeId> target;
+    if (selected_node_) {
+        const auto* n = color::findNode(graph, *selected_node_);
+        if (n && n->type == color::NodeType::Effect && n->effect && n->effect->id == effect.id) {
+            target = n->id;
+        }
+    }
+    if (!target) {
+        for (const auto& n : graph.nodes) {
+            if (n.type == color::NodeType::Effect && n.effect && n.effect->id == effect.id) {
+                target = n.id;
+                break;
+            }
+        }
+    }
+    if (target) {
+        if (auto* n = color::findNode(graph, *target)) {
+            if (n->effect == effect) return;
+            n->effect = effect;
+            if (grade_edit_started_handler_) grade_edit_started_handler_();
+            submit(std::move(graph), *target, false);
+            if (grade_edit_finished_handler_) grade_edit_finished_handler_();
+        }
+        return;
+    }
+    color::NodeId anchor = 0;
+    if (selected_node_) {
+        const auto* n = color::findNode(graph, *selected_node_);
+        if (n && n->type != color::NodeType::Output) anchor = n->id;
+    }
+    if (anchor == 0) {
+        for (const auto& n : graph.nodes) {
+            if (n.type == color::NodeType::Input) { anchor = n.id; break; }
+        }
+    }
+    if (anchor == 0) return;
+    if (color::insertEffectAfter(graph, anchor, effect)) {
+        std::optional<color::NodeId> created;
+        for (const auto& n : graph.nodes) {
+            if (n.type == color::NodeType::Effect && n.effect && n.effect->id == effect.id) {
+                created = n.id;
+            }
+        }
+        if (grade_edit_started_handler_) grade_edit_started_handler_();
+        submit(std::move(graph), created, true);
+        if (grade_edit_finished_handler_) grade_edit_finished_handler_();
+    }
+}
+
+void ColorWorkspace::syncSizingDockPages() {
+    const auto find_effect = [this](std::string_view id) -> const creative_suite::effects::EffectInstance* {
+        if (selected_node_) {
+            const auto* n = color::findNode(graph_, *selected_node_);
+            if (n && n->type == color::NodeType::Effect && n->effect && n->effect->id == id) {
+                return &(*n->effect);
+            }
+        }
+        for (const auto& n : graph_.nodes) {
+            if (n.type == color::NodeType::Effect && n.effect && n.effect->id == id) {
+                return &(*n.effect);
+            }
+        }
+        return nullptr;
+    };
+    const color::Node* curves_node = nullptr;
+    if (selected_node_) {
+        const auto* n = color::findNode(graph_, *selected_node_);
+        if (n && n->type == color::NodeType::Curves && n->curves) curves_node = n;
+    }
+    if (!curves_node) {
+        for (const auto& n : graph_.nodes) {
+            if (n.type == color::NodeType::Curves && n.curves) { curves_node = &n; break; }
+        }
+    }
+    if (curves_page_ && curves_node && curves_node->curves) {
+        curves_page_->setCurvePoints(curves_page_->currentKind(),
+            curvePointsFor(curves_node->curves->parameters, curves_page_->currentKind()));
+    }
+    if (qualifier_page_ && curves_node && curves_node->curves &&
+        curves_node->curves->parameters.qualifier != creative_suite::effects::TonalQualifier{}) {
+        qualifier_page_->setQualifier(curves_node->curves->parameters.qualifier);
+    }
+    if (window_page_) {
+        const auto nid = targetWindowNode();
+        const auto* n = nid ? color::findNode(graph_, *nid) : nullptr;
+        if (n && (!n->power_windows.empty() || window_page_->isBound())) {
+            window_page_->syncWindows(n->power_windows, selected_power_window_,
+                std::max<qint64>(0, playhead_frame_ - selected_clip_start_frame_));
+        }
+    }
+    if (tracker_page_) {
+        tracker_page_->setTrackingState(
+            selected_power_window_.has_value(), active_power_window_request_id_ != 0);
+    }
+    if (blur_page_) {
+        if (const auto* eff = find_effect("video.color_blur")) blur_page_->setEffect(*eff);
+    }
+    if (key_page_) {
+        if (const auto* eff = find_effect("video.color_key")) key_page_->setEffect(*eff);
+    }
+    if (input_sizing_page_) {
+        if (const auto* eff = find_effect("video.input_sizing")) input_sizing_page_->setEffect(*eff);
+    }
+    if (color_slice_page_) {
+        if (const auto* eff = find_effect("video.color_slice")) color_slice_page_->setEffect(*eff);
+    }
 }
 
 void ColorWorkspace::submit(color::Graph graph, std::optional<color::NodeId> selected,

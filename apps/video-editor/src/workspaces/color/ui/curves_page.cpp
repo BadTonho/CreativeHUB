@@ -11,6 +11,7 @@
 #include <QPainter>
 #include <QPolygonF>
 #include <QPushButton>
+#include <QSignalBlocker>
 #include <QSlider>
 #include <QSpinBox>
 #include <QVBoxLayout>
@@ -44,6 +45,24 @@ public:
         dragging_ = -1;
         publishPointCount();
         update();
+    }
+    void setPoints(std::vector<QPointF> pts) {
+        if (pts.size() < 2) {
+            resetPoints();
+            return;
+        }
+        points_ = std::move(pts);
+        dragging_ = -1;
+        publishPointCount();
+        update();
+    }
+    [[nodiscard]] const std::vector<QPointF>& points() const noexcept { return points_; }
+    void setCallbacks(std::function<void()> started,
+                      std::function<void(const std::vector<QPointF>&)> changed,
+                      std::function<void()> finished) {
+        on_started_ = std::move(started);
+        on_changed_ = std::move(changed);
+        on_finished_ = std::move(finished);
     }
     [[nodiscard]] int pointCount() const noexcept { return static_cast<int>(points_.size()); }
     [[nodiscard]] QPointF pointAt(int index) const { return points_.at(static_cast<std::size_t>(index)); }
@@ -87,6 +106,7 @@ protected:
 
     void mousePressEvent(QMouseEvent* event) override {
         if (event->button() != Qt::LeftButton) return;
+        if (on_started_) on_started_();
         int index = hitTest(event->position());
         if (index < 0) {
             // Add a point between its neighbors by x.
@@ -97,6 +117,7 @@ protected:
             index = static_cast<int>(position - points_.begin());
             points_.insert(position, value);
             publishPointCount();
+            if (on_changed_) on_changed_(points_);
         }
         dragging_ = index;
         update();
@@ -115,15 +136,22 @@ protected:
                 points_[static_cast<std::size_t>(dragging_ + 1)].x() - kGap);
         }
         points_[static_cast<std::size_t>(dragging_)] = QPointF(x, std::clamp(value.y(), 0.0, 1.0));
+        if (on_changed_) on_changed_(points_);
         update();
     }
-    void mouseReleaseEvent(QMouseEvent*) override { dragging_ = -1; }
+    void mouseReleaseEvent(QMouseEvent*) override {
+        if (dragging_ >= 0 && on_finished_) on_finished_();
+        dragging_ = -1;
+    }
     void mouseDoubleClickEvent(QMouseEvent* event) override {
         const int index = hitTest(event->position());
         if (index > 0 && index < static_cast<int>(points_.size()) - 1) {
+            if (on_started_) on_started_();
             points_.erase(points_.begin() + index);
             publishPointCount();
             dragging_ = -1;
+            if (on_changed_) on_changed_(points_);
+            if (on_finished_) on_finished_();
             update();
         }
     }
@@ -152,6 +180,9 @@ private:
 
     std::vector<QPointF> points_;
     int dragging_ = -1;
+    std::function<void()> on_started_;
+    std::function<void(const std::vector<QPointF>&)> on_changed_;
+    std::function<void()> on_finished_;
 };
 
 QPushButton* makeButton(QWidget* parent, const QString& text, const QString& name,
@@ -351,7 +382,42 @@ CurvesPage::CurvesPage(QWidget* parent) : QWidget(parent) {
     body->addWidget(side_host, 2);
     root->addLayout(body, 1);
 
-    connect(reset_all, &QPushButton::clicked, this, [this] { restoreDefaults(); });
+    connect(reset_all, &QPushButton::clicked, this, [this, graph] {
+        restoreDefaults();
+        if (!updating_ && points_changed_) {
+            if (edit_started_) edit_started_();
+            points_changed_(current_kind_, {{0, 0}, {255, 255}});
+            if (edit_finished_) edit_finished_();
+        }
+    });
+    const auto map_button_kind = [](const QString& obj) -> color::CurveKind {
+        if (obj == QLatin1String("colorCurvesHueVsHueModeButton")) return color::CurveKind::HueVsHue;
+        if (obj == QLatin1String("colorCurvesHueVsSatModeButton")) return color::CurveKind::HueVsSaturation;
+        if (obj == QLatin1String("colorCurvesHueVsLumModeButton")) return color::CurveKind::HueVsLuminance;
+        if (obj == QLatin1String("colorCurvesLumVsSatModeButton")) return color::CurveKind::LuminanceVsSaturation;
+        if (obj == QLatin1String("colorCurvesSatVsSatModeButton")) return color::CurveKind::SaturationVsSaturation;
+        return color::CurveKind::Master;
+    };
+    connect(kinds, &QButtonGroup::buttonClicked, this,
+        [this, map_button_kind](QAbstractButton* btn) {
+            if (!btn) return;
+            current_kind_ = map_button_kind(btn->objectName());
+            if (!updating_ && kind_changed_) kind_changed_(current_kind_);
+        });
+    graph->setCallbacks(
+        [this] { if (!updating_ && edit_started_) edit_started_(); },
+        [this](const std::vector<QPointF>& pts) {
+            if (updating_ || !points_changed_) return;
+            creative_suite::effects::CurvesPointList list;
+            list.reserve(pts.size());
+            for (const QPointF& p : pts) {
+                list.push_back({
+                    static_cast<int>(std::clamp(std::lround(p.x() * 255.0), 0L, 255L)),
+                    static_cast<int>(std::clamp(std::lround(p.y() * 255.0), 0L, 255L))});
+            }
+            points_changed_(current_kind_, std::move(list));
+        },
+        [this] { if (!updating_ && edit_finished_) edit_finished_(); });
     connect(findChild<QPushButton*>("colorCurvesEditResetButton"), &QPushButton::clicked, this,
         [this] {
             for (const char* name : {"colorCurvesEditLink", "colorCurvesEditY", "colorCurvesEditR",
@@ -368,6 +434,33 @@ CurvesPage::CurvesPage(QWidget* parent) : QWidget(parent) {
             box->setValue(box->property("defaultValue").toDouble());
         }
     });
+}
+
+void CurvesPage::setHandlers(
+    std::function<void()> edit_started,
+    std::function<void()> edit_finished,
+    std::function<void(color::CurveKind, creative_suite::effects::CurvesPointList)> points_changed,
+    std::function<void(color::CurveKind)> kind_changed) {
+    edit_started_ = std::move(edit_started);
+    edit_finished_ = std::move(edit_finished);
+    points_changed_ = std::move(points_changed);
+    kind_changed_ = std::move(kind_changed);
+}
+
+void CurvesPage::setCurvePoints(color::CurveKind kind,
+                                const creative_suite::effects::CurvesPointList& points) {
+    updating_ = true;
+    current_kind_ = kind;
+    if (auto* graph = dynamic_cast<CurveGraph*>(findChild<QWidget*>("colorCurvesGraph"))) {
+        std::vector<QPointF> normalized;
+        normalized.reserve(points.size());
+        for (const auto& pt : points) {
+            normalized.emplace_back(static_cast<double>(pt.input) / 255.0,
+                                    static_cast<double>(pt.output) / 255.0);
+        }
+        graph->setPoints(std::move(normalized));
+    }
+    updating_ = false;
 }
 
 void CurvesPage::restoreDefaults() {

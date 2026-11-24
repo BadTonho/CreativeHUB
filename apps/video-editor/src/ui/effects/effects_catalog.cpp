@@ -150,6 +150,10 @@ const QVector<Definition>& definitions() {
     static const QVector<Definition> values = [] {
         QVector<Definition> result;
         for (const auto& effect : creative_suite::effects::builtInEffects()) {
+            if (effect.id == "video.color_blur" || effect.id == "video.color_key" ||
+                effect.id == "video.input_sizing" || effect.id == "video.color_slice") {
+                continue;
+            }
             const bool color_supported = effect.id == "video.grayscale" ||
                 effect.id == "video.brightness" || effect.id == "video.contrast" ||
                 effect.id == "video.saturation" || effect.id == "video.primary_grade";

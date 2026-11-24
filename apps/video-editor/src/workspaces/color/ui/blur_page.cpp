@@ -9,6 +9,7 @@
 #include <QPainter>
 #include <QPushButton>
 #include <QRegularExpression>
+#include <QSignalBlocker>
 #include <QSlider>
 #include <QVBoxLayout>
 
@@ -247,7 +248,101 @@ BlurPage::BlurPage(QWidget* parent) : QWidget(parent) {
     footer->addStretch();
     root->addLayout(footer);
 
-    connect(reset_all, &QPushButton::clicked, this, [this] { restoreDefaults(); });
+    connect(kinds, &QButtonGroup::buttonClicked, this, [this, title](QAbstractButton* btn) {
+        if (!btn) return;
+        const QString obj = btn->objectName();
+        if (obj == QLatin1String("colorBlurSharpenModeButton")) {
+            mode_ = 1;
+            title->setText(tr("Blur - Sharpen"));
+        } else if (obj == QLatin1String("colorBlurMistModeButton")) {
+            mode_ = 2;
+            title->setText(tr("Blur - Mist"));
+        } else {
+            mode_ = 0;
+            title->setText(tr("Blur - Blur"));
+        }
+        const bool footer_on = (mode_ != 0);
+        for (const char* n : {"colorBlurCoringSoftness", "colorBlurLevel", "colorBlurMix"}) {
+            if (auto* b = findChild<QDoubleSpinBox*>(QLatin1String(n))) b->setEnabled(footer_on);
+        }
+        emitEffect();
+    });
+    for (auto* box : findChildren<QDoubleSpinBox*>()) {
+        connect(box, qOverload<double>(&QDoubleSpinBox::valueChanged), this,
+            [this](double) { emitEffect(); });
+    }
+    connect(reset_all, &QPushButton::clicked, this, [this] {
+        restoreDefaults();
+        emitEffect();
+    });
+}
+
+void BlurPage::setEffectChangedHandler(
+    std::function<void(const creative_suite::effects::EffectInstance&)> on_changed) {
+    on_changed_ = std::move(on_changed);
+}
+
+void BlurPage::setEffect(const creative_suite::effects::EffectInstance& effect) {
+    updating_ = true;
+    const auto val = [&effect](std::string_view id, double def) {
+        for (const auto& p : effect.parameters) {
+            if (p.id == id) return p.value;
+        }
+        return def;
+    };
+    mode_ = static_cast<int>(std::lround(val("mode", 0.0)));
+    const char* mode_btn = (mode_ == 1) ? "colorBlurSharpenModeButton"
+        : (mode_ == 2) ? "colorBlurMistModeButton" : "colorBlurBlurModeButton";
+    if (auto* b = findChild<QPushButton*>(QLatin1String(mode_btn))) {
+        const QSignalBlocker blocker(b);
+        b->setChecked(true);
+    }
+    const bool footer_on = (mode_ != 0);
+    for (const char* n : {"colorBlurCoringSoftness", "colorBlurLevel", "colorBlurMix"}) {
+        if (auto* box = findChild<QDoubleSpinBox*>(QLatin1String(n))) box->setEnabled(footer_on);
+    }
+    const auto set_spin = [this](const char* obj, double v) {
+        if (auto* box = findChild<QDoubleSpinBox*>(QLatin1String(obj))) {
+            const QSignalBlocker blocker(box);
+            box->setValue(v);
+        }
+    };
+    set_spin("colorBlurRadiusRValue", val("radius_r", 0.5));
+    set_spin("colorBlurRadiusGValue", val("radius_g", 0.5));
+    set_spin("colorBlurRadiusBValue", val("radius_b", 0.5));
+    set_spin("colorBlurRatioRValue", val("hv_ratio_r", 0.5));
+    set_spin("colorBlurRatioGValue", val("hv_ratio_g", 0.5));
+    set_spin("colorBlurRatioBValue", val("hv_ratio_b", 0.5));
+    set_spin("colorBlurScalingRValue", val("scaling_r", 0.25));
+    set_spin("colorBlurScalingGValue", val("scaling_g", 0.25));
+    set_spin("colorBlurScalingBValue", val("scaling_b", 0.25));
+    set_spin("colorBlurCoringSoftness", val("coring_softness", 0.0));
+    set_spin("colorBlurLevel", val("level", 0.0));
+    set_spin("colorBlurMix", val("mix", 100.0));
+    updating_ = false;
+}
+
+void BlurPage::emitEffect() {
+    if (updating_ || !on_changed_) return;
+    auto eff = creative_suite::effects::makeDefaultInstance("video.color_blur");
+    const auto spin = [this](const char* obj, double def) {
+        auto* b = findChild<QDoubleSpinBox*>(QLatin1String(obj));
+        return b ? b->value() : def;
+    };
+    (void)creative_suite::effects::setParameterValue(eff, "mode", static_cast<double>(mode_));
+    (void)creative_suite::effects::setParameterValue(eff, "radius_r", spin("colorBlurRadiusRValue", 0.5));
+    (void)creative_suite::effects::setParameterValue(eff, "radius_g", spin("colorBlurRadiusGValue", 0.5));
+    (void)creative_suite::effects::setParameterValue(eff, "radius_b", spin("colorBlurRadiusBValue", 0.5));
+    (void)creative_suite::effects::setParameterValue(eff, "hv_ratio_r", spin("colorBlurRatioRValue", 0.5));
+    (void)creative_suite::effects::setParameterValue(eff, "hv_ratio_g", spin("colorBlurRatioGValue", 0.5));
+    (void)creative_suite::effects::setParameterValue(eff, "hv_ratio_b", spin("colorBlurRatioBValue", 0.5));
+    (void)creative_suite::effects::setParameterValue(eff, "scaling_r", spin("colorBlurScalingRValue", 0.25));
+    (void)creative_suite::effects::setParameterValue(eff, "scaling_g", spin("colorBlurScalingGValue", 0.25));
+    (void)creative_suite::effects::setParameterValue(eff, "scaling_b", spin("colorBlurScalingBValue", 0.25));
+    (void)creative_suite::effects::setParameterValue(eff, "coring_softness", spin("colorBlurCoringSoftness", 0.0));
+    (void)creative_suite::effects::setParameterValue(eff, "level", spin("colorBlurLevel", 0.0));
+    (void)creative_suite::effects::setParameterValue(eff, "mix", spin("colorBlurMix", 100.0));
+    on_changed_(eff);
 }
 
 void BlurPage::restoreDefaults() {

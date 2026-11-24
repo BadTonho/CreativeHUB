@@ -12,6 +12,7 @@
 #include <QPushButton>
 #include <QRadialGradient>
 #include <QRegularExpression>
+#include <QSignalBlocker>
 #include <QSlider>
 #include <QVBoxLayout>
 
@@ -297,7 +298,95 @@ ColorSlicePage::ColorSlicePage(QWidget* parent) : QWidget(parent) {
     }
     root->addLayout(columns, 1);
 
-    connect(reset_all, &QPushButton::clicked, this, [this] { restoreDefaults(); });
+    for (auto* box : findChildren<QDoubleSpinBox*>()) {
+        connect(box, qOverload<double>(&QDoubleSpinBox::valueChanged), this,
+            [this](double) { emitEffect(); });
+    }
+    for (auto* button : findChildren<QPushButton*>(QRegularExpression(QStringLiteral("ToggleButton$")))) {
+        connect(button, &QPushButton::toggled, this, [this](bool) { emitEffect(); });
+    }
+    connect(reset_all, &QPushButton::clicked, this, [this] {
+        restoreDefaults();
+        emitEffect();
+    });
+}
+
+void ColorSlicePage::setEffectChangedHandler(
+    std::function<void(const creative_suite::effects::EffectInstance&)> on_changed) {
+    on_changed_ = std::move(on_changed);
+}
+
+void ColorSlicePage::setEffect(const creative_suite::effects::EffectInstance& effect) {
+    updating_ = true;
+    const auto val = [&effect](std::string_view id, double def) {
+        for (const auto& p : effect.parameters) {
+            if (p.id == id) return p.value;
+        }
+        return def;
+    };
+    const auto set_spin = [this](const QString& obj, double v) {
+        if (auto* b = findChild<QDoubleSpinBox*>(obj)) {
+            const QSignalBlocker blocker(b);
+            b->setValue(v);
+        }
+    };
+    const auto set_tog = [this](const QString& obj, bool v) {
+        if (auto* b = findChild<QPushButton*>(obj)) {
+            const QSignalBlocker blocker(b);
+            b->setChecked(v);
+        }
+    };
+    set_spin(QStringLiteral("colorSliceGlobalDen"), val("global_den", 0.0));
+    set_spin(QStringLiteral("colorSliceGlobalDenDepth"), val("global_den_depth", 0.0));
+    set_spin(QStringLiteral("colorSliceGlobalSat"), val("global_sat", 1.0));
+    set_spin(QStringLiteral("colorSliceGlobalSatBalance"), val("global_sat_balance", 0.0));
+    set_spin(QStringLiteral("colorSliceGlobalSatDepth"), val("global_sat_depth", 0.0));
+    set_spin(QStringLiteral("colorSliceGlobalHue"), val("global_hue", 0.0));
+    const struct { const char* ui; const char* id; } slices[] = {
+        {"Red", "red"}, {"Skin", "skin"}, {"Yellow", "yellow"}, {"Green", "green"},
+        {"Cyan", "cyan"}, {"Blue", "blue"}, {"Magenta", "magenta"}};
+    for (const auto& s : slices) {
+        const QString p = QStringLiteral("colorSlice") + QLatin1String(s.ui);
+        const std::string id(s.id);
+        set_tog(p + QStringLiteral("ToggleButton"), val(id + "_enabled", 1.0) >= 0.5);
+        set_spin(p + QStringLiteral("Center"), val(id + "_center", 0.0));
+        set_spin(p + QStringLiteral("Hue"), val(id + "_hue", 0.0));
+        set_spin(p + QStringLiteral("ValueA"), val(id + "_density", 0.0));
+        set_spin(p + QStringLiteral("ValueB"), val(id + "_sat", 1.0));
+    }
+    updating_ = false;
+}
+
+void ColorSlicePage::emitEffect() {
+    if (updating_ || !on_changed_) return;
+    auto eff = creative_suite::effects::makeDefaultInstance("video.color_slice");
+    const auto spin = [this](const QString& obj, double def) {
+        auto* b = findChild<QDoubleSpinBox*>(obj);
+        return b ? b->value() : def;
+    };
+    const auto tog = [this](const QString& obj) {
+        auto* b = findChild<QPushButton*>(obj);
+        return (b && b->isChecked()) ? 1.0 : 0.0;
+    };
+    (void)creative_suite::effects::setParameterValue(eff, "global_den", spin(QStringLiteral("colorSliceGlobalDen"), 0.0));
+    (void)creative_suite::effects::setParameterValue(eff, "global_den_depth", spin(QStringLiteral("colorSliceGlobalDenDepth"), 0.0));
+    (void)creative_suite::effects::setParameterValue(eff, "global_sat", spin(QStringLiteral("colorSliceGlobalSat"), 1.0));
+    (void)creative_suite::effects::setParameterValue(eff, "global_sat_balance", spin(QStringLiteral("colorSliceGlobalSatBalance"), 0.0));
+    (void)creative_suite::effects::setParameterValue(eff, "global_sat_depth", spin(QStringLiteral("colorSliceGlobalSatDepth"), 0.0));
+    (void)creative_suite::effects::setParameterValue(eff, "global_hue", spin(QStringLiteral("colorSliceGlobalHue"), 0.0));
+    const struct { const char* ui; const char* id; } slices[] = {
+        {"Red", "red"}, {"Skin", "skin"}, {"Yellow", "yellow"}, {"Green", "green"},
+        {"Cyan", "cyan"}, {"Blue", "blue"}, {"Magenta", "magenta"}};
+    for (const auto& s : slices) {
+        const QString p = QStringLiteral("colorSlice") + QLatin1String(s.ui);
+        const std::string id(s.id);
+        (void)creative_suite::effects::setParameterValue(eff, id + "_enabled", tog(p + QStringLiteral("ToggleButton")));
+        (void)creative_suite::effects::setParameterValue(eff, id + "_center", spin(p + QStringLiteral("Center"), 0.0));
+        (void)creative_suite::effects::setParameterValue(eff, id + "_hue", spin(p + QStringLiteral("Hue"), 0.0));
+        (void)creative_suite::effects::setParameterValue(eff, id + "_density", spin(p + QStringLiteral("ValueA"), 0.0));
+        (void)creative_suite::effects::setParameterValue(eff, id + "_sat", spin(p + QStringLiteral("ValueB"), 1.0));
+    }
+    on_changed_(eff);
 }
 
 void ColorSlicePage::restoreDefaults() {

@@ -10,6 +10,7 @@
 #include <QLabel>
 #include <QPushButton>
 #include <QRegularExpression>
+#include <QSignalBlocker>
 #include <QVBoxLayout>
 
 namespace ui {
@@ -191,14 +192,104 @@ InputSizingPage::InputSizingPage(QWidget* parent) : QWidget(parent) {
     body->addWidget(blanking_host, 2);
     root->addLayout(body, 1);
 
+    connect(modes, &QButtonGroup::idClicked, this, [this, title](int id) {
+        mode_ = id;
+        title->setText(id == 3 ? tr("Sizing - Node Sizing") : tr("Sizing - Input Sizing"));
+        emitEffect();
+    });
+    for (const char* name : {"colorInputSizingPan", "colorInputSizingTilt", "colorInputSizingZoom",
+                             "colorInputSizingRotate", "colorInputSizingWidth", "colorInputSizingHeight",
+                             "colorInputSizingPitch", "colorInputSizingYaw"}) {
+        if (auto* b = findChild<QDoubleSpinBox*>(QLatin1String(name))) {
+            connect(b, qOverload<double>(&QDoubleSpinBox::valueChanged), this,
+                [this](double) { emitEffect(); });
+        }
+    }
+    for (const char* name : {"colorInputSizingFlipHorizontal", "colorInputSizingFlipVertical"}) {
+        if (auto* b = findChild<QPushButton*>(QLatin1String(name))) {
+            connect(b, &QPushButton::toggled, this, [this](bool) { emitEffect(); });
+        }
+    }
     connect(sizing_reset, &QPushButton::clicked, this, [this] {
         for (auto* box : findChildren<QDoubleSpinBox*>(QRegularExpression(
                  QStringLiteral("^colorInputSizing(Pan|Tilt|Zoom|Rotate|Width|Height|Pitch|Yaw)$"))))
             box->setValue(box->property("defaultValue").toDouble());
         for (const char* name : {"colorInputSizingFlipHorizontal", "colorInputSizingFlipVertical"})
             findChild<QPushButton*>(QLatin1String(name))->setChecked(false);
+        emitEffect();
     });
-    connect(reset_all, &QPushButton::clicked, this, [this] { restoreDefaults(); });
+    connect(reset_all, &QPushButton::clicked, this, [this] {
+        restoreDefaults();
+        emitEffect();
+    });
+}
+
+void InputSizingPage::setEffectChangedHandler(
+    std::function<void(const creative_suite::effects::EffectInstance&)> on_changed) {
+    on_changed_ = std::move(on_changed);
+}
+
+void InputSizingPage::setEffect(const creative_suite::effects::EffectInstance& effect) {
+    updating_ = true;
+    const auto val = [&effect](std::string_view id, double def) {
+        for (const auto& p : effect.parameters) {
+            if (p.id == id) return p.value;
+        }
+        return def;
+    };
+    mode_ = static_cast<int>(std::lround(val("mode", 1.0)));
+    if (auto* btn = findChild<QPushButton*>(QStringLiteral("colorInputSizingModeButton%1").arg(mode_ + 1))) {
+        const QSignalBlocker b(btn);
+        btn->setChecked(true);
+    }
+    const auto set_spin = [this](const char* obj, double v) {
+        if (auto* box = findChild<QDoubleSpinBox*>(QLatin1String(obj))) {
+            const QSignalBlocker b(box);
+            box->setValue(v);
+        }
+    };
+    const auto set_tog = [this](const char* obj, bool v) {
+        if (auto* btn = findChild<QPushButton*>(QLatin1String(obj))) {
+            const QSignalBlocker b(btn);
+            btn->setChecked(v);
+        }
+    };
+    set_spin("colorInputSizingPan", val("pan", 0.0));
+    set_spin("colorInputSizingTilt", val("tilt", 0.0));
+    set_spin("colorInputSizingZoom", val("zoom", 1.0));
+    set_spin("colorInputSizingRotate", val("rotate", 0.0));
+    set_spin("colorInputSizingWidth", val("width", 1.0));
+    set_spin("colorInputSizingHeight", val("height", 1.0));
+    set_spin("colorInputSizingPitch", val("pitch", 0.0));
+    set_spin("colorInputSizingYaw", val("yaw", 0.0));
+    set_tog("colorInputSizingFlipHorizontal", val("flip_h", 0.0) >= 0.5);
+    set_tog("colorInputSizingFlipVertical", val("flip_v", 0.0) >= 0.5);
+    updating_ = false;
+}
+
+void InputSizingPage::emitEffect() {
+    if (updating_ || !on_changed_) return;
+    auto eff = creative_suite::effects::makeDefaultInstance("video.input_sizing");
+    const auto spin = [this](const char* obj, double def) {
+        auto* b = findChild<QDoubleSpinBox*>(QLatin1String(obj));
+        return b ? b->value() : def;
+    };
+    const auto tog = [this](const char* obj) {
+        auto* b = findChild<QPushButton*>(QLatin1String(obj));
+        return (b && b->isChecked()) ? 1.0 : 0.0;
+    };
+    (void)creative_suite::effects::setParameterValue(eff, "mode", static_cast<double>(mode_));
+    (void)creative_suite::effects::setParameterValue(eff, "pan", spin("colorInputSizingPan", 0.0));
+    (void)creative_suite::effects::setParameterValue(eff, "tilt", spin("colorInputSizingTilt", 0.0));
+    (void)creative_suite::effects::setParameterValue(eff, "zoom", spin("colorInputSizingZoom", 1.0));
+    (void)creative_suite::effects::setParameterValue(eff, "rotate", spin("colorInputSizingRotate", 0.0));
+    (void)creative_suite::effects::setParameterValue(eff, "width", spin("colorInputSizingWidth", 1.0));
+    (void)creative_suite::effects::setParameterValue(eff, "height", spin("colorInputSizingHeight", 1.0));
+    (void)creative_suite::effects::setParameterValue(eff, "pitch", spin("colorInputSizingPitch", 0.0));
+    (void)creative_suite::effects::setParameterValue(eff, "yaw", spin("colorInputSizingYaw", 0.0));
+    (void)creative_suite::effects::setParameterValue(eff, "flip_h", tog("colorInputSizingFlipHorizontal"));
+    (void)creative_suite::effects::setParameterValue(eff, "flip_v", tog("colorInputSizingFlipVertical"));
+    on_changed_(eff);
 }
 
 void InputSizingPage::restoreDefaults() {

@@ -10,6 +10,7 @@
 #include <QPainter>
 #include <QPushButton>
 #include <QRegularExpression>
+#include <QSignalBlocker>
 #include <QVBoxLayout>
 
 #include <algorithm>
@@ -169,7 +170,83 @@ KeyPage::KeyPage(QWidget* parent) : QWidget(parent) {
     body->addWidget(side_host, 2);
     root->addLayout(body, 1);
 
-    connect(reset_all, &QPushButton::clicked, this, [this] { restoreDefaults(); });
+    for (auto* box : findChildren<QDoubleSpinBox*>()) {
+        connect(box, qOverload<double>(&QDoubleSpinBox::valueChanged), this,
+            [this](double) { emitEffect(); });
+    }
+    for (const char* btn : {"colorKeyInputEnable", "colorKeyOutputEnable", "colorKeyQualifierEnable"}) {
+        if (auto* b = findChild<QPushButton*>(QLatin1String(btn))) {
+            connect(b, &QPushButton::toggled, this, [this](bool) { emitEffect(); });
+        }
+    }
+    connect(reset_all, &QPushButton::clicked, this, [this] {
+        restoreDefaults();
+        emitEffect();
+    });
+}
+
+void KeyPage::setEffectChangedHandler(
+    std::function<void(const creative_suite::effects::EffectInstance&)> on_changed) {
+    on_changed_ = std::move(on_changed);
+}
+
+void KeyPage::setEffect(const creative_suite::effects::EffectInstance& effect) {
+    updating_ = true;
+    const auto val = [&effect](std::string_view id, double def) {
+        for (const auto& p : effect.parameters) {
+            if (p.id == id) return p.value;
+        }
+        return def;
+    };
+    const auto set_spin = [this](const char* obj, double v) {
+        if (auto* box = findChild<QDoubleSpinBox*>(QLatin1String(obj))) {
+            const QSignalBlocker b(box);
+            box->setValue(v);
+        }
+    };
+    const auto set_tog = [this](const char* obj, bool v) {
+        if (auto* btn = findChild<QPushButton*>(QLatin1String(obj))) {
+            const QSignalBlocker b(btn);
+            btn->setChecked(v);
+        }
+    };
+    set_tog("colorKeyInputEnable", val("input_enabled", 1.0) >= 0.5);
+    set_spin("colorKeyInputGain", val("input_gain", 1.0));
+    set_spin("colorKeyInputOffset", val("input_offset", 0.0));
+    set_spin("colorKeyInputBlurR", val("input_blur_r", 0.0));
+    set_spin("colorKeyInputBlurHV", val("input_blur_hv", 0.0));
+    set_tog("colorKeyOutputEnable", val("output_enabled", 0.0) >= 0.5);
+    set_spin("colorKeyOutputGain", val("output_gain", 1.0));
+    set_spin("colorKeyOutputOffset", val("output_offset", 0.0));
+    set_tog("colorKeyQualifierEnable", val("qualifier_enabled", 0.0) >= 0.5);
+    set_spin("colorKeyQualifierGain", val("qualifier_gain", 1.0));
+    set_spin("colorKeyQualifierOffset", val("qualifier_offset", 0.0));
+    updating_ = false;
+}
+
+void KeyPage::emitEffect() {
+    if (updating_ || !on_changed_) return;
+    auto eff = creative_suite::effects::makeDefaultInstance("video.color_key");
+    const auto spin = [this](const char* obj, double def) {
+        auto* b = findChild<QDoubleSpinBox*>(QLatin1String(obj));
+        return b ? b->value() : def;
+    };
+    const auto tog = [this](const char* obj) {
+        auto* b = findChild<QPushButton*>(QLatin1String(obj));
+        return (b && b->isChecked()) ? 1.0 : 0.0;
+    };
+    (void)creative_suite::effects::setParameterValue(eff, "input_enabled", tog("colorKeyInputEnable"));
+    (void)creative_suite::effects::setParameterValue(eff, "input_gain", spin("colorKeyInputGain", 1.0));
+    (void)creative_suite::effects::setParameterValue(eff, "input_offset", spin("colorKeyInputOffset", 0.0));
+    (void)creative_suite::effects::setParameterValue(eff, "input_blur_r", spin("colorKeyInputBlurR", 0.0));
+    (void)creative_suite::effects::setParameterValue(eff, "input_blur_hv", spin("colorKeyInputBlurHV", 0.0));
+    (void)creative_suite::effects::setParameterValue(eff, "output_enabled", tog("colorKeyOutputEnable"));
+    (void)creative_suite::effects::setParameterValue(eff, "output_gain", spin("colorKeyOutputGain", 1.0));
+    (void)creative_suite::effects::setParameterValue(eff, "output_offset", spin("colorKeyOutputOffset", 0.0));
+    (void)creative_suite::effects::setParameterValue(eff, "qualifier_enabled", tog("colorKeyQualifierEnable"));
+    (void)creative_suite::effects::setParameterValue(eff, "qualifier_gain", spin("colorKeyQualifierGain", 1.0));
+    (void)creative_suite::effects::setParameterValue(eff, "qualifier_offset", spin("colorKeyQualifierOffset", 0.0));
+    on_changed_(eff);
 }
 
 void KeyPage::restoreDefaults() {

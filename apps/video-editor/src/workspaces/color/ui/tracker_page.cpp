@@ -262,7 +262,45 @@ TrackerPage::TrackerPage(QWidget* parent) : QWidget(parent) {
         region->setEnabled(on);
         points->setEnabled(on);
     });
-    connect(reset_all, &QPushButton::clicked, this, [this] { restoreDefaults(); });
+    connect(reset_all, &QPushButton::clicked, this, [this] {
+        restoreDefaults();
+        if (on_clear_) on_clear_();
+    });
+    if (auto* fwd = findChild<QPushButton*>("colorTrackerTrackForwardButton")) {
+        connect(fwd, &QPushButton::clicked, this, [this] {
+            if (on_track_) on_track_(1);
+        });
+    }
+    if (auto* bwd = findChild<QPushButton*>("colorTrackerTrackBackwardButton")) {
+        connect(bwd, &QPushButton::clicked, this, [this] {
+            if (on_track_) on_track_(-1);
+        });
+    }
+    if (auto* stop = findChild<QPushButton*>("colorTrackerStopButton")) {
+        connect(stop, &QPushButton::clicked, this, [this] {
+            if (on_stop_) on_stop_();
+        });
+    }
+}
+
+void TrackerPage::setHandlers(std::function<void(int direction)> on_track,
+                              std::function<void()> on_stop,
+                              std::function<void()> on_clear) {
+    on_track_ = std::move(on_track);
+    on_stop_ = std::move(on_stop);
+    on_clear_ = std::move(on_clear);
+}
+
+void TrackerPage::setTrackingState(bool has_window, bool tracking_active) {
+    if (auto* fwd = findChild<QPushButton*>("colorTrackerTrackForwardButton")) {
+        fwd->setEnabled(has_window && !tracking_active);
+    }
+    if (auto* bwd = findChild<QPushButton*>("colorTrackerTrackBackwardButton")) {
+        bwd->setEnabled(has_window && !tracking_active);
+    }
+    if (auto* stop = findChild<QPushButton*>("colorTrackerStopButton")) {
+        stop->setEnabled(tracking_active);
+    }
 }
 
 void TrackerPage::restoreDefaults() {

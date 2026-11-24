@@ -2301,6 +2301,66 @@ int main(int argc, char** argv) {
         }
         require(waveform->text() == QStringLiteral("No frame"),
                 "Scopes must show their empty state when no composed frame is available.");
+        // Verify Stage 2 Color Sizing Dock effects & wiring.
+        {
+            creative_suite::media::RgbaFrame test_frame;
+            test_frame.width = 16;
+            test_frame.height = 16;
+            test_frame.stride = 16 * 4;
+            test_frame.rgba_pixels.assign(static_cast<std::size_t>(test_frame.stride * test_frame.height), 255);
+            for (int y = 0; y < 16; ++y) {
+                for (int x = 0; x < 16; ++x) {
+                    auto* p = test_frame.rgba_pixels.data() + y * test_frame.stride + x * 4;
+                    p[0] = static_cast<std::uint8_t>((x < 8) ? 220 : 40);
+                    p[1] = 80;
+                    p[2] = 60;
+                    p[3] = 200;
+                }
+            }
+            auto blur_eff = creative_suite::effects::makeDefaultInstance("video.color_blur");
+            require(creative_suite::effects::setParameterValue(blur_eff, "radius_r", 0.85),
+                    "video.color_blur must accept radius_r parameter.");
+            auto blur_frame = test_frame;
+            require(creative_suite::effects::applyStack(blur_frame, std::span{&blur_eff, 1}) &&
+                        blur_frame.rgba_pixels != test_frame.rgba_pixels,
+                    "video.color_blur must modify pixels when radius differs from neutral 0.5.");
+
+            auto key_eff = creative_suite::effects::makeDefaultInstance("video.color_key");
+            require(creative_suite::effects::setParameterValue(key_eff, "input_gain", 0.5),
+                    "video.color_key must accept input_gain parameter.");
+            auto key_frame = test_frame;
+            require(creative_suite::effects::applyStack(key_frame, std::span{&key_eff, 1}) &&
+                        key_frame.rgba_pixels[3] == 100,
+                    "video.color_key must scale frame alpha.");
+
+            auto sizing_eff = creative_suite::effects::makeDefaultInstance("video.input_sizing");
+            require(creative_suite::effects::setParameterValue(sizing_eff, "flip_h", 1.0),
+                    "video.input_sizing must accept flip_h parameter.");
+            auto sizing_frame = test_frame;
+            require(creative_suite::effects::applyStack(sizing_frame, std::span{&sizing_eff, 1}) &&
+                        sizing_frame.rgba_pixels != test_frame.rgba_pixels,
+                    "video.input_sizing must transform pixels when flipped.");
+
+            auto slice_eff = creative_suite::effects::makeDefaultInstance("video.color_slice");
+            require(creative_suite::effects::setParameterValue(slice_eff, "red_density", 0.8),
+                    "video.color_slice must accept red_density parameter.");
+            auto slice_frame = test_frame;
+            require(creative_suite::effects::applyStack(slice_frame, std::span{&slice_eff, 1}) &&
+                        slice_frame.rgba_pixels != test_frame.rgba_pixels,
+                    "video.color_slice must adjust pixels when slice density changes.");
+
+            if (auto* blur_btn = workspace.findChild<QPushButton*>("colorToolButton14")) {
+                blur_btn->click();
+                if (auto* rad_r = workspace.findChild<QDoubleSpinBox*>("colorBlurRadiusRValue")) {
+                    rad_r->setValue(0.8);
+                    const auto& nodes = graph.nodes;
+                    const bool has_blur = std::any_of(nodes.begin(), nodes.end(), [](const color::Node& n) {
+                        return n.type == color::NodeType::Effect && n.effect && n.effect->id == "video.color_blur";
+                    });
+                    require(has_blur, "Editing BlurPage must insert/update a video.color_blur node in ColorWorkspace.");
+                }
+            }
+        }
         workspace.setActive(false);
         return 0;
     } catch (const std::exception& error) {

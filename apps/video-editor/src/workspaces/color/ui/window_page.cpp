@@ -11,6 +11,7 @@
 #include <QPainter>
 #include <QPushButton>
 #include <QScrollArea>
+#include <QSignalBlocker>
 #include <QVBoxLayout>
 
 #include <functional>
@@ -107,6 +108,8 @@ public:
                 : QStringLiteral("QFrame#colorWindowRow { background: #20242a; border-bottom: 1px solid #14181e; }"));
     }
     [[nodiscard]] bool isSelected() const noexcept { return selected_; }
+    [[nodiscard]] QPushButton* invertButton() const noexcept { return invert_; }
+    [[nodiscard]] QPushButton* enableButton() const noexcept { return enable_; }
     void setPressedHandler(std::function<void(WindowRow*)> handler) { pressed_ = std::move(handler); }
 
 protected:
@@ -164,23 +167,62 @@ public:
     void setSelectionChangedHandler(std::function<void(bool)> handler) {
         selection_changed_ = std::move(handler);
     }
+    void setRowSelectedIdHandler(std::function<void(std::optional<color::PowerWindowId>)> handler) {
+        selected_id_changed_ = std::move(handler);
+    }
+    void syncFromWindows(const std::vector<color::PowerWindow>& windows,
+                         std::optional<color::PowerWindowId> selected_id,
+                         std::function<void(color::PowerWindowId, bool)> on_invert) {
+        for (auto* row : rows_) delete row;
+        rows_.clear();
+        WindowRow* to_select = nullptr;
+        for (const auto& w : windows) {
+            const auto shape = w.kind == creative_suite::composition::ShapeMaskKind::Ellipse
+                ? WindowShape::Circle
+                : WindowShape::Linear;
+            auto* row = new WindowRow(shape, this);
+            row->setProperty("windowId", QVariant::fromValue<qulonglong>(w.id));
+            {
+                const QSignalBlocker b(row->invertButton());
+                row->invertButton()->setChecked(w.parameters.invert);
+            }
+            const auto wid = w.id;
+            QObject::connect(row->invertButton(), &QPushButton::toggled, row,
+                [wid, on_invert](bool checked) {
+                    if (on_invert) on_invert(wid, checked);
+                });
+            row->setPressedHandler([this](WindowRow* pressed) { select(pressed); });
+            layout_->insertWidget(static_cast<int>(rows_.size()), row);
+            rows_.push_back(row);
+            if (selected_id && *selected_id == wid) to_select = row;
+        }
+        if (!to_select && !rows_.empty()) to_select = rows_.front();
+        select(to_select);
+    }
 
 private:
     void select(WindowRow* row) {
         int selected = -1;
+        std::optional<color::PowerWindowId> wid;
         for (std::size_t i = 0; i < rows_.size(); ++i) {
             rows_[i]->setSelected(rows_[i] == row);
-            if (rows_[i] == row) selected = static_cast<int>(i);
+            if (rows_[i] == row) {
+                selected = static_cast<int>(i);
+                const QVariant prop = rows_[i]->property("windowId");
+                if (prop.isValid()) wid = prop.toULongLong();
+            }
         }
         // Counts and selection are exposed as properties for tests.
         setProperty("rowCount", static_cast<int>(rows_.size()));
         setProperty("selectedRow", selected);
         if (selection_changed_) selection_changed_(selected >= 0);
+        if (selected_id_changed_) selected_id_changed_(wid);
     }
 
     QVBoxLayout* layout_ = nullptr;
     std::vector<WindowRow*> rows_;
     std::function<void(bool)> selection_changed_;
+    std::function<void(std::optional<color::PowerWindowId>)> selected_id_changed_;
 };
 
 struct FieldSpec {
@@ -261,7 +303,16 @@ WindowPage::WindowPage(QWidget* parent) : QWidget(parent) {
         add->setFocusPolicy(Qt::NoFocus);
         actions->addWidget(add);
         const WindowShape shape = spec.shape;
-        connect(add, &QPushButton::clicked, this, [list, shape] { list->addRow(shape); });
+        connect(add, &QPushButton::clicked, this, [this, list, shape] {
+            if (bound_ && on_add_) {
+                const auto kind = (shape == WindowShape::Circle)
+                    ? creative_suite::composition::ShapeMaskKind::Ellipse
+                    : creative_suite::composition::ShapeMaskKind::Rectangle;
+                on_add_(kind);
+                return;
+            }
+            list->addRow(shape);
+        });
     }
     actions->addStretch();
     auto* delete_button = new QPushButton(tr("Delete"), this);
@@ -329,9 +380,100 @@ WindowPage::WindowPage(QWidget* parent) : QWidget(parent) {
         delete_button->setEnabled(selected);
     };
     list->setSelectionChangedHandler(setFieldsEnabled);
+    list->setRowSelectedIdHandler([this](std::optional<color::PowerWindowId> id) {
+        if (!updating_ && bound_ && on_select_) {
+            selected_id_ = id;
+            on_select_(id);
+        }
+    });
+    for (const char* field : {"colorWindowSize", "colorWindowAspect", "colorWindowPan",
+                              "colorWindowTilt", "colorWindowRotate", "colorWindowSoft1"}) {
+        if (auto* box = findChild<QDoubleSpinBox*>(QLatin1String(field))) {
+            connect(box, &QDoubleSpinBox::editingFinished, this, [this] {
+                if (updating_ || !bound_ || !selected_id_) return;
+                const auto val = [this](const char* n, double def) {
+                    auto* b = findChild<QDoubleSpinBox*>(QLatin1String(n));
+                    return b ? b->value() : def;
+                };
+                if (on_geometry_) {
+                    const double size = std::clamp(val("colorWindowSize", 50.0) / 100.0, 0.02, 2.0);
+                    const double aspect = std::clamp(val("colorWindowAspect", 50.0) / 50.0, 0.1, 4.0);
+                    const double cx = std::clamp(val("colorWindowPan", 50.0) / 100.0, 0.0, 1.0);
+                    const double cy = std::clamp(val("colorWindowTilt", 50.0) / 100.0, 0.0, 1.0);
+                    const double rot = val("colorWindowRotate", 0.0);
+                    on_geometry_(*selected_id_, cx, cy, size * aspect, size, rot);
+                }
+                if (on_settings_) {
+                    const double soft = std::clamp(val("colorWindowSoft1", 2.0) / 100.0, 0.0, 1.0);
+                    on_settings_(*selected_id_, soft, false, color::WindowCombineMode::Add);
+                }
+            });
+        }
+    }
     setFieldsEnabled(false);
-    connect(delete_button, &QPushButton::clicked, this, [list] { list->removeSelected(); });
+    connect(delete_button, &QPushButton::clicked, this, [this, list] {
+        if (bound_ && on_remove_ && selected_id_) {
+            on_remove_(*selected_id_);
+            return;
+        }
+        list->removeSelected();
+    });
     connect(reset_all, &QPushButton::clicked, this, [this] { restoreDefaults(); });
+}
+
+void WindowPage::setHandlers(
+    std::function<void(creative_suite::composition::ShapeMaskKind)> on_add,
+    std::function<void(color::PowerWindowId)> on_remove,
+    std::function<void(std::optional<color::PowerWindowId>)> on_select,
+    std::function<void(color::PowerWindowId, double, bool, color::WindowCombineMode)> on_settings,
+    std::function<void(color::PowerWindowId, double, double, double, double, double)> on_geometry) {
+    on_add_ = std::move(on_add);
+    on_remove_ = std::move(on_remove);
+    on_select_ = std::move(on_select);
+    on_settings_ = std::move(on_settings);
+    on_geometry_ = std::move(on_geometry);
+}
+
+void WindowPage::syncWindows(const std::vector<color::PowerWindow>& windows,
+                             std::optional<color::PowerWindowId> selected_id,
+                             std::int64_t frame) {
+    bound_ = true;
+    updating_ = true;
+    selected_id_ = selected_id;
+    if (auto* list = dynamic_cast<WindowList*>(findChild<QWidget*>("colorWindowList"))) {
+        list->syncFromWindows(windows, selected_id,
+            [this, windows](color::PowerWindowId wid, bool inv) {
+                if (updating_ || !on_settings_) return;
+                const auto found = std::find_if(windows.begin(), windows.end(),
+                    [wid](const auto& w) { return w.id == wid; });
+                if (found != windows.end()) {
+                    on_settings_(wid, found->parameters.soft_edge, inv, found->combine_mode);
+                }
+            });
+    }
+    const color::PowerWindow* active = nullptr;
+    if (selected_id_) {
+        const auto found = std::find_if(windows.begin(), windows.end(),
+            [this](const auto& w) { return w.id == *selected_id_; });
+        if (found != windows.end()) active = &(*found);
+    }
+    if (active) {
+        const auto params = creative_suite::composition::evaluateShapeMask(
+            active->parameters, active->keyframes, frame);
+        const auto set_spin = [this](const char* n, double v) {
+            if (auto* b = findChild<QDoubleSpinBox*>(QLatin1String(n))) {
+                const QSignalBlocker blocker(b);
+                b->setValue(v);
+            }
+        };
+        set_spin("colorWindowPan", params.center_x * 100.0);
+        set_spin("colorWindowTilt", params.center_y * 100.0);
+        set_spin("colorWindowSize", params.height * 100.0);
+        set_spin("colorWindowAspect", params.height > 1e-4 ? (params.width / params.height) * 50.0 : 50.0);
+        set_spin("colorWindowRotate", params.rotation);
+        set_spin("colorWindowSoft1", params.soft_edge * 100.0);
+    }
+    updating_ = false;
 }
 
 void WindowPage::restoreDefaults() {

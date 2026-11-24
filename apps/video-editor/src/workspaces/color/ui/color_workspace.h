@@ -7,6 +7,7 @@
 
 #include <QWidget>
 #include <QImage>
+#include <QPointer>
 
 #include <functional>
 #include <atomic>
@@ -32,6 +33,15 @@ class QShowEvent;
 class PreviewWidget;
 
 namespace ui {
+
+class BlurPage;
+class ColorSlicePage;
+class CurvesPage;
+class InputSizingPage;
+class KeyPage;
+class QualifierPage;
+class TrackerPage;
+class WindowPage;
 
 class ColorTimelineView;
 
@@ -263,6 +273,20 @@ private:
     std::optional<color::NodeId> power_window_status_node_;
     qint64 power_window_stop_frame_ = -1;
     double power_window_confidence_ = 0.0;
+
+    void syncSizingDockPages();
+    void upsertEffectNode(const creative_suite::effects::EffectInstance& effect);
+    std::optional<color::NodeId> ensureCurvesNode(color::Graph& graph);
+    std::optional<color::NodeId> targetWindowNode() const;
+
+    QPointer<CurvesPage> curves_page_;
+    QPointer<ColorSlicePage> color_slice_page_;
+    QPointer<QualifierPage> qualifier_page_;
+    QPointer<WindowPage> window_page_;
+    QPointer<TrackerPage> tracker_page_;
+    QPointer<BlurPage> blur_page_;
+    QPointer<KeyPage> key_page_;
+    QPointer<InputSizingPage> input_sizing_page_;
 };
 
 }  // namespace ui

@@ -397,7 +397,88 @@ QualifierPage::QualifierPage(QWidget* parent) : QWidget(parent) {
     body->addWidget(matte_host, 1);
     root->addLayout(body, 1);
 
-    connect(reset_all, &QPushButton::clicked, this, [this] { restoreDefaults(); });
+    connect(reset_all, &QPushButton::clicked, this, [this] {
+        restoreDefaults();
+        emitQualifier();
+    });
+    for (auto* box : findChildren<QDoubleSpinBox*>()) {
+        connect(box, qOverload<double>(&QDoubleSpinBox::valueChanged), this, [this](double) {
+            emitQualifier();
+        });
+    }
+    for (auto* toggle : findChildren<QPushButton*>(QRegularExpression(QStringLiteral("Toggle$")))) {
+        connect(toggle, &QPushButton::toggled, this, [this](bool) {
+            emitQualifier();
+        });
+    }
+}
+
+void QualifierPage::setQualifierChangedHandler(
+    std::function<void(const creative_suite::effects::TonalQualifier&)> on_changed) {
+    on_changed_ = std::move(on_changed);
+}
+
+void QualifierPage::setQualifier(const creative_suite::effects::TonalQualifier& qualifier) {
+    updating_ = true;
+    const auto set_spin = [this](const char* name, double val) {
+        if (auto* box = findChild<QDoubleSpinBox*>(QLatin1String(name))) {
+            const QSignalBlocker b(box);
+            box->setValue(val);
+        }
+    };
+    const double hue_min_pct = qualifier.hue_min / 3.6;
+    const double hue_max_pct = qualifier.hue_max / 3.6;
+    const double hue_center = std::clamp((hue_min_pct + hue_max_pct) * 0.5, 0.0, 100.0);
+    const double hue_width = std::clamp(hue_max_pct - hue_min_pct, 0.0, 100.0);
+    set_spin("colorQualifierHueCenter", hue_center);
+    set_spin("colorQualifierHueWidth", hue_width);
+    set_spin("colorQualifierHueSoft", qualifier.hue_softness);
+    set_spin("colorQualifierSatLow", qualifier.saturation_min);
+    set_spin("colorQualifierSatHigh", qualifier.saturation_max);
+    set_spin("colorQualifierSatLSoft", qualifier.saturation_softness);
+    set_spin("colorQualifierLumLow", qualifier.luminance_min);
+    set_spin("colorQualifierLumHigh", qualifier.luminance_max);
+    set_spin("colorQualifierLumLSoft", qualifier.luminance_softness);
+    set_spin("colorQualifierPreFilter", qualifier.denoise_percent);
+    set_spin("colorQualifierCleanBlack", qualifier.clean_black_percent);
+    set_spin("colorQualifierCleanWhite", qualifier.clean_white_percent);
+    set_spin("colorQualifierBlurRadius", qualifier.blur_radius_pixels);
+    set_spin("colorQualifierInOutRatio", qualifier.in_out_percent);
+    updating_ = false;
+}
+
+void QualifierPage::emitQualifier() {
+    if (updating_ || !on_changed_) return;
+    const auto get_spin = [this](const char* name, double fallback = 0.0) {
+        auto* box = findChild<QDoubleSpinBox*>(QLatin1String(name));
+        return box ? box->value() : fallback;
+    };
+    const auto get_toggle = [this](const char* name) {
+        auto* btn = findChild<QPushButton*>(QLatin1String(name));
+        return btn && btn->isChecked();
+    };
+    creative_suite::effects::TonalQualifier q;
+    const bool hue_on = get_toggle("colorQualifierHueToggle");
+    const bool sat_on = get_toggle("colorQualifierSatToggle");
+    const bool lum_on = get_toggle("colorQualifierLumToggle");
+    q.enabled = hue_on || sat_on || lum_on;
+    const double h_center = get_spin("colorQualifierHueCenter", 50.0);
+    const double h_width = get_spin("colorQualifierHueWidth", 100.0);
+    q.hue_min = hue_on ? std::clamp((h_center - h_width * 0.5) * 3.6, 0.0, 360.0) : 0.0;
+    q.hue_max = hue_on ? std::clamp((h_center + h_width * 0.5) * 3.6, 0.0, 360.0) : 360.0;
+    q.hue_softness = get_spin("colorQualifierHueSoft", 0.0);
+    q.saturation_min = sat_on ? get_spin("colorQualifierSatLow", 0.0) : 0.0;
+    q.saturation_max = sat_on ? get_spin("colorQualifierSatHigh", 100.0) : 100.0;
+    q.saturation_softness = get_spin("colorQualifierSatLSoft", 0.0);
+    q.luminance_min = lum_on ? get_spin("colorQualifierLumLow", 0.0) : 0.0;
+    q.luminance_max = lum_on ? get_spin("colorQualifierLumHigh", 100.0) : 100.0;
+    q.luminance_softness = get_spin("colorQualifierLumLSoft", 0.0);
+    q.denoise_percent = get_spin("colorQualifierPreFilter", 0.0);
+    q.clean_black_percent = get_spin("colorQualifierCleanBlack", 0.0);
+    q.clean_white_percent = get_spin("colorQualifierCleanWhite", 100.0);
+    q.blur_radius_pixels = get_spin("colorQualifierBlurRadius", 0.0);
+    q.in_out_percent = get_spin("colorQualifierInOutRatio", 0.0);
+    on_changed_(q);
 }
 
 void QualifierPage::restoreDefaults() {

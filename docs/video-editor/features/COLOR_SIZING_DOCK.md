@@ -1,12 +1,15 @@
 # Color Sizing Dock
 
-Status: **Stage 1 (visual only) is implemented for all ten pages: 1 (Curves - Custom),
-2 (Color Slice), 3 (Color Warp - Chroma Warp), 4 (Qualifier - HSL), 5 (Window), 6
-(Tracker - Window), 7 (Smart Mask), 8 (Blur - Blur), 9 (Key) and 10 (Sizing - Input
-Sizing).** Control
-names, ranges and defaults are taken from the maintainer's layout reference
-screenshots and are proposals until implemented and recorded as decisions.
-Behavior marked *Pending* has not been decided.
+[Português (pt-BR)](COLOR_SIZING_DOCK.pt-BR.md) · English is authoritative if the versions differ.
+
+Status: **Stage 2 (functional wiring & DSP effects) is implemented for pages 1 (`Curves - Custom`), 2 (`Color Slice`), 4 (`Qualifier - HSL`), 5 (`Window`), 6 (`Tracker - Window`), 8 (`Blur - Blur`), 9 (`Key`), and 10 (`Sizing - Input Sizing` / `Node Sizing`).**
+Pages **3 (`Color Warp - Chroma Warp`)** and **7 (`Smart Mask`)**, as well as the remaining Sizing modes (`Edit`, `Output`, `Reference`) and `Blanking` in page 10, remain **Stage 1 (visual only)** and are explicitly deferred to future phases:
+- **Page 3 (`Color Warp - Chroma Warp`)**: Dedicated future phase requiring a 2D chroma mesh/RBF deformation engine and pin-pair/pick tool definitions.
+- **Page 7 (`Smart Mask`)**: Future phase requiring a local segmentation / optical-flow mask engine (none exists in the repository today).
+- **Page 10 (`Sizing` modes & `Blanking`)**: Focused on `Input Sizing` and `Node Sizing` first; `Edit Sizing`, `Output Sizing`, `Reference Sizing`, and `Blanking` units remain for a future phase.
+- **Page 2 (`Color Slice`)**: Per maintainer decision, vertical bar `SliderA` maps to **Density** and `SliderB` maps to **Saturation** (matching standard colorist workflow with non-proprietary naming).
+
+Control names, ranges and defaults are taken from the maintainer's layout reference screenshots. Behavior marked *Pending* has not been decided.
 
 ## Scope and staging
 
