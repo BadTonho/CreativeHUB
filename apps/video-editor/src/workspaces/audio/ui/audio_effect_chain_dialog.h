@@ -1,6 +1,15 @@
 #pragma once
 
 #include "timeline/timeline_model.h"
+#include "workspaces/audio/effects/delay_effect.h"
+#include "workspaces/audio/effects/distortion_effect.h"
+#include "workspaces/audio/effects/gain_effect.h"
+#include "workspaces/audio/effects/lfe_filter_effect.h"
+#include "workspaces/audio/effects/limiter_effect.h"
+#include "workspaces/audio/effects/modulation_effect.h"
+#include "workspaces/audio/effects/pitch_effect.h"
+#include "workspaces/audio/effects/reverb_effect.h"
+#include "workspaces/audio/effects/stereo_effect.h"
 
 #include <QCheckBox>
 #include <QComboBox>
@@ -356,78 +365,41 @@ private:
             });
             addDoubleControl(form, "Click detection threshold", "audioRepairSensitivity", 1, 10, 1, {},
                 repair->declick_sensitivity, [this, index](double value) { std::get<timeline::AudioRepairParameters>(effects_[index].parameters).declick_sensitivity = value; });
-        } else if (auto* gain = std::get_if<timeline::AudioGainParameters>(&effects_[index].parameters)) {
-            addDoubleControl(form, "Gain", "audioFxGainDb", -24.0, 24.0, 1, QStringLiteral(" dB"),
-                gain->gain_db, [this, index](double v) { std::get<timeline::AudioGainParameters>(effects_[index].parameters).gain_db = v; });
-            auto* inv = new QCheckBox(audio_effect_dialog_detail::translated("Invert phase"), editor_);
-            inv->setChecked(gain->invert_phase);
-            form->addRow(inv);
-            connect(inv, &QCheckBox::toggled, this, [this, index](bool v) {
-                std::get<timeline::AudioGainParameters>(effects_[index].parameters).invert_phase = v;
-            });
+        }
+        const auto add_double = [this](
+            QFormLayout* target_form, const char* label, const char* object_name,
+            double min, double max, int decimals, const QString& suffix, double value,
+            std::function<void(double)> on_change) {
+            addDoubleControl(target_form, label, object_name, min, max, decimals,
+                             suffix, value, std::move(on_change));
+        };
+        if (auto* gain = std::get_if<timeline::AudioGainParameters>(&effects_[index].parameters)) {
+            audio_effects::gain::buildEditor(editor_, form, *gain, add_double,
+                [this, index](auto v) { effects_[index].parameters = v; });
         } else if (auto* limiter = std::get_if<timeline::AudioLimiterParameters>(&effects_[index].parameters)) {
-            addDoubleControl(form, "Ceiling", "audioFxLimiterCeiling", -12.0, 0.0, 1, QStringLiteral(" dB"),
-                limiter->ceiling_db, [this, index](double v) { std::get<timeline::AudioLimiterParameters>(effects_[index].parameters).ceiling_db = v; });
-            addDoubleControl(form, "Release", "audioFxLimiterRelease", 5.0, 500.0, 0, QStringLiteral(" ms"),
-                limiter->release_ms, [this, index](double v) { std::get<timeline::AudioLimiterParameters>(effects_[index].parameters).release_ms = v; });
-            auto* soft = new QCheckBox(audio_effect_dialog_detail::translated("Soft clip"), editor_);
-            soft->setChecked(limiter->soft_clip);
-            form->addRow(soft);
-            connect(soft, &QCheckBox::toggled, this, [this, index](bool v) {
-                std::get<timeline::AudioLimiterParameters>(effects_[index].parameters).soft_clip = v;
-            });
+            audio_effects::limiter::buildEditor(editor_, form, *limiter, add_double,
+                [this, index](auto v) { effects_[index].parameters = v; });
         } else if (auto* lfe = std::get_if<timeline::AudioLfeFilterParameters>(&effects_[index].parameters)) {
-            addDoubleControl(form, "Cutoff frequency", "audioFxLfeCutoff", 40.0, 250.0, 0, QStringLiteral(" Hz"),
-                lfe->cutoff_hz, [this, index](double v) { std::get<timeline::AudioLfeFilterParameters>(effects_[index].parameters).cutoff_hz = v; });
+            audio_effects::lfe_filter::buildEditor(editor_, form, *lfe, add_double,
+                [this, index](auto v) { effects_[index].parameters = v; });
         } else if (auto* delay = std::get_if<timeline::AudioDelayParameters>(&effects_[index].parameters)) {
-            addDoubleControl(form, "Delay time", "audioFxDelayMs", 1.0, 2000.0, 0, QStringLiteral(" ms"),
-                delay->delay_ms, [this, index](double v) { std::get<timeline::AudioDelayParameters>(effects_[index].parameters).delay_ms = v; });
-            addDoubleControl(form, "Feedback", "audioFxDelayFeedback", 0.0, 90.0, 0, QStringLiteral("%"),
-                delay->feedback * 100.0, [this, index](double v) { std::get<timeline::AudioDelayParameters>(effects_[index].parameters).feedback = v / 100.0; });
-            addDoubleControl(form, "Mix", "audioFxDelayMix", 0.0, 100.0, 0, QStringLiteral("%"),
-                delay->mix * 100.0, [this, index](double v) { std::get<timeline::AudioDelayParameters>(effects_[index].parameters).mix = v / 100.0; });
+            audio_effects::delay::buildEditor(editor_, form, *delay, add_double,
+                [this, index](auto v) { effects_[index].parameters = v; });
         } else if (auto* reverb = std::get_if<timeline::AudioReverbParameters>(&effects_[index].parameters)) {
-            addDoubleControl(form, "Room size", "audioFxReverbRoom", 0.0, 100.0, 0, QStringLiteral("%"),
-                reverb->room_size * 100.0, [this, index](double v) { std::get<timeline::AudioReverbParameters>(effects_[index].parameters).room_size = v / 100.0; });
-            addDoubleControl(form, "Damping", "audioFxReverbDamping", 0.0, 100.0, 0, QStringLiteral("%"),
-                reverb->damping * 100.0, [this, index](double v) { std::get<timeline::AudioReverbParameters>(effects_[index].parameters).damping = v / 100.0; });
-            addDoubleControl(form, "Mix", "audioFxReverbMix", 0.0, 100.0, 0, QStringLiteral("%"),
-                reverb->mix * 100.0, [this, index](double v) { std::get<timeline::AudioReverbParameters>(effects_[index].parameters).mix = v / 100.0; });
+            audio_effects::reverb::buildEditor(editor_, form, *reverb, add_double,
+                [this, index](auto v) { effects_[index].parameters = v; });
         } else if (auto* mod = std::get_if<timeline::AudioModulationParameters>(&effects_[index].parameters)) {
-            auto* mode = new QComboBox(editor_);
-            mode->addItem(audio_effect_dialog_detail::translated("Chorus"), 0);
-            mode->addItem(audio_effect_dialog_detail::translated("Flanger"), 1);
-            mode->addItem(audio_effect_dialog_detail::translated("Modulation"), 2);
-            mode->setCurrentIndex(mode->findData(mod->mode));
-            form->addRow(audio_effect_dialog_detail::translated("Mode"), mode);
-            connect(mode, qOverload<int>(&QComboBox::currentIndexChanged), this, [this, index, mode](int) {
-                std::get<timeline::AudioModulationParameters>(effects_[index].parameters).mode = mode->currentData().toInt();
-            });
-            addDoubleControl(form, "Rate", "audioFxModRate", 0.1, 10.0, 1, QStringLiteral(" Hz"),
-                mod->rate_hz, [this, index](double v) { std::get<timeline::AudioModulationParameters>(effects_[index].parameters).rate_hz = v; });
-            addDoubleControl(form, "Depth", "audioFxModDepth", 0.0, 100.0, 0, QStringLiteral("%"),
-                mod->depth * 100.0, [this, index](double v) { std::get<timeline::AudioModulationParameters>(effects_[index].parameters).depth = v / 100.0; });
-            addDoubleControl(form, "Mix", "audioFxModMix", 0.0, 100.0, 0, QStringLiteral("%"),
-                mod->mix * 100.0, [this, index](double v) { std::get<timeline::AudioModulationParameters>(effects_[index].parameters).mix = v / 100.0; });
+            audio_effects::modulation::buildEditor(editor_, form, *mod, add_double,
+                [this, index](auto v) { effects_[index].parameters = v; });
         } else if (auto* dist = std::get_if<timeline::AudioDistortionParameters>(&effects_[index].parameters)) {
-            addDoubleControl(form, "Drive", "audioFxDistDrive", 0.0, 100.0, 0, QStringLiteral("%"),
-                dist->drive * 100.0, [this, index](double v) { std::get<timeline::AudioDistortionParameters>(effects_[index].parameters).drive = v / 100.0; });
-            addDoubleControl(form, "Mix", "audioFxDistMix", 0.0, 100.0, 0, QStringLiteral("%"),
-                dist->mix * 100.0, [this, index](double v) { std::get<timeline::AudioDistortionParameters>(effects_[index].parameters).mix = v / 100.0; });
+            audio_effects::distortion::buildEditor(editor_, form, *dist, add_double,
+                [this, index](auto v) { effects_[index].parameters = v; });
         } else if (auto* stereo = std::get_if<timeline::AudioStereoParameters>(&effects_[index].parameters)) {
-            addDoubleControl(form, "Stereo width", "audioFxStereoWidth", 0.0, 200.0, 0, QStringLiteral("%"),
-                stereo->width * 100.0, [this, index](double v) { std::get<timeline::AudioStereoParameters>(effects_[index].parameters).width = v / 100.0; });
-            addDoubleControl(form, "Balance", "audioFxStereoBalance", -100.0, 100.0, 0, QStringLiteral("%"),
-                stereo->balance * 100.0, [this, index](double v) { std::get<timeline::AudioStereoParameters>(effects_[index].parameters).balance = v / 100.0; });
-            auto* mono = new QCheckBox(audio_effect_dialog_detail::translated("Mono sum"), editor_);
-            mono->setChecked(stereo->mono_sum);
-            form->addRow(mono);
-            connect(mono, &QCheckBox::toggled, this, [this, index](bool v) {
-                std::get<timeline::AudioStereoParameters>(effects_[index].parameters).mono_sum = v;
-            });
+            audio_effects::stereo::buildEditor(editor_, form, *stereo, add_double,
+                [this, index](auto v) { effects_[index].parameters = v; });
         } else if (auto* pitch = std::get_if<timeline::AudioPitchParameters>(&effects_[index].parameters)) {
-            addDoubleControl(form, "Pitch shift", "audioFxPitchSemitones", -12.0, 12.0, 1, QStringLiteral(" st"),
-                pitch->semitones, [this, index](double v) { std::get<timeline::AudioPitchParameters>(effects_[index].parameters).semitones = v; });
+            audio_effects::pitch::buildEditor(editor_, form, *pitch, add_double,
+                [this, index](auto v) { effects_[index].parameters = v; });
         }
         editor_layout_->addStretch(1);
         updateActions();
