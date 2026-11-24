@@ -57,16 +57,16 @@ int main(int argc, char* argv[]) {
                 "The Fusion selector must keep a stable object name.");
         require(unnamed_button == buttons.fusion,
                 "The blank button must be the Fusion selector.");
-        require(unnamed_button->text().isEmpty(),
-                "The second timeline end button must have no visible label.");
+        require(unnamed_button->text() == "Nodes",
+                "The second timeline end button label must be Nodes.");
         require(unnamed_button->icon().isNull(),
                 "The second timeline end button must have no icon.");
         require(unnamed_button->accessibleName() == "Fusion",
-                "The blank button must be accessible as Fusion.");
+                "The Nodes button must remain accessible as Fusion.");
         require(!unnamed_button->toolTip().isEmpty(),
-                "The blank button must explain that it opens Fusion.");
-        require(unnamed_button->size() == QSize(32, 22),
-                "The blank Fusion selector must fit the compact application footer.");
+                "The Nodes button must explain that it opens Fusion.");
+        require(unnamed_button->size() == QSize(68, 22),
+                "The Nodes selector must match the labeled workspace button size.");
         require(unnamed_button->isCheckable() &&
                     !unnamed_button->isChecked(),
                 "The Fusion selector must start inactive.");

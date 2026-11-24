@@ -22,11 +22,11 @@ TimelineEndButtons createTimelineEndButtons(QWidget* parent) {
     edit_button->setAccessibleName(QCoreApplication::translate("TimelineEndButtons", "Edit workspace"));
     edit_button->setChecked(true);
 
-    auto* unnamed_button = new QPushButton(container);
+    auto* unnamed_button = new QPushButton(QCoreApplication::translate("TimelineEndButtons", "Nodes"), container);
     unnamed_button->setObjectName("timelineUnnamedButton");
     unnamed_button->setAccessibleName(QCoreApplication::translate("TimelineEndButtons", "Fusion"));
     unnamed_button->setToolTip(QCoreApplication::translate("TimelineEndButtons", "Switch to the Fusion workspace"));
-    unnamed_button->setFixedSize(32, 22);
+    unnamed_button->setFixedSize(68, 22);
     unnamed_button->setCheckable(true);
     unnamed_button->setAutoExclusive(true);
 
