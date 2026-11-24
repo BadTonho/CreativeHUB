@@ -1,6 +1,12 @@
 #include "workspaces/audio/ui/audio_workspace.h"
 #include "workspaces/audio/ui/audio_effect_chain_dialog.h"
 #include "workspaces/audio/ui/audio_ducking_dialog.h"
+#include "workspaces/audio/effects/foley_sampler_effect.h"
+#include "workspaces/audio/effects/frequency_analyzer_effect.h"
+#include "workspaces/audio/effects/meter_panel_effect.h"
+#include "workspaces/audio/effects/monitor_effect.h"
+#include "workspaces/audio/effects/phase_meter_effect.h"
+#include "workspaces/audio/effects/surround_analyzer_effect.h"
 
 #include <QApplication>
 #include <QCheckBox>
@@ -495,6 +501,13 @@ void AudioWorkspace::createPanels(QWidget* parent) {
     auto* dim_pill = new QPushButton(QStringLiteral("DIM"), top_bar);
     dim_pill->setCheckable(true);
     dim_pill->setFixedWidth(40);
+    dim_button_ = dim_pill;
+    QObject::connect(dim_button_, &QPushButton::toggled, this, [this](bool checked) {
+        dim_active_ = checked;
+        if (monitor_dialog_) {
+            monitor_dialog_->setDimChecked(checked);
+        }
+    });
     top_bar_layout->addWidget(dim_pill);
     meter_outer->addWidget(top_bar);
 
@@ -2076,6 +2089,39 @@ void AudioWorkspace::setPeaks(
         set_peak(strip.meter, peak);
         set_peak(strip.mixer_meter, peak);
     }
+
+    float active_track_peak = track_peaks.empty() ? master_peak : track_peaks.front().second;
+    if (selected_track_id_ != 0) {
+        const auto found = std::find_if(track_peaks.begin(), track_peaks.end(),
+            [this](const auto& peak) { return peak.first == selected_track_id_; });
+        if (found != track_peaks.end()) {
+            active_track_peak = found->second;
+        }
+    }
+    float active_pan = 0.0F;
+    if (!strips_.empty()) {
+        const Strip* active_strip = &strips_.front();
+        if (selected_track_id_ != 0) {
+            const auto found = std::find_if(strips_.begin(), strips_.end(),
+                [this](const Strip& s) { return s.id == selected_track_id_; });
+            if (found != strips_.end()) active_strip = &(*found);
+        }
+        if (active_strip->pan != nullptr) {
+            active_pan = static_cast<float>(active_strip->pan->value()) / 100.0F;
+        }
+    }
+    if (frequency_analyzer_dialog_) {
+        frequency_analyzer_dialog_->updateLevel(master_peak, active_track_peak);
+    }
+    if (phase_meter_dialog_) {
+        phase_meter_dialog_->updateLevel(master_peak, active_pan);
+    }
+    if (surround_analyzer_dialog_) {
+        surround_analyzer_dialog_->updateLevel(master_peak, active_pan);
+    }
+    if (meter_detail_dialog_) {
+        meter_detail_dialog_->updateLevel(master_peak);
+    }
 }
 
 void AudioWorkspace::clearPeaks() { setPeaks({}, {}, 0.0F); }
@@ -2161,6 +2207,66 @@ void AudioWorkspace::applyAudioFx(
     const QString& fx_id,
     std::optional<timeline::TrackId> track_id,
     std::optional<timeline::ClipId> clip_id) {
+    const auto show_tool_dialog = [](auto& ptr, auto factory) {
+        if (!ptr) {
+            ptr = factory();
+            ptr->setAttribute(Qt::WA_DeleteOnClose, true);
+        }
+        ptr->show();
+        ptr->raise();
+        ptr->activateWindow();
+    };
+    if (fx_id == QStringLiteral("frequency_analyzer")) {
+        show_tool_dialog(frequency_analyzer_dialog_, [this] {
+            return new audio_effects::frequency_analyzer::FrequencyAnalyzerDialog(mixer_panel_);
+        });
+        return;
+    }
+    if (fx_id == QStringLiteral("phase_meter")) {
+        show_tool_dialog(phase_meter_dialog_, [this] {
+            return new audio_effects::phase_meter::PhaseMeterDialog(mixer_panel_);
+        });
+        return;
+    }
+    if (fx_id == QStringLiteral("surround_analyzer")) {
+        show_tool_dialog(surround_analyzer_dialog_, [this] {
+            return new audio_effects::surround_analyzer::SurroundAnalyzerDialog(mixer_panel_);
+        });
+        return;
+    }
+    if (fx_id == QStringLiteral("meter") || fx_id == QStringLiteral("loudness_meter")) {
+        show_tool_dialog(meter_detail_dialog_, [this, fx_id] {
+            const QString title = (fx_id == QStringLiteral("loudness_meter"))
+                ? translated("Loudness Meter")
+                : translated("Meter");
+            return new audio_effects::meter_panel::MeterDetailDialog(title, mixer_panel_);
+        });
+        return;
+    }
+    if (fx_id == QStringLiteral("monitor")) {
+        show_tool_dialog(monitor_dialog_, [this] {
+            auto* dlg = new audio_effects::monitor::MonitorDialog(dim_active_, monitor_ref_level_, mixer_panel_);
+            dlg->on_dim_changed = [this](bool dim) {
+                dim_active_ = dim;
+                if (dim_button_) {
+                    const QSignalBlocker blocker(dim_button_);
+                    dim_button_->setChecked(dim);
+                }
+            };
+            dlg->on_ref_changed = [this](double ref) {
+                monitor_ref_level_ = ref;
+            };
+            return dlg;
+        });
+        return;
+    }
+    if (fx_id == QStringLiteral("foley_sampler")) {
+        show_tool_dialog(foley_sampler_dialog_, [this] {
+            return new audio_effects::foley_sampler::FoleySamplerDialog(mixer_panel_);
+        });
+        return;
+    }
+
     if (clip_id.has_value() && *clip_id != 0 && *clip_id == selected_clip_id_) {
         auto chain = selected_clip_chain_;
         const auto before = chain.size();

@@ -3,6 +3,7 @@
 #include "timeline/timeline_model.h"
 
 #include <QObject>
+#include <QPointer>
 #include <map>
 #include "voice_isolation_panel.h"
 #include <QWidget>
@@ -20,6 +21,13 @@ class QPushButton;
 class QWidget;
 class QSlider;
 class QVBoxLayout;
+
+namespace audio_effects::frequency_analyzer { class FrequencyAnalyzerDialog; }
+namespace audio_effects::phase_meter { class PhaseMeterDialog; }
+namespace audio_effects::surround_analyzer { class SurroundAnalyzerDialog; }
+namespace audio_effects::meter_panel { class MeterDetailDialog; }
+namespace audio_effects::monitor { class MonitorDialog; }
+namespace audio_effects::foley_sampler { class FoleySamplerDialog; }
 
 namespace ui {
 
@@ -184,6 +192,15 @@ private:
     std::vector<TrackEffectsRow> track_effects_rows_;
     std::vector<timeline::TrackId> solo_track_ids_;
     std::vector<timeline::AudioBusId> solo_bus_ids_;
+    QPushButton* dim_button_ = nullptr;
+    bool dim_active_ = false;
+    double monitor_ref_level_ = 1.0;
+    QPointer<audio_effects::frequency_analyzer::FrequencyAnalyzerDialog> frequency_analyzer_dialog_;
+    QPointer<audio_effects::phase_meter::PhaseMeterDialog> phase_meter_dialog_;
+    QPointer<audio_effects::surround_analyzer::SurroundAnalyzerDialog> surround_analyzer_dialog_;
+    QPointer<audio_effects::meter_panel::MeterDetailDialog> meter_detail_dialog_;
+    QPointer<audio_effects::monitor::MonitorDialog> monitor_dialog_;
+    QPointer<audio_effects::foley_sampler::FoleySamplerDialog> foley_sampler_dialog_;
 };
 
 }  // namespace ui

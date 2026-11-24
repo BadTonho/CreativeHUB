@@ -955,6 +955,37 @@ public:
                         bus_meter->value() == 0 &&
                         mixer_output_meter->value() == 0,
                     "Audio meters must clear after playback stops.");
+            for (const auto& tool_id : {QStringLiteral("frequency_analyzer"),
+                                        QStringLiteral("phase_meter"),
+                                        QStringLiteral("surround_analyzer"),
+                                        QStringLiteral("meter"),
+                                        QStringLiteral("monitor"),
+                                        QStringLiteral("foley_sampler")}) {
+                window.audio_workspace_->applyAudioFx(tool_id);
+            }
+            const auto find_top_dialog = [](const char* obj_name) -> QWidget* {
+                for (QWidget* w : QApplication::topLevelWidgets()) {
+                    if (w != nullptr && w->objectName() == QLatin1String(obj_name)) {
+                        return w;
+                    }
+                }
+                return nullptr;
+            };
+            auto* freq_dlg = find_top_dialog("audioFrequencyAnalyzerDialog");
+            auto* phase_dlg = find_top_dialog("audioPhaseMeterDialog");
+            auto* surround_dlg = find_top_dialog("audioSurroundAnalyzerDialog");
+            auto* meter_dlg = find_top_dialog("audioMeterDetailDialog");
+            auto* monitor_dlg = find_top_dialog("audioMonitorDialog");
+            auto* foley_dlg = find_top_dialog("audioFoleySamplerDialog");
+            require(freq_dlg != nullptr && phase_dlg != nullptr &&
+                        surround_dlg != nullptr && meter_dlg != nullptr &&
+                        monitor_dlg != nullptr && foley_dlg != nullptr,
+                    "Phase 3 Audio FX analyzer and tool dialogs must open non-modally.");
+            window.audio_workspace_->setPeaks({{track_id, 0.5F}}, {{dialogue_bus, 0.4F}}, 0.8F);
+            window.audio_workspace_->clearPeaks();
+            for (QWidget* dlg : {freq_dlg, phase_dlg, surround_dlg, meter_dlg, monitor_dlg, foley_dlg}) {
+                dlg->close();
+            }
             gain->setValue(65);
             require(std::abs(window.timeline_model_.tracks()
                         [*window.timeline_model_.locateTrack(track_id)]
