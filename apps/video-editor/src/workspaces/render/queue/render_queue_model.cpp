@@ -1,6 +1,7 @@
 #include "workspaces/render/queue/render_queue_model.h"
 
 #include <QCoreApplication>
+#include <QMimeData>
 #include <QStringList>
 
 #include <algorithm>
@@ -89,7 +90,55 @@ QVariant RenderQueueModel::data(const QModelIndex& index, int role) const {
     if (role == Qt::UserRole + 3) {
         return job->error_message;
     }
+    if (role == Qt::UserRole + 4) {
+        return job->display_name;
+    }
+    if (role == Qt::UserRole + 5) {
+        return job->settings.output_path;
+    }
     return {};
+}
+
+Qt::ItemFlags RenderQueueModel::flags(const QModelIndex& index) const {
+    if (!index.isValid()) {
+        return locked_ ? Qt::NoItemFlags : Qt::ItemIsDropEnabled;
+    }
+    Qt::ItemFlags f = Qt::ItemIsEnabled | Qt::ItemIsSelectable;
+    if (!locked_) f |= Qt::ItemIsDragEnabled;
+    return f;
+}
+
+Qt::DropActions RenderQueueModel::supportedDropActions() const {
+    return Qt::MoveAction;
+}
+
+QStringList RenderQueueModel::mimeTypes() const {
+    return {QStringLiteral("application/x-creative-suite-render-job-row")};
+}
+
+QMimeData* RenderQueueModel::mimeData(const QModelIndexList& indexes) const {
+    auto* mime = new QMimeData();
+    for (const auto& idx : indexes) {
+        if (idx.isValid()) {
+            mime->setData(QStringLiteral("application/x-creative-suite-render-job-row"),
+                          QByteArray::number(idx.row()));
+            break;
+        }
+    }
+    return mime;
+}
+
+bool RenderQueueModel::dropMimeData(const QMimeData* data, Qt::DropAction action,
+                                    int row, int, const QModelIndex&) {
+    if (locked_ || action != Qt::MoveAction || data == nullptr) return false;
+    const auto key = QStringLiteral("application/x-creative-suite-render-job-row");
+    if (!data->hasFormat(key)) return false;
+    bool ok = false;
+    const int source_row = data->data(key).toInt(&ok);
+    if (!ok || source_row < 0 || source_row >= rowCount()) return false;
+    int dest = row < 0 ? rowCount() - 1 : (row > source_row ? row - 1 : row);
+    dest = std::clamp(dest, 0, rowCount() - 1);
+    return moveJob(source_row, dest);
 }
 
 std::uint64_t RenderQueueModel::addJob(RenderJob job) {

@@ -20,6 +20,12 @@ public:
     [[nodiscard]] QVariant data(
         const QModelIndex& index,
         int role = Qt::DisplayRole) const override;
+    [[nodiscard]] Qt::ItemFlags flags(const QModelIndex& index) const override;
+    [[nodiscard]] Qt::DropActions supportedDropActions() const override;
+    [[nodiscard]] QStringList mimeTypes() const override;
+    [[nodiscard]] QMimeData* mimeData(const QModelIndexList& indexes) const override;
+    bool dropMimeData(const QMimeData* data, Qt::DropAction action,
+                      int row, int column, const QModelIndex& parent) override;
 
     [[nodiscard]] std::uint64_t addJob(rendering::RenderJob job);
     [[nodiscard]] bool removeJobAt(int row);

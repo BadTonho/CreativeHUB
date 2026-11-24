@@ -75,8 +75,6 @@ private:
     void updateQualitySuggestions();
     void updateQueueActions();
     void startQueue();
-    void removeSelectedJob();
-    void moveSelectedJob(int row_delta);
     void handleQueueFinished(bool canceled);
     void updateAddAction();
     void updateDefaultFrameRate();
@@ -119,9 +117,6 @@ private:
     QPushButton* add_job_button_ = nullptr;
     QPushButton* start_queue_button_ = nullptr;
     QPushButton* cancel_queue_button_ = nullptr;
-    QPushButton* remove_job_button_ = nullptr;
-    QPushButton* move_job_up_button_ = nullptr;
-    QPushButton* move_job_down_button_ = nullptr;
     RenderQueueModel* queue_model_ = nullptr;
     RenderQueueController* queue_controller_ = nullptr;
     QStringList failed_job_names_;

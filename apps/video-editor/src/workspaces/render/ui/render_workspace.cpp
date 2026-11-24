@@ -24,6 +24,8 @@
 #include <QLineEdit>
 #include <QListView>
 #include <QMessageBox>
+#include <QMouseEvent>
+#include <QPainter>
 #include <QPushButton>
 #include <QScrollArea>
 #include <QScrollBar>
@@ -32,6 +34,8 @@
 #include <QSizePolicy>
 #include <QSpinBox>
 #include <QSplitter>
+#include <QStackedWidget>
+#include <QStyledItemDelegate>
 #include <QStringList>
 #include <QVariant>
 #include <QVBoxLayout>
@@ -110,6 +114,159 @@ QString normalizedOutputPath(const QString& path) {
     return normalized;
 }
 
+class RenderQueueCardDelegate final : public QStyledItemDelegate {
+public:
+    RenderQueueCardDelegate(
+        std::function<void(int)> remove_handler,
+        std::function<void()> cancel_handler,
+        QObject* parent = nullptr)
+        : QStyledItemDelegate(parent),
+          remove_handler_(std::move(remove_handler)),
+          cancel_handler_(std::move(cancel_handler)) {}
+
+    QSize sizeHint(const QStyleOptionViewItem& option,
+                   const QModelIndex& index) const override {
+        const auto status = index.data(Qt::UserRole + 1).toString();
+        const int h = (status == QStringLiteral("Rendering")) ? 84 : 74;
+        return QSize(option.rect.width(), h);
+    }
+
+    void paint(QPainter* painter, const QStyleOptionViewItem& option,
+               const QModelIndex& index) const override {
+        painter->save();
+        painter->setRenderHint(QPainter::Antialiasing, true);
+
+        const QRect card = option.rect.adjusted(2, 2, -2, -2);
+        const bool selected = option.state & QStyle::State_Selected;
+        const QString status = index.data(Qt::UserRole + 1).toString();
+        const int progress = index.data(Qt::UserRole + 2).toInt();
+        const QString title = index.data(Qt::UserRole + 4).toString();
+        const QString output = index.data(Qt::UserRole + 5).toString();
+
+        // Card background & border
+        painter->setBrush(QColor("#181a1f"));
+        painter->setPen(QPen(selected ? QColor("#cfd6e0") : QColor("#323743"), 1));
+        painter->drawRoundedRect(card, 4, 4);
+
+        // Header strip
+        const QRect hdr(card.left() + 1, card.top() + 1, card.width() - 2, 22);
+        painter->fillRect(hdr, QColor("#22252c"));
+        painter->setPen(QColor("#2d313b"));
+        painter->drawLine(hdr.left(), hdr.bottom(), hdr.right(), hdr.bottom());
+
+        // Drag grip dots
+        painter->setPen(QColor("#7c8596"));
+        for (int dy = 0; dy < 3; ++dy) {
+            painter->drawPoint(hdr.left() + 8, hdr.top() + 7 + dy * 4);
+            painter->drawPoint(hdr.left() + 10, hdr.top() + 7 + dy * 4);
+        }
+
+        // Job header label
+        QFont f = option.font;
+        f.setPixelSize(11);
+        f.setWeight(QFont::DemiBold);
+        painter->setFont(f);
+        painter->setPen(QColor("#d8dee9"));
+        painter->drawText(hdr.adjusted(18, 0, -28, 0), Qt::AlignVCenter | Qt::AlignLeft,
+                          QStringLiteral("Job %1").arg(index.row() + 1));
+
+        // Close / Cancel 'x' button
+        const QRect close_rect = closeButtonRect(card);
+        painter->setPen(QPen(status == QStringLiteral("Rendering")
+                                 ? QColor("#e05555") : QColor("#8f98a8"), 1.5));
+        const int cx = close_rect.center().x();
+        const int cy = close_rect.center().y();
+        painter->drawLine(cx - 4, cy - 4, cx + 4, cy + 4);
+        painter->drawLine(cx + 4, cy - 4, cx - 4, cy + 4);
+
+        // Filmstrip icon
+        const QRect body(card.left() + 8, hdr.bottom() + 6,
+                         card.width() - 16, card.bottom() - hdr.bottom() - 10);
+        const QRect thumb(body.left(), body.top() + 4, 34, 24);
+        painter->setBrush(QColor("#22252c"));
+        painter->setPen(QColor("#525968"));
+        painter->drawRoundedRect(thumb, 2, 2);
+        painter->setPen(QColor("#7c8596"));
+        for (int i = 0; i < 4; ++i) {
+            const int sy = thumb.top() + 3 + i * 5;
+            painter->drawPoint(thumb.left() + 3, sy);
+            painter->drawPoint(thumb.right() - 3, sy);
+        }
+
+        // Title & output path
+        const int text_left = thumb.right() + 10;
+        const int text_w = std::max(20, body.right() - text_left);
+        f.setPixelSize(11);
+        f.setWeight(QFont::Bold);
+        painter->setFont(f);
+        painter->setPen(QColor("#e2e8f0"));
+        const QString elided_title = option.fontMetrics.elidedText(
+            title, Qt::ElideRight, text_w);
+        painter->drawText(text_left, body.top() + 2, text_w, 16,
+                          Qt::AlignVCenter | Qt::AlignLeft, elided_title);
+
+        f.setPixelSize(10);
+        f.setWeight(QFont::Normal);
+        painter->setFont(f);
+        painter->setPen(QColor("#7c8596"));
+        const QString elided_path = painter->fontMetrics().elidedText(
+            output, Qt::ElideMiddle, text_w);
+        painter->drawText(text_left, body.top() + 19, text_w, 15,
+                          Qt::AlignVCenter | Qt::AlignLeft, elided_path);
+
+        if (status == QStringLiteral("Rendering")) {
+            const QRect bar(text_left, body.bottom() - 8, text_w, 5);
+            painter->fillRect(bar, QColor("#111317"));
+            const int fill_w = static_cast<int>(
+                (std::clamp(progress, 0, 100) / 100.0) * bar.width());
+            painter->fillRect(bar.left(), bar.top(), fill_w, bar.height(),
+                              QColor("#4f88c2"));
+        } else if (status == QStringLiteral("Completed") ||
+                   status == QStringLiteral("Failed") ||
+                   status == QStringLiteral("Canceled")) {
+            f.setPixelSize(9);
+            painter->setFont(f);
+            painter->setPen(status == QStringLiteral("Completed")
+                                ? QColor("#39ad77")
+                                : (status == QStringLiteral("Failed")
+                                       ? QColor("#e05555") : QColor("#8f98a8")));
+            painter->drawText(hdr.adjusted(18, 0, -28, 0),
+                              Qt::AlignVCenter | Qt::AlignRight, status);
+        }
+
+        painter->restore();
+    }
+
+    bool editorEvent(QEvent* event, QAbstractItemModel*,
+                     const QStyleOptionViewItem& option,
+                     const QModelIndex& index) override {
+        if (event->type() == QEvent::MouseButtonRelease) {
+            const auto* mouse = static_cast<const QMouseEvent*>(event);
+            if (mouse->button() == Qt::LeftButton) {
+                const QRect card = option.rect.adjusted(2, 2, -2, -2);
+                if (closeButtonRect(card).contains(mouse->pos())) {
+                    const auto status = index.data(Qt::UserRole + 1).toString();
+                    if (status == QStringLiteral("Rendering")) {
+                        if (cancel_handler_) cancel_handler_();
+                    } else {
+                        if (remove_handler_) remove_handler_(index.row());
+                    }
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+private:
+    static QRect closeButtonRect(const QRect& card) {
+        return QRect(card.right() - 22, card.top() + 2, 20, 20);
+    }
+
+    std::function<void(int)> remove_handler_;
+    std::function<void()> cancel_handler_;
+};
+
 }  // namespace
 
 RenderWorkspace::RenderWorkspace(
@@ -134,8 +291,37 @@ void RenderWorkspace::createPanels(QWidget* parent) {
 
     central_page_ = new QWidget(parent);
     central_page_->setObjectName("renderWorkspacePage");
+    central_page_->setStyleSheet(QStringLiteral(R"(
+        QWidget#renderWorkspacePage { background: #16181c; color: #cfd6e0; }
+        QFrame#renderPanelHeader {
+            background: #1b1d22; border-bottom: 1px solid #262a33;
+        }
+        QLabel#renderSectionTitle {
+            color: #cfd6e0; font-size: 11px; font-weight: 600;
+        }
+        QWidget#renderWorkspacePage QListView {
+            background: #121418; color: #cfd6e0; border: 1px solid #262a33;
+            border-radius: 2px; outline: 0; font-size: 11px;
+        }
+        QWidget#renderWorkspacePage QPushButton {
+            background: #232730; color: #cfd6e0; border: 1px solid #323743;
+            border-radius: 9px; padding: 3px 8px; font-size: 11px;
+        }
+        QWidget#renderWorkspacePage QPushButton:hover { background: #2d323e; }
+        QWidget#renderWorkspacePage QPushButton:disabled {
+            background: #1a1c22; color: #5b6270; border-color: #252830;
+        }
+        QPushButton#renderStartQueueButton {
+            background: #285685; border-color: #4f88c2; color: #ffffff; font-weight: 600;
+        }
+        QPushButton#renderStartQueueButton:hover { background: #31669c; }
+        QPushButton#renderStartQueueButton:disabled {
+            background: #1a1c22; color: #5b6270; border-color: #252830;
+        }
+    )"));
     auto* page_layout = new QVBoxLayout(central_page_);
-    page_layout->setContentsMargins(8, 8, 8, 8);
+    page_layout->setContentsMargins(0, 0, 0, 0);
+    page_layout->setSpacing(0);
 
     page_scroll_area_ = new QScrollArea(central_page_);
     page_scroll_area_->setObjectName("renderWorkspaceScrollArea");
@@ -340,8 +526,88 @@ void RenderWorkspace::updateResponsiveLayout() {
 void RenderWorkspace::createSettingsPanel() {
     settings_panel_ = new QWidget(central_page_);
     settings_panel_->setObjectName("renderSettingsPanel");
+    settings_panel_->setStyleSheet(QStringLiteral(R"(
+        QWidget#renderSettingsPanel { background: #16181c; color: #cfd6e0; }
+        QFrame#renderSettingsHeader {
+            background: #1b1d22; border-bottom: 1px solid #262a33;
+        }
+        QWidget#renderPresetStrip {
+            background: #181a1f; border-bottom: 1px solid #262a33;
+        }
+        QPushButton#renderPresetCard {
+            background: #1e2128; color: #b7c0ce; border: 1px solid #2a2e38;
+            border-radius: 3px; padding: 6px 8px; font-size: 10px; font-weight: 600;
+        }
+        QPushButton#renderPresetCard:hover { background: #262a34; }
+        QPushButton#renderPresetCard:checked {
+            background: #232834; border-color: #4f88c2; color: #ffffff;
+        }
+        QPushButton#renderSettingsTab {
+            background: #1a1c22; color: #8f98a8; border: 1px solid #262a33;
+            border-radius: 2px; padding: 4px 10px; font-size: 11px;
+        }
+        QPushButton#renderSettingsTab:checked {
+            background: #252932; color: #ffffff; border-color: #4f88c2; font-weight: 600;
+        }
+        QWidget#renderSettingsPanel QLineEdit,
+        QWidget#renderSettingsPanel QComboBox,
+        QWidget#renderSettingsPanel QSpinBox,
+        QWidget#renderSettingsPanel QDoubleSpinBox {
+            background: #111317; color: #d8dee9; border: 1px solid #2b2f3a;
+            border-radius: 2px; padding: 3px 6px; font-size: 11px;
+        }
+        QWidget#renderSettingsPanel QLabel { color: #9ba5b5; font-size: 11px; }
+        QWidget#renderSettingsPanel QCheckBox { color: #cfd6e0; font-size: 11px; }
+        QPushButton#renderBrowseOutputButton {
+            background: #232730; color: #cfd6e0; border: 1px solid #323743;
+            border-radius: 3px; padding: 3px 10px; font-size: 11px;
+        }
+        QPushButton#renderAddToQueueButton {
+            background: #232730; color: #e2e8f0; border: 1px solid #3a404e;
+            border-radius: 11px; padding: 5px 14px; margin: 4px 10px 0px 10px;
+            font-size: 11px; font-weight: 600;
+        }
+        QPushButton#renderAddToQueueButton:hover { background: #2d3340; }
+        QPushButton#renderAddToQueueButton:disabled {
+            background: #1a1c22; color: #5b6270; border-color: #252830;
+        }
+    )"));
     auto* panel_layout = new QVBoxLayout(settings_panel_);
-    panel_layout->setContentsMargins(8, 8, 8, 0);
+    panel_layout->setContentsMargins(0, 0, 0, 8);
+    panel_layout->setSpacing(0);
+
+    auto* header = new QFrame(settings_panel_);
+    header->setObjectName("renderSettingsHeader");
+    header->setFixedHeight(30);
+    auto* header_layout = new QHBoxLayout(header);
+    header_layout->setContentsMargins(10, 3, 10, 3);
+    auto* title_lbl = new QLabel(
+        QCoreApplication::translate("RenderWorkspace", "Render Settings"), header);
+    title_lbl->setStyleSheet(QStringLiteral("color: #cfd6e0; font-size: 11px; font-weight: 600;"));
+    header_layout->addWidget(title_lbl);
+    header_layout->addStretch(1);
+    panel_layout->addWidget(header);
+
+    // Preset Cards Strip
+    auto* preset_strip = new QWidget(settings_panel_);
+    preset_strip->setObjectName("renderPresetStrip");
+    preset_strip->setMinimumWidth(0);
+    preset_strip->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed);
+    auto* preset_layout = new QHBoxLayout(preset_strip);
+    preset_layout->setContentsMargins(8, 6, 8, 6);
+    preset_layout->setSpacing(4);
+    bool first_preset = true;
+    for (const char* preset_name : {"Custom", "H.264", "H.265", "Web"}) {
+        auto* btn = new QPushButton(QString::fromLatin1(preset_name), preset_strip);
+        btn->setObjectName("renderPresetCard");
+        btn->setMinimumWidth(0);
+        btn->setCheckable(true);
+        btn->setAutoExclusive(true);
+        btn->setChecked(first_preset);
+        first_preset = false;
+        preset_layout->addWidget(btn, 1);
+    }
+    panel_layout->addWidget(preset_strip);
 
     settings_scroll_area_ = new QScrollArea(settings_panel_);
     settings_scroll_area_->setObjectName("renderSettingsScrollArea");
@@ -349,19 +615,24 @@ void RenderWorkspace::createSettingsPanel() {
     settings_scroll_area_->setFrameShape(QFrame::NoFrame);
     settings_scroll_area_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     settings_scroll_area_->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+    settings_scroll_area_->setStyleSheet(QStringLiteral("background: #16181c; border: none;"));
     panel_layout->addWidget(settings_scroll_area_, 1);
 
     auto* content = new QWidget(settings_scroll_area_);
     content->setMinimumWidth(0);
     content->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Preferred);
+    content->setStyleSheet(QStringLiteral("background: #16181c;"));
     auto* content_layout = new QVBoxLayout(content);
-    content_layout->setContentsMargins(0, 0, 8, 0);
+    content_layout->setContentsMargins(10, 8, 10, 8);
+    content_layout->setSpacing(8);
 
-    auto* output_group = new QGroupBox(QCoreApplication::translate("RenderWorkspace", "Output"), content);
+    auto* output_group = new QWidget(content);
     output_group->setObjectName("renderOutputSettingsGroup");
     output_group->setMinimumWidth(0);
     output_group->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
     auto* output_form = new QFormLayout(output_group);
+    output_form->setContentsMargins(0, 0, 0, 0);
+    output_form->setSpacing(6);
     output_form->setRowWrapPolicy(QFormLayout::WrapLongRows);
 
     auto* output_path_row = new QWidget(output_group);
@@ -395,11 +666,42 @@ void RenderWorkspace::createSettingsPanel() {
     output_form->addRow(capability_warning_);
     content_layout->addWidget(output_group);
 
-    auto* video_group = new QGroupBox(QCoreApplication::translate("RenderWorkspace", "Video"), content);
+    // Video / Audio / File Category Tabs
+    auto* tab_bar = new QWidget(content);
+    auto* tab_layout = new QHBoxLayout(tab_bar);
+    tab_layout->setContentsMargins(0, 2, 0, 2);
+    tab_layout->setSpacing(2);
+    auto* video_tab = new QPushButton(QCoreApplication::translate("RenderWorkspace", "Video"), tab_bar);
+    video_tab->setObjectName("renderSettingsTab");
+    video_tab->setCheckable(true);
+    video_tab->setAutoExclusive(true);
+    video_tab->setChecked(true);
+    auto* audio_tab = new QPushButton(QCoreApplication::translate("RenderWorkspace", "Audio"), tab_bar);
+    audio_tab->setObjectName("renderSettingsTab");
+    audio_tab->setCheckable(true);
+    audio_tab->setAutoExclusive(true);
+    auto* file_tab = new QPushButton(QCoreApplication::translate("RenderWorkspace", "File"), tab_bar);
+    file_tab->setObjectName("renderSettingsTab");
+    file_tab->setCheckable(true);
+    file_tab->setAutoExclusive(true);
+    tab_layout->addWidget(video_tab, 1);
+    tab_layout->addWidget(audio_tab, 1);
+    tab_layout->addWidget(file_tab, 1);
+    content_layout->addWidget(tab_bar);
+
+    auto* settings_stack = new QStackedWidget(content);
+    content_layout->addWidget(settings_stack);
+    connect(video_tab, &QPushButton::clicked, settings_stack, [settings_stack] { settings_stack->setCurrentIndex(0); });
+    connect(audio_tab, &QPushButton::clicked, settings_stack, [settings_stack] { settings_stack->setCurrentIndex(1); });
+    connect(file_tab, &QPushButton::clicked, settings_stack, [settings_stack] { settings_stack->setCurrentIndex(2); });
+
+    auto* video_group = new QWidget(settings_stack);
     video_group->setObjectName("renderVideoSettingsGroup");
     video_group->setMinimumWidth(0);
     video_group->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
     auto* video_form = new QFormLayout(video_group);
+    video_form->setContentsMargins(0, 4, 0, 0);
+    video_form->setSpacing(6);
     video_form->setRowWrapPolicy(QFormLayout::WrapLongRows);
 
     video_encoder_combo_ = new QComboBox(video_group);
@@ -481,19 +783,22 @@ void RenderWorkspace::createSettingsPanel() {
     gpu_warning_timer_ = new QTimer(this);
     gpu_warning_timer_->setSingleShot(true);
     connect(gpu_warning_timer_, &QTimer::timeout, gpu_warning_, &QWidget::hide);
-    content_layout->addWidget(video_group);
+    settings_stack->addWidget(video_group);
 
-    auto* audio_group = new QGroupBox(QCoreApplication::translate("RenderWorkspace", "Audio"), content);
+    auto* audio_group = new QWidget(settings_stack);
     audio_group->setObjectName("renderAudioSettingsGroup");
     audio_group->setMinimumWidth(0);
     audio_group->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
     auto* audio_layout = new QVBoxLayout(audio_group);
+    audio_layout->setContentsMargins(0, 4, 0, 0);
+    audio_layout->setSpacing(6);
     export_audio_check_ = new QCheckBox(QCoreApplication::translate("RenderWorkspace", "Export audio"), audio_group);
     export_audio_check_->setObjectName("renderExportAudioCheck");
     audio_layout->addWidget(export_audio_check_);
     auto* audio_form_widget = new QWidget(audio_group);
     auto* audio_form = new QFormLayout(audio_form_widget);
     audio_form->setContentsMargins(0, 0, 0, 0);
+    audio_form->setSpacing(6);
     audio_form->setRowWrapPolicy(QFormLayout::WrapLongRows);
     audio_encoder_combo_ = new QComboBox(audio_form_widget);
     audio_encoder_combo_->setObjectName("renderAudioEncoderCombo");
@@ -507,7 +812,20 @@ void RenderWorkspace::createSettingsPanel() {
     audio_bitrate_spin_->setSuffix(QStringLiteral(" kbps"));
     audio_form->addRow(QCoreApplication::translate("RenderWorkspace", "Audio bitrate"), audio_bitrate_spin_);
     audio_layout->addWidget(audio_form_widget);
-    content_layout->addWidget(audio_group);
+    audio_layout->addStretch(1);
+    settings_stack->addWidget(audio_group);
+
+    auto* file_group = new QWidget(settings_stack);
+    auto* file_layout = new QVBoxLayout(file_group);
+    file_layout->setContentsMargins(0, 8, 0, 0);
+    auto* file_hint = new QLabel(
+        QCoreApplication::translate("RenderWorkspace", "Output file name, location, and container are configured above."),
+        file_group);
+    file_hint->setWordWrap(true);
+    file_layout->addWidget(file_hint);
+    file_layout->addStretch(1);
+    settings_stack->addWidget(file_group);
+
     content_layout->addStretch(1);
 
     settings_scroll_area_->setWidget(content);
@@ -608,69 +926,86 @@ void RenderWorkspace::createQueuePanel() {
         compact_layout_ ? QSizePolicy::Ignored : QSizePolicy::Expanding);
     queue_panel_->setSizePolicy(queue_policy);
     auto* layout = new QVBoxLayout(queue_panel_);
-    layout->setContentsMargins(8, 0, 0, 0);
+    layout->setContentsMargins(0, 0, 0, 0);
+    layout->setSpacing(0);
 
-    auto* heading = new QLabel(QCoreApplication::translate("RenderWorkspace", "Render Queue"), queue_panel_);
-    QFont heading_font = heading->font();
-    heading_font.setBold(true);
-    heading_font.setPointSize(heading_font.pointSize() + 1);
-    heading->setFont(heading_font);
-    layout->addWidget(heading);
+    auto* q_header = new QFrame(queue_panel_);
+    q_header->setObjectName("renderPanelHeader");
+    q_header->setFixedHeight(30);
+    auto* q_header_layout = new QHBoxLayout(q_header);
+    q_header_layout->setContentsMargins(10, 3, 10, 3);
+    auto* heading = new QLabel(QCoreApplication::translate("RenderWorkspace", "Render Queue"), q_header);
+    heading->setObjectName("renderSectionTitle");
+    q_header_layout->addWidget(heading);
+    q_header_layout->addStretch(1);
+    layout->addWidget(q_header);
 
-    empty_queue_label_ = new QLabel(
-        QCoreApplication::translate("RenderWorkspace", "No jobs in the queue. Configure an output in Render Settings and add it to the queue."),
-        queue_panel_);
-    empty_queue_label_->setObjectName("renderQueueEmptyLabel");
-    empty_queue_label_->setWordWrap(true);
-    layout->addWidget(empty_queue_label_);
+    auto* body = new QWidget(queue_panel_);
+    body->setMinimumWidth(0);
+    body->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Expanding);
+    auto* body_layout = new QVBoxLayout(body);
+    body_layout->setContentsMargins(8, 8, 8, 8);
+    body_layout->setSpacing(6);
 
-    queue_view_ = new QListView(queue_panel_);
+    queue_view_ = new QListView(body);
     queue_view_->setObjectName("renderQueueList");
     queue_view_->setAccessibleName(QCoreApplication::translate("RenderWorkspace", "Prepared render jobs"));
     queue_view_->setModel(queue_model_);
     queue_view_->setSelectionMode(QAbstractItemView::SingleSelection);
     queue_view_->setUniformItemSizes(false);
-    layout->addWidget(queue_view_, 1);
+    queue_view_->setSpacing(4);
+    queue_view_->setDragEnabled(true);
+    queue_view_->setAcceptDrops(true);
+    queue_view_->setDropIndicatorShown(true);
+    queue_view_->setDragDropMode(QAbstractItemView::InternalMove);
+    queue_view_->setDefaultDropAction(Qt::MoveAction);
 
-    auto* run_actions = new QWidget(queue_panel_);
+    auto* empty_overlay_layout = new QVBoxLayout(queue_view_);
+    empty_overlay_layout->setContentsMargins(16, 16, 16, 16);
+    empty_queue_label_ = new QLabel(
+        QCoreApplication::translate("RenderWorkspace", "No jobs in queue"),
+        queue_view_);
+    empty_queue_label_->setObjectName("renderQueueEmptyLabel");
+    empty_queue_label_->setMinimumWidth(0);
+    empty_queue_label_->setAttribute(Qt::WA_TransparentForMouseEvents);
+    empty_queue_label_->setStyleSheet(QStringLiteral(
+        "color: #555c69; background: transparent; font-size: 15px; font-weight: 500;"));
+    empty_queue_label_->setAlignment(Qt::AlignCenter);
+    empty_queue_label_->setWordWrap(true);
+    empty_overlay_layout->addWidget(empty_queue_label_, 1, Qt::AlignCenter);
+    queue_view_->setItemDelegate(new RenderQueueCardDelegate(
+        [this](int row) {
+            if (queue_model_ != nullptr && !isQueueRunning() &&
+                queue_model_->removeJobAt(row)) {
+                queue_view_->clearSelection();
+                updateQueueActions();
+            }
+        },
+        [this] { cancelActiveQueue(); },
+        queue_view_));
+    body_layout->addWidget(queue_view_, 1);
+
+    auto* run_actions = new QWidget(body);
+    run_actions->setMinimumWidth(0);
     auto* run_layout = new QHBoxLayout(run_actions);
     run_layout->setContentsMargins(0, 0, 0, 0);
-    start_queue_button_ = new QPushButton(QCoreApplication::translate("RenderWorkspace", "Start Queue"), run_actions);
-    start_queue_button_->setObjectName("renderStartQueueButton");
-    start_queue_button_->setAccessibleName(QCoreApplication::translate("RenderWorkspace", "Start render queue"));
+    run_layout->setSpacing(6);
     cancel_queue_button_ = new QPushButton(QCoreApplication::translate("RenderWorkspace", "Cancel"), run_actions);
     cancel_queue_button_->setObjectName("renderCancelQueueButton");
     cancel_queue_button_->setAccessibleName(QCoreApplication::translate("RenderWorkspace", "Cancel current render queue"));
-    run_layout->addWidget(start_queue_button_);
-    run_layout->addWidget(cancel_queue_button_);
+    start_queue_button_ = new QPushButton(QCoreApplication::translate("RenderWorkspace", "Start Queue"), run_actions);
+    start_queue_button_->setObjectName("renderStartQueueButton");
+    start_queue_button_->setAccessibleName(QCoreApplication::translate("RenderWorkspace", "Start render queue"));
     run_layout->addStretch(1);
-    layout->addWidget(run_actions);
+    run_layout->addWidget(cancel_queue_button_);
+    run_layout->addWidget(start_queue_button_);
+    body_layout->addWidget(run_actions);
+    layout->addWidget(body, 1);
 
-    auto* queue_actions = new QWidget(queue_panel_);
-    auto* action_layout = new QHBoxLayout(queue_actions);
-    action_layout->setContentsMargins(0, 0, 0, 0);
-    remove_job_button_ = new QPushButton(QCoreApplication::translate("RenderWorkspace", "Remove"), queue_actions);
-    remove_job_button_->setObjectName("renderRemoveQueueJobButton");
-    move_job_up_button_ = new QPushButton(QCoreApplication::translate("RenderWorkspace", "Move Up"), queue_actions);
-    move_job_up_button_->setObjectName("renderMoveQueueJobUpButton");
-    move_job_down_button_ = new QPushButton(QCoreApplication::translate("RenderWorkspace", "Move Down"), queue_actions);
-    move_job_down_button_->setObjectName("renderMoveQueueJobDownButton");
-    action_layout->addWidget(remove_job_button_);
-    action_layout->addStretch(1);
-    action_layout->addWidget(move_job_up_button_);
-    action_layout->addWidget(move_job_down_button_);
-    layout->addWidget(queue_actions);
-
-    connect(remove_job_button_, &QPushButton::clicked,
-            this, [this] { removeSelectedJob(); });
     connect(start_queue_button_, &QPushButton::clicked,
             this, [this] { startQueue(); });
     connect(cancel_queue_button_, &QPushButton::clicked,
             this, [this] { cancelActiveQueue(); });
-    connect(move_job_up_button_, &QPushButton::clicked,
-            this, [this] { moveSelectedJob(-1); });
-    connect(move_job_down_button_, &QPushButton::clicked,
-            this, [this] { moveSelectedJob(1); });
     connect(queue_view_->selectionModel(), &QItemSelectionModel::currentChanged,
             this, [this] { updateQueueActions(); });
     connect(queue_model_, &QAbstractItemModel::rowsInserted,
@@ -691,22 +1026,31 @@ void RenderWorkspace::createQueuePanel() {
 void RenderWorkspace::createPreviewPanel() {
     preview_panel_ = new QWidget(splitter_);
     preview_panel_->setObjectName("renderPreviewPanel");
+    preview_panel_->setStyleSheet(QStringLiteral(
+        "QWidget#renderPreviewPanel { background: #14161a; border-left: 1px solid #262a33; border-right: 1px solid #262a33; }"));
     preview_panel_->setMinimumWidth(compact_layout_ ? 0 : 320);
     auto preview_policy = preview_panel_->sizePolicy();
     preview_policy.setHorizontalPolicy(
         compact_layout_ ? QSizePolicy::Ignored : QSizePolicy::Expanding);
     preview_panel_->setSizePolicy(preview_policy);
     auto* panel_layout = new QVBoxLayout(preview_panel_);
-    panel_layout->setContentsMargins(8, 0, 8, 0);
-    panel_layout->setSpacing(6);
+    panel_layout->setContentsMargins(0, 0, 0, 0);
+    panel_layout->setSpacing(0);
 
-    auto* heading = new QLabel(QCoreApplication::translate("RenderWorkspace", "Preview"), preview_panel_);
-    QFont heading_font = heading->font();
-    heading_font.setBold(true);
-    heading_font.setPointSize(heading_font.pointSize() + 1);
-    heading->setFont(heading_font);
-    panel_layout->addWidget(heading);
-    panel_layout->addStretch(1);
+    auto* p_header = new QFrame(preview_panel_);
+    p_header->setObjectName("renderPanelHeader");
+    p_header->setFixedHeight(30);
+    auto* p_header_layout = new QHBoxLayout(p_header);
+    p_header_layout->setContentsMargins(10, 3, 10, 3);
+    p_header_layout->setSpacing(10);
+    auto* heading = new QLabel(QCoreApplication::translate("RenderWorkspace", "Preview"), p_header);
+    heading->setObjectName("renderSectionTitle");
+    p_header_layout->addWidget(heading);
+    p_header_layout->addStretch(1);
+    auto* tc_hint = new QLabel(QStringLiteral("IN 00:00:00:00   OUT 00:00:00:00"), p_header);
+    tc_hint->setStyleSheet(QStringLiteral("color: #7c8596; font-family: Consolas, monospace; font-size: 10px;"));
+    p_header_layout->addWidget(tc_hint);
+    panel_layout->addWidget(p_header);
 }
 
 void RenderWorkspace::populateContainerOptions() {
@@ -930,13 +1274,7 @@ void RenderWorkspace::updateQueueActions() {
     if (empty_queue_label_ != nullptr) {
         empty_queue_label_->setVisible(queue_model_->jobCount() == 0);
     }
-    const int row = queue_view_->currentIndex().row();
-    const bool selected = row >= 0 && row < queue_model_->jobCount();
     const bool running = queue_controller_ != nullptr && queue_controller_->isRunning();
-    remove_job_button_->setEnabled(selected && !running);
-    move_job_up_button_->setEnabled(selected && row > 0 && !running);
-    move_job_down_button_->setEnabled(
-        selected && row + 1 < queue_model_->jobCount() && !running);
     if (start_queue_button_ != nullptr) {
         bool has_pending = false;
         for (int index = 0; index < queue_model_->jobCount(); ++index) {
@@ -948,7 +1286,10 @@ void RenderWorkspace::updateQueueActions() {
         }
         start_queue_button_->setEnabled(has_pending && !running);
     }
-    if (cancel_queue_button_ != nullptr) cancel_queue_button_->setEnabled(running);
+    if (cancel_queue_button_ != nullptr) {
+        cancel_queue_button_->setEnabled(running);
+        cancel_queue_button_->setVisible(running);
+    }
     if (add_job_button_ != nullptr) add_job_button_->setEnabled(
         add_job_button_->property("renderSettingsValid").toBool() && !running);
 }
@@ -1019,24 +1360,6 @@ void RenderWorkspace::startQueue() {
         return;
     }
     updateQueueActions();
-}
-
-void RenderWorkspace::removeSelectedJob() {
-    if (queue_model_ == nullptr || queue_view_ == nullptr || isQueueRunning()) return;
-    const int row = queue_view_->currentIndex().row();
-    if (queue_model_->removeJobAt(row)) {
-        queue_view_->clearSelection();
-        updateQueueActions();
-    }
-}
-
-void RenderWorkspace::moveSelectedJob(int row_delta) {
-    if (queue_model_ == nullptr || queue_view_ == nullptr || isQueueRunning()) return;
-    const int row = queue_view_->currentIndex().row();
-    const int destination_row = row + row_delta;
-    if (queue_model_->moveJob(row, destination_row)) {
-        queue_view_->setCurrentIndex(queue_model_->index(destination_row, 0));
-    }
 }
 
 void RenderWorkspace::handleQueueFinished(bool canceled) {
