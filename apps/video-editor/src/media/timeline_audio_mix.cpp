@@ -79,6 +79,18 @@ struct BiquadDelay {
 struct TrackDspState {
     std::array<std::vector<BiquadDelay>, 3> equalizer_delays;
     double compressor_reduction_db = 0.0;
+    double limiter_gain = 1.0;
+    std::vector<BiquadDelay> lfe_delays;
+    std::vector<float> delay_buffer;
+    std::size_t delay_write = 0;
+    std::array<std::vector<float>, 4> reverb_combs;
+    std::array<std::size_t, 4> reverb_pos{};
+    std::vector<float> mod_buffer;
+    std::size_t mod_write = 0;
+    double mod_phase = 0.0;
+    std::vector<float> pitch_buffer;
+    std::size_t pitch_write = 0;
+    double pitch_phase = 0.0;
     int sample_rate = 0;
     int channel_count = 0;
     std::int64_t next_source_sample_index = -1;
@@ -99,6 +111,31 @@ bool hasActiveAudioEffectProcessing(
                     timeline::AudioCompressorParameters>(&effect.parameters)) {
                 return compressor->ratio != 1.0 ||
                     compressor->makeup_gain_db != 0.0;
+            }
+            if (const auto* gain = std::get_if<timeline::AudioGainParameters>(&effect.parameters)) {
+                return gain->gain_db != 0.0 || gain->invert_phase;
+            }
+            if (std::holds_alternative<timeline::AudioLimiterParameters>(effect.parameters) ||
+                std::holds_alternative<timeline::AudioLfeFilterParameters>(effect.parameters)) {
+                return true;
+            }
+            if (const auto* delay = std::get_if<timeline::AudioDelayParameters>(&effect.parameters)) {
+                return delay->mix > 0.0;
+            }
+            if (const auto* reverb = std::get_if<timeline::AudioReverbParameters>(&effect.parameters)) {
+                return reverb->mix > 0.0;
+            }
+            if (const auto* mod = std::get_if<timeline::AudioModulationParameters>(&effect.parameters)) {
+                return mod->mix > 0.0 && mod->depth > 0.0;
+            }
+            if (const auto* dist = std::get_if<timeline::AudioDistortionParameters>(&effect.parameters)) {
+                return dist->drive > 0.0 && dist->mix > 0.0;
+            }
+            if (const auto* stereo = std::get_if<timeline::AudioStereoParameters>(&effect.parameters)) {
+                return stereo->mono_sum || stereo->width != 1.0 || stereo->balance != 0.0;
+            }
+            if (const auto* pitch = std::get_if<timeline::AudioPitchParameters>(&effect.parameters)) {
+                return std::abs(pitch->semitones) > 1.0e-4;
             }
             return false;
         });
@@ -250,6 +287,273 @@ void processCompressor(
     }
 }
 
+void processGain(
+    std::vector<float>& samples,
+    const timeline::AudioGainParameters& p) {
+    const float scale = static_cast<float>(std::pow(10.0, p.gain_db / 20.0)) *
+        (p.invert_phase ? -1.0F : 1.0F);
+    for (float& s : samples) s *= scale;
+}
+
+void processLimiter(
+    std::vector<float>& samples,
+    int channel_count,
+    int sample_rate,
+    const timeline::AudioLimiterParameters& p,
+    TrackDspState& state) {
+    if (channel_count <= 0 || sample_rate <= 0) return;
+    const double ceiling = std::pow(10.0, p.ceiling_db / 20.0);
+    if (p.soft_clip) {
+        const float c = static_cast<float>(ceiling);
+        for (float& s : samples) {
+            s = c * std::tanh(s / std::max(1.0e-5F, c));
+        }
+        return;
+    }
+    const double release_coeff = std::exp(-1.0 / (std::max(1.0, p.release_ms) * 0.001 * sample_rate));
+    const std::size_t frames = samples.size() / static_cast<std::size_t>(channel_count);
+    for (std::size_t frame = 0; frame < frames; ++frame) {
+        const std::size_t base = frame * static_cast<std::size_t>(channel_count);
+        double peak = 0.0;
+        for (int ch = 0; ch < channel_count; ++ch) {
+            peak = std::max(peak, static_cast<double>(std::abs(samples[base + ch])));
+        }
+        const double target_gain = peak > ceiling ? (ceiling / peak) : 1.0;
+        if (target_gain < state.limiter_gain) {
+            state.limiter_gain = target_gain;
+        } else {
+            state.limiter_gain = release_coeff * state.limiter_gain + (1.0 - release_coeff) * target_gain;
+        }
+        const float g = static_cast<float>(state.limiter_gain);
+        for (int ch = 0; ch < channel_count; ++ch) {
+            samples[base + ch] *= g;
+        }
+    }
+}
+
+void processLfeFilter(
+    std::vector<float>& samples,
+    int channel_count,
+    int sample_rate,
+    const timeline::AudioLfeFilterParameters& p,
+    TrackDspState& state) {
+    if (channel_count <= 0 || sample_rate <= 0) return;
+    if (static_cast<int>(state.lfe_delays.size()) != channel_count) {
+        state.lfe_delays.assign(static_cast<std::size_t>(channel_count), {});
+    }
+    const double freq = safeFrequency(p.cutoff_hz, sample_rate);
+    const double omega = 2.0 * 3.14159265358979323846 * freq / sample_rate;
+    const double sin_w = std::sin(omega);
+    const double cos_w = std::cos(omega);
+    const double alpha = sin_w / std::sqrt(2.0);
+    const auto coeffs = normalizeBiquad(
+        (1.0 - cos_w) * 0.5, 1.0 - cos_w, (1.0 - cos_w) * 0.5,
+        1.0 + alpha, -2.0 * cos_w, 1.0 - alpha);
+    const std::size_t frames = samples.size() / static_cast<std::size_t>(channel_count);
+    for (std::size_t frame = 0; frame < frames; ++frame) {
+        const std::size_t base = frame * static_cast<std::size_t>(channel_count);
+        for (int ch = 0; ch < channel_count; ++ch) {
+            auto& d = state.lfe_delays[static_cast<std::size_t>(ch)];
+            const double x = samples[base + ch];
+            const double y = coeffs.b0 * x + coeffs.b1 * d.x1 + coeffs.b2 * d.x2 -
+                coeffs.a1 * d.y1 - coeffs.a2 * d.y2;
+            d.x2 = d.x1; d.x1 = x; d.y2 = d.y1; d.y1 = y;
+            samples[base + ch] = static_cast<float>(y);
+        }
+    }
+}
+
+void processDelay(
+    std::vector<float>& samples,
+    int channel_count,
+    int sample_rate,
+    const timeline::AudioDelayParameters& p,
+    TrackDspState& state) {
+    if (channel_count <= 0 || sample_rate <= 0 || p.mix <= 0.0) return;
+    const std::size_t delay_frames = std::max<std::size_t>(
+        1, static_cast<std::size_t>(std::lround(p.delay_ms * 0.001 * sample_rate)));
+    const std::size_t buf_frames = std::max<std::size_t>(delay_frames + 1, static_cast<std::size_t>(sample_rate * 2));
+    const std::size_t needed = buf_frames * static_cast<std::size_t>(channel_count);
+    if (state.delay_buffer.size() != needed) {
+        state.delay_buffer.assign(needed, 0.0F);
+        state.delay_write = 0;
+    }
+    const float fb = static_cast<float>(std::clamp(p.feedback, 0.0, 0.9));
+    const float mix = static_cast<float>(std::clamp(p.mix, 0.0, 1.0));
+    const std::size_t frames = samples.size() / static_cast<std::size_t>(channel_count);
+    for (std::size_t frame = 0; frame < frames; ++frame) {
+        const std::size_t read_frame = (state.delay_write + buf_frames - delay_frames) % buf_frames;
+        const std::size_t base = frame * static_cast<std::size_t>(channel_count);
+        const std::size_t rbase = read_frame * static_cast<std::size_t>(channel_count);
+        const std::size_t wbase = state.delay_write * static_cast<std::size_t>(channel_count);
+        for (int ch = 0; ch < channel_count; ++ch) {
+            const float dry = samples[base + ch];
+            const float delayed = state.delay_buffer[rbase + ch];
+            state.delay_buffer[wbase + ch] = dry + delayed * fb;
+            samples[base + ch] = dry * (1.0F - mix) + delayed * mix;
+        }
+        state.delay_write = (state.delay_write + 1) % buf_frames;
+    }
+}
+
+void processReverb(
+    std::vector<float>& samples,
+    int channel_count,
+    int sample_rate,
+    const timeline::AudioReverbParameters& p,
+    TrackDspState& state) {
+    if (channel_count <= 0 || sample_rate <= 0 || p.mix <= 0.0) return;
+    static constexpr double kCombMs[4] = {29.7, 37.1, 41.1, 43.7};
+    const float fb = static_cast<float>(0.65 + 0.28 * std::clamp(p.room_size, 0.0, 1.0));
+    const float damp = static_cast<float>(1.0 - 0.5 * std::clamp(p.damping, 0.0, 1.0));
+    const float mix = static_cast<float>(std::clamp(p.mix, 0.0, 1.0));
+    for (int c = 0; c < 4; ++c) {
+        const std::size_t len = std::max<std::size_t>(
+            16, static_cast<std::size_t>(std::lround(kCombMs[c] * (0.6 + 0.8 * p.room_size) * 0.001 * sample_rate))) *
+            static_cast<std::size_t>(channel_count);
+        if (state.reverb_combs[c].size() != len) {
+            state.reverb_combs[c].assign(len, 0.0F);
+            state.reverb_pos[c] = 0;
+        }
+    }
+    const std::size_t frames = samples.size() / static_cast<std::size_t>(channel_count);
+    for (std::size_t frame = 0; frame < frames; ++frame) {
+        const std::size_t base = frame * static_cast<std::size_t>(channel_count);
+        for (int ch = 0; ch < channel_count; ++ch) {
+            const float dry = samples[base + ch];
+            float wet = 0.0F;
+            for (int c = 0; c < 4; ++c) {
+                auto& buf = state.reverb_combs[c];
+                const std::size_t idx = (state.reverb_pos[c] * static_cast<std::size_t>(channel_count) + ch) % buf.size();
+                const float y = buf[idx];
+                buf[idx] = dry + y * fb * damp;
+                wet += y;
+            }
+            wet *= 0.25F;
+            samples[base + ch] = dry * (1.0F - mix) + wet * mix;
+        }
+        for (int c = 0; c < 4; ++c) {
+            const std::size_t fcount = state.reverb_combs[c].size() / static_cast<std::size_t>(channel_count);
+            state.reverb_pos[c] = (state.reverb_pos[c] + 1) % std::max<std::size_t>(1, fcount);
+        }
+    }
+}
+
+void processModulation(
+    std::vector<float>& samples,
+    int channel_count,
+    int sample_rate,
+    const timeline::AudioModulationParameters& p,
+    TrackDspState& state) {
+    if (channel_count <= 0 || sample_rate <= 0 || p.mix <= 0.0 || p.depth <= 0.0) return;
+    const std::size_t buf_frames = std::max<std::size_t>(2048, static_cast<std::size_t>(sample_rate * 0.1));
+    const std::size_t needed = buf_frames * static_cast<std::size_t>(channel_count);
+    if (state.mod_buffer.size() != needed) {
+        state.mod_buffer.assign(needed, 0.0F);
+        state.mod_write = 0;
+    }
+    const double base_ms = (p.mode == 1) ? 2.0 : 12.0;
+    const double sweep_ms = (p.mode == 1) ? 3.0 * p.depth : 6.0 * p.depth;
+    const float mix = static_cast<float>(std::clamp(p.mix, 0.0, 1.0));
+    const double phase_inc = 2.0 * 3.14159265358979323846 * p.rate_hz / sample_rate;
+    const std::size_t frames = samples.size() / static_cast<std::size_t>(channel_count);
+    for (std::size_t frame = 0; frame < frames; ++frame) {
+        const double delay_samples = (base_ms + sweep_ms * (0.5 + 0.5 * std::sin(state.mod_phase))) * 0.001 * sample_rate;
+        state.mod_phase += phase_inc;
+        if (state.mod_phase > 6.283185307179586) state.mod_phase -= 6.283185307179586;
+        const std::size_t d0 = std::min<std::size_t>(buf_frames - 2, static_cast<std::size_t>(delay_samples));
+        const float frac = static_cast<float>(delay_samples - d0);
+        const std::size_t r0 = (state.mod_write + buf_frames - d0) % buf_frames;
+        const std::size_t r1 = (state.mod_write + buf_frames - d0 - 1) % buf_frames;
+        const std::size_t base = frame * static_cast<std::size_t>(channel_count);
+        for (int ch = 0; ch < channel_count; ++ch) {
+            const float dry = samples[base + ch];
+            state.mod_buffer[state.mod_write * static_cast<std::size_t>(channel_count) + ch] = dry;
+            const float s0 = state.mod_buffer[r0 * static_cast<std::size_t>(channel_count) + ch];
+            const float s1 = state.mod_buffer[r1 * static_cast<std::size_t>(channel_count) + ch];
+            const float wet = s0 + (s1 - s0) * frac;
+            samples[base + ch] = dry * (1.0F - mix) + wet * mix;
+        }
+        state.mod_write = (state.mod_write + 1) % buf_frames;
+    }
+}
+
+void processDistortion(
+    std::vector<float>& samples,
+    const timeline::AudioDistortionParameters& p) {
+    if (p.drive <= 0.0 || p.mix <= 0.0) return;
+    const float gain = static_cast<float>(1.0 + p.drive * 14.0);
+    const float mix = static_cast<float>(std::clamp(p.mix, 0.0, 1.0));
+    const float norm = 1.0F / std::tanh(gain);
+    for (float& s : samples) {
+        const float wet = std::tanh(s * gain) * norm;
+        s = s * (1.0F - mix) + wet * mix;
+    }
+}
+
+void processStereo(
+    std::vector<float>& samples,
+    int channel_count,
+    const timeline::AudioStereoParameters& p) {
+    if (channel_count < 2) return;
+    const float width = p.mono_sum ? 0.0F : static_cast<float>(std::clamp(p.width, 0.0, 2.0));
+    const float left_bal = static_cast<float>(std::clamp(1.0 - std::max(0.0, p.balance), 0.0, 1.0));
+    const float right_bal = static_cast<float>(std::clamp(1.0 + std::min(0.0, p.balance), 0.0, 1.0));
+    const std::size_t frames = samples.size() / static_cast<std::size_t>(channel_count);
+    for (std::size_t frame = 0; frame < frames; ++frame) {
+        const std::size_t base = frame * static_cast<std::size_t>(channel_count);
+        const float l = samples[base] * left_bal;
+        const float r = samples[base + 1] * right_bal;
+        const float mid = 0.5F * (l + r);
+        const float side = 0.5F * (l - r) * width;
+        samples[base] = mid + side;
+        samples[base + 1] = mid - side;
+    }
+}
+
+void processPitch(
+    std::vector<float>& samples,
+    int channel_count,
+    int sample_rate,
+    const timeline::AudioPitchParameters& p,
+    TrackDspState& state) {
+    if (channel_count <= 0 || sample_rate <= 0 || std::abs(p.semitones) <= 1.0e-4) return;
+    const std::size_t win_frames = std::max<std::size_t>(512, static_cast<std::size_t>(sample_rate * 0.04));
+    const std::size_t buf_frames = win_frames * 2;
+    const std::size_t needed = buf_frames * static_cast<std::size_t>(channel_count);
+    if (state.pitch_buffer.size() != needed) {
+        state.pitch_buffer.assign(needed, 0.0F);
+        state.pitch_write = 0;
+        state.pitch_phase = 0.0;
+    }
+    const double ratio = std::pow(2.0, p.semitones / 12.0);
+    const double phase_step = (1.0 - ratio) / static_cast<double>(win_frames);
+    const std::size_t frames = samples.size() / static_cast<std::size_t>(channel_count);
+    for (std::size_t frame = 0; frame < frames; ++frame) {
+        const std::size_t base = frame * static_cast<std::size_t>(channel_count);
+        for (int ch = 0; ch < channel_count; ++ch) {
+            state.pitch_buffer[state.pitch_write * static_cast<std::size_t>(channel_count) + ch] = samples[base + ch];
+        }
+        const double ph0 = state.pitch_phase;
+        const double ph1 = std::fmod(ph0 + 0.5, 1.0);
+        const double d0 = ph0 * static_cast<double>(win_frames);
+        const double d1 = ph1 * static_cast<double>(win_frames);
+        const float w0 = static_cast<float>(0.5 - 0.5 * std::cos(2.0 * 3.14159265358979323846 * ph0));
+        const float w1 = 1.0F - w0;
+        const std::size_t i0 = (state.pitch_write + buf_frames - static_cast<std::size_t>(d0)) % buf_frames;
+        const std::size_t i1 = (state.pitch_write + buf_frames - static_cast<std::size_t>(d1)) % buf_frames;
+        for (int ch = 0; ch < channel_count; ++ch) {
+            const float s0 = state.pitch_buffer[i0 * static_cast<std::size_t>(channel_count) + ch];
+            const float s1 = state.pitch_buffer[i1 * static_cast<std::size_t>(channel_count) + ch];
+            samples[base + ch] = s0 * w0 + s1 * w1;
+        }
+        state.pitch_phase += phase_step;
+        if (state.pitch_phase >= 1.0) state.pitch_phase -= 1.0;
+        if (state.pitch_phase < 0.0) state.pitch_phase += 1.0;
+        state.pitch_write = (state.pitch_write + 1) % buf_frames;
+    }
+}
+
 void runTrackEffectChain(
     std::vector<float>& samples,
     int channel_count,
@@ -267,6 +571,24 @@ void runTrackEffectChain(
             if (compressor->ratio != 1.0 || compressor->makeup_gain_db != 0.0)
                 processCompressor(samples, channel_count, sample_rate,
                                   *compressor, state);
+        } else if (const auto* gain = std::get_if<timeline::AudioGainParameters>(&effect.parameters)) {
+            processGain(samples, *gain);
+        } else if (const auto* limiter = std::get_if<timeline::AudioLimiterParameters>(&effect.parameters)) {
+            processLimiter(samples, channel_count, sample_rate, *limiter, state);
+        } else if (const auto* lfe = std::get_if<timeline::AudioLfeFilterParameters>(&effect.parameters)) {
+            processLfeFilter(samples, channel_count, sample_rate, *lfe, state);
+        } else if (const auto* delay = std::get_if<timeline::AudioDelayParameters>(&effect.parameters)) {
+            processDelay(samples, channel_count, sample_rate, *delay, state);
+        } else if (const auto* reverb = std::get_if<timeline::AudioReverbParameters>(&effect.parameters)) {
+            processReverb(samples, channel_count, sample_rate, *reverb, state);
+        } else if (const auto* mod = std::get_if<timeline::AudioModulationParameters>(&effect.parameters)) {
+            processModulation(samples, channel_count, sample_rate, *mod, state);
+        } else if (const auto* dist = std::get_if<timeline::AudioDistortionParameters>(&effect.parameters)) {
+            processDistortion(samples, *dist);
+        } else if (const auto* stereo = std::get_if<timeline::AudioStereoParameters>(&effect.parameters)) {
+            processStereo(samples, channel_count, *stereo);
+        } else if (const auto* pitch = std::get_if<timeline::AudioPitchParameters>(&effect.parameters)) {
+            processPitch(samples, channel_count, sample_rate, *pitch, state);
         }
     }
 }

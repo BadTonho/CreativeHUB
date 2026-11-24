@@ -747,6 +747,20 @@ public:
                 "Ducking editor allowed self-reference or changed the saved settings.");
             duck.findChild<QPushButton*>("audioDuckingGenerateCurve")->click();
             require(duck.generateRequested() && duck.result() == QDialog::Accepted, "The curve-generation action was not exposed.");
+
+            const std::vector<timeline::AudioEffectInstance> studio_chain{
+                {timeline::AudioGainParameters{3.0, true}, true},
+                {timeline::AudioLimiterParameters{-1.0, 50.0, true}, true},
+                {timeline::AudioLfeFilterParameters{100.0}, true},
+                {timeline::AudioDelayParameters{200.0, 0.3, 0.4}, true},
+                {timeline::AudioReverbParameters{0.6, 0.4, 0.3}, true},
+                {timeline::AudioModulationParameters{0, 1.5, 0.5, 0.4}, true},
+                {timeline::AudioDistortionParameters{0.4, 0.5}, true},
+                {timeline::AudioStereoParameters{1.4, 0.0, false}, true},
+                {timeline::AudioPitchParameters{2.0}, true}
+            };
+            require(timeline::validAudioEffectChain(studio_chain),
+                    "Extended studio audio effect chain must validate.");
         }
         qputenv("CREATIVE_SUITE_VOICE_ISOLATION_CACHE_ROOT", QString::fromStdU16String((directory / "isolation-cache").u16string()).toUtf8());
         const auto audio_source = directory / "audio-workspace.wav";

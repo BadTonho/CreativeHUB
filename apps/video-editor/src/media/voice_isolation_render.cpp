@@ -35,7 +35,16 @@ void effects(QDataStream& stream, const std::vector<timeline::AudioEffectInstanc
             else if constexpr (std::is_same_v<T, timeline::AudioCompressorParameters>) stream << value.threshold_db << value.ratio << value.attack_ms << value.release_ms << value.makeup_gain_db;
             else if constexpr (std::is_same_v<T, timeline::AudioDialogueCleanupParameters>) stream << value.highpass_frequency_hz << value.deesser_intensity;
             else if constexpr (std::is_same_v<T, timeline::AudioNoiseReductionParameters>) stream << value.reduction_db << value.noise_floor_db;
-            else stream << value.hum_frequency_hz << value.declick_enabled << value.declick_sensitivity;
+            else if constexpr (std::is_same_v<T, timeline::AudioRepairParameters>) stream << value.hum_frequency_hz << value.declick_enabled << value.declick_sensitivity;
+            else if constexpr (std::is_same_v<T, timeline::AudioGainParameters>) stream << value.gain_db << value.invert_phase;
+            else if constexpr (std::is_same_v<T, timeline::AudioLimiterParameters>) stream << value.ceiling_db << value.release_ms << value.soft_clip;
+            else if constexpr (std::is_same_v<T, timeline::AudioLfeFilterParameters>) stream << value.cutoff_hz;
+            else if constexpr (std::is_same_v<T, timeline::AudioDelayParameters>) stream << value.delay_ms << value.feedback << value.mix;
+            else if constexpr (std::is_same_v<T, timeline::AudioReverbParameters>) stream << value.room_size << value.damping << value.mix;
+            else if constexpr (std::is_same_v<T, timeline::AudioModulationParameters>) stream << value.mode << value.rate_hz << value.depth << value.mix;
+            else if constexpr (std::is_same_v<T, timeline::AudioDistortionParameters>) stream << value.drive << value.mix;
+            else if constexpr (std::is_same_v<T, timeline::AudioStereoParameters>) stream << value.width << value.balance << value.mono_sum;
+            else if constexpr (std::is_same_v<T, timeline::AudioPitchParameters>) stream << value.semitones;
         }, effect.parameters);
     }
 }

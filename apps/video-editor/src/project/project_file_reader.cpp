@@ -173,6 +173,34 @@ std::vector<timeline::AudioEffectInstance> readAudioEffectChain(
                 throwJson(ProjectErrorCode::InvalidValue, project_path, "Invalid audio repair settings.");
             effect.parameters = timeline::AudioRepairParameters{
                 static_cast<int>(hum), enabled_declick.toBool(), read_parameter("declick_sensitivity")};
+        } else if (type.toString() == QLatin1String("gain")) {
+            effect.parameters = timeline::AudioGainParameters{
+                read_parameter("gain_db"), effect_object.value("invert_phase").toBool(false)};
+        } else if (type.toString() == QLatin1String("limiter")) {
+            effect.parameters = timeline::AudioLimiterParameters{
+                read_parameter("ceiling_db"), read_parameter("release_ms"),
+                effect_object.value("soft_clip").toBool(false)};
+        } else if (type.toString() == QLatin1String("lfe_filter")) {
+            effect.parameters = timeline::AudioLfeFilterParameters{read_parameter("cutoff_hz")};
+        } else if (type.toString() == QLatin1String("delay")) {
+            effect.parameters = timeline::AudioDelayParameters{
+                read_parameter("delay_ms"), read_parameter("feedback"), read_parameter("mix")};
+        } else if (type.toString() == QLatin1String("reverb")) {
+            effect.parameters = timeline::AudioReverbParameters{
+                read_parameter("room_size"), read_parameter("damping"), read_parameter("mix")};
+        } else if (type.toString() == QLatin1String("modulation")) {
+            effect.parameters = timeline::AudioModulationParameters{
+                effect_object.value("mode").toInt(0),
+                read_parameter("rate_hz"), read_parameter("depth"), read_parameter("mix")};
+        } else if (type.toString() == QLatin1String("distortion")) {
+            effect.parameters = timeline::AudioDistortionParameters{
+                read_parameter("drive"), read_parameter("mix")};
+        } else if (type.toString() == QLatin1String("stereo")) {
+            effect.parameters = timeline::AudioStereoParameters{
+                read_parameter("width"), read_parameter("balance"),
+                effect_object.value("mono_sum").toBool(false)};
+        } else if (type.toString() == QLatin1String("pitch")) {
+            effect.parameters = timeline::AudioPitchParameters{read_parameter("semitones")};
         } else {
             throwJson(ProjectErrorCode::InvalidValue, project_path,
                       "Project JSON contains an unsupported audio effect type.");

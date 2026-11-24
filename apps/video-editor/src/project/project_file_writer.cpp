@@ -125,6 +125,46 @@ QJsonArray audioEffectChainJson(
             effect_item.insert("hum_frequency_hz", repair->hum_frequency_hz);
             effect_item.insert("declick_enabled", repair->declick_enabled);
             effect_item.insert("declick_sensitivity", repair->declick_sensitivity);
+        } else if (const auto* gain = std::get_if<timeline::AudioGainParameters>(&effect.parameters)) {
+            effect_item.insert("type", "gain");
+            effect_item.insert("gain_db", gain->gain_db);
+            effect_item.insert("invert_phase", gain->invert_phase);
+        } else if (const auto* limiter = std::get_if<timeline::AudioLimiterParameters>(&effect.parameters)) {
+            effect_item.insert("type", "limiter");
+            effect_item.insert("ceiling_db", limiter->ceiling_db);
+            effect_item.insert("release_ms", limiter->release_ms);
+            effect_item.insert("soft_clip", limiter->soft_clip);
+        } else if (const auto* lfe = std::get_if<timeline::AudioLfeFilterParameters>(&effect.parameters)) {
+            effect_item.insert("type", "lfe_filter");
+            effect_item.insert("cutoff_hz", lfe->cutoff_hz);
+        } else if (const auto* delay = std::get_if<timeline::AudioDelayParameters>(&effect.parameters)) {
+            effect_item.insert("type", "delay");
+            effect_item.insert("delay_ms", delay->delay_ms);
+            effect_item.insert("feedback", delay->feedback);
+            effect_item.insert("mix", delay->mix);
+        } else if (const auto* reverb = std::get_if<timeline::AudioReverbParameters>(&effect.parameters)) {
+            effect_item.insert("type", "reverb");
+            effect_item.insert("room_size", reverb->room_size);
+            effect_item.insert("damping", reverb->damping);
+            effect_item.insert("mix", reverb->mix);
+        } else if (const auto* mod = std::get_if<timeline::AudioModulationParameters>(&effect.parameters)) {
+            effect_item.insert("type", "modulation");
+            effect_item.insert("mode", mod->mode);
+            effect_item.insert("rate_hz", mod->rate_hz);
+            effect_item.insert("depth", mod->depth);
+            effect_item.insert("mix", mod->mix);
+        } else if (const auto* dist = std::get_if<timeline::AudioDistortionParameters>(&effect.parameters)) {
+            effect_item.insert("type", "distortion");
+            effect_item.insert("drive", dist->drive);
+            effect_item.insert("mix", dist->mix);
+        } else if (const auto* stereo = std::get_if<timeline::AudioStereoParameters>(&effect.parameters)) {
+            effect_item.insert("type", "stereo");
+            effect_item.insert("width", stereo->width);
+            effect_item.insert("balance", stereo->balance);
+            effect_item.insert("mono_sum", stereo->mono_sum);
+        } else if (const auto* pitch = std::get_if<timeline::AudioPitchParameters>(&effect.parameters)) {
+            effect_item.insert("type", "pitch");
+            effect_item.insert("semitones", pitch->semitones);
         }
         audio_effects.append(effect_item);
     }

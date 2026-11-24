@@ -28,9 +28,88 @@ struct AudioCompressorParameters {
                            const AudioCompressorParameters&) = default;
 };
 
+struct AudioGainParameters {
+    double gain_db = 0.0;
+    bool invert_phase = false;
+
+    friend bool operator==(const AudioGainParameters&,
+                           const AudioGainParameters&) = default;
+};
+
+struct AudioLimiterParameters {
+    double ceiling_db = -1.0;
+    double release_ms = 50.0;
+    bool soft_clip = false;
+
+    friend bool operator==(const AudioLimiterParameters&,
+                           const AudioLimiterParameters&) = default;
+};
+
+struct AudioLfeFilterParameters {
+    double cutoff_hz = 120.0;
+
+    friend bool operator==(const AudioLfeFilterParameters&,
+                           const AudioLfeFilterParameters&) = default;
+};
+
+struct AudioDelayParameters {
+    double delay_ms = 250.0;
+    double feedback = 0.35;
+    double mix = 0.35;
+
+    friend bool operator==(const AudioDelayParameters&,
+                           const AudioDelayParameters&) = default;
+};
+
+struct AudioReverbParameters {
+    double room_size = 0.5;
+    double damping = 0.4;
+    double mix = 0.3;
+
+    friend bool operator==(const AudioReverbParameters&,
+                           const AudioReverbParameters&) = default;
+};
+
+struct AudioModulationParameters {
+    int mode = 0;  // 0: Chorus, 1: Flanger, 2: Modulation
+    double rate_hz = 1.2;
+    double depth = 0.5;
+    double mix = 0.4;
+
+    friend bool operator==(const AudioModulationParameters&,
+                           const AudioModulationParameters&) = default;
+};
+
+struct AudioDistortionParameters {
+    double drive = 0.4;
+    double mix = 0.5;
+
+    friend bool operator==(const AudioDistortionParameters&,
+                           const AudioDistortionParameters&) = default;
+};
+
+struct AudioStereoParameters {
+    double width = 1.0;
+    double balance = 0.0;
+    bool mono_sum = false;
+
+    friend bool operator==(const AudioStereoParameters&,
+                           const AudioStereoParameters&) = default;
+};
+
+struct AudioPitchParameters {
+    double semitones = 0.0;
+
+    friend bool operator==(const AudioPitchParameters&,
+                           const AudioPitchParameters&) = default;
+};
+
 using AudioEffectParameters = std::variant<
     AudioEqualizerParameters, AudioCompressorParameters, AudioDialogueCleanupParameters,
-    AudioNoiseReductionParameters, AudioRepairParameters>;
+    AudioNoiseReductionParameters, AudioRepairParameters,
+    AudioGainParameters, AudioLimiterParameters, AudioLfeFilterParameters,
+    AudioDelayParameters, AudioReverbParameters, AudioModulationParameters,
+    AudioDistortionParameters, AudioStereoParameters, AudioPitchParameters>;
 
 struct AudioEffectInstance {
     AudioEffectParameters parameters = AudioEqualizerParameters{};
@@ -42,8 +121,8 @@ struct AudioEffectInstance {
 
 [[nodiscard]] inline bool validAudioEffectChain(
     const std::vector<AudioEffectInstance>& effects) noexcept {
-    if (effects.size() > 5) return false;
-    std::array<bool, 5> seen{};
+    if (effects.size() > 14) return false;
+    std::array<bool, 14> seen{};
     bool has_equalizer = false;
     bool has_compressor = false;
     for (const auto& effect : effects) {
@@ -103,6 +182,34 @@ struct AudioEffectInstance {
         } else if (const auto* repair = std::get_if<AudioRepairParameters>(&effect.parameters)) {
             if ((repair->hum_frequency_hz != 0 && repair->hum_frequency_hz != 50 && repair->hum_frequency_hz != 60) ||
                 !audioParameterInRange(repair->declick_sensitivity, 1, 10)) return false;
+        } else if (const auto* gain = std::get_if<AudioGainParameters>(&effect.parameters)) {
+            if (!audioParameterInRange(gain->gain_db, -24.0, 24.0)) return false;
+        } else if (const auto* limiter = std::get_if<AudioLimiterParameters>(&effect.parameters)) {
+            if (!audioParameterInRange(limiter->ceiling_db, -12.0, 0.0) ||
+                !audioParameterInRange(limiter->release_ms, 5.0, 500.0)) return false;
+        } else if (const auto* lfe = std::get_if<AudioLfeFilterParameters>(&effect.parameters)) {
+            if (!audioParameterInRange(lfe->cutoff_hz, 40.0, 250.0)) return false;
+        } else if (const auto* delay = std::get_if<AudioDelayParameters>(&effect.parameters)) {
+            if (!audioParameterInRange(delay->delay_ms, 1.0, 2000.0) ||
+                !audioParameterInRange(delay->feedback, 0.0, 0.9) ||
+                !audioParameterInRange(delay->mix, 0.0, 1.0)) return false;
+        } else if (const auto* reverb = std::get_if<AudioReverbParameters>(&effect.parameters)) {
+            if (!audioParameterInRange(reverb->room_size, 0.0, 1.0) ||
+                !audioParameterInRange(reverb->damping, 0.0, 1.0) ||
+                !audioParameterInRange(reverb->mix, 0.0, 1.0)) return false;
+        } else if (const auto* mod = std::get_if<AudioModulationParameters>(&effect.parameters)) {
+            if (mod->mode < 0 || mod->mode > 2 ||
+                !audioParameterInRange(mod->rate_hz, 0.1, 10.0) ||
+                !audioParameterInRange(mod->depth, 0.0, 1.0) ||
+                !audioParameterInRange(mod->mix, 0.0, 1.0)) return false;
+        } else if (const auto* dist = std::get_if<AudioDistortionParameters>(&effect.parameters)) {
+            if (!audioParameterInRange(dist->drive, 0.0, 1.0) ||
+                !audioParameterInRange(dist->mix, 0.0, 1.0)) return false;
+        } else if (const auto* stereo = std::get_if<AudioStereoParameters>(&effect.parameters)) {
+            if (!audioParameterInRange(stereo->width, 0.0, 2.0) ||
+                !audioParameterInRange(stereo->balance, -1.0, 1.0)) return false;
+        } else if (const auto* pitch = std::get_if<AudioPitchParameters>(&effect.parameters)) {
+            if (!audioParameterInRange(pitch->semitones, -12.0, 12.0)) return false;
         } else {
             return false;
         }

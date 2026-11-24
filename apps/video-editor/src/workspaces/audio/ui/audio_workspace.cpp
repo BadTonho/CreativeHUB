@@ -2121,29 +2121,52 @@ void AudioWorkspace::setSelectedClip(const timeline::TimelineClip* clip) {
     }
 }
 
+void appendEffectsForId(std::vector<timeline::AudioEffectInstance>& chain, const QString& fx_id) {
+    auto add_unique = [&chain](timeline::AudioEffectParameters params) {
+        timeline::AudioEffectInstance fx;
+        fx.parameters = std::move(params);
+        fx.enabled = true;
+        const bool exists = std::any_of(chain.begin(), chain.end(), [&fx](const auto& item) {
+            return item.parameters.index() == fx.parameters.index();
+        });
+        if (!exists) chain.push_back(std::move(fx));
+    };
+    if (fx_id == QStringLiteral("studio_eq")) add_unique(timeline::AudioEqualizerParameters{});
+    else if (fx_id == QStringLiteral("multiband_compressor")) add_unique(timeline::AudioCompressorParameters{});
+    else if (fx_id == QStringLiteral("de_esser") || fx_id == QStringLiteral("dialogue_processor")) add_unique(timeline::AudioDialogueCleanupParameters{});
+    else if (fx_id == QStringLiteral("noise_reduction")) add_unique(timeline::AudioNoiseReductionParameters{});
+    else if (fx_id == QStringLiteral("de_hummer")) add_unique(timeline::AudioRepairParameters{});
+    else if (fx_id == QStringLiteral("gain")) add_unique(timeline::AudioGainParameters{});
+    else if (fx_id == QStringLiteral("limiter")) add_unique(timeline::AudioLimiterParameters{-1.0, 50.0, false});
+    else if (fx_id == QStringLiteral("soft_clipper")) add_unique(timeline::AudioLimiterParameters{-0.5, 20.0, true});
+    else if (fx_id == QStringLiteral("lfe_filter")) add_unique(timeline::AudioLfeFilterParameters{});
+    else if (fx_id == QStringLiteral("delay")) add_unique(timeline::AudioDelayParameters{250.0, 0.35, 0.35});
+    else if (fx_id == QStringLiteral("echo")) add_unique(timeline::AudioDelayParameters{420.0, 0.5, 0.45});
+    else if (fx_id == QStringLiteral("reverb")) add_unique(timeline::AudioReverbParameters{});
+    else if (fx_id == QStringLiteral("chorus")) add_unique(timeline::AudioModulationParameters{0, 1.0, 0.5, 0.4});
+    else if (fx_id == QStringLiteral("flanger")) add_unique(timeline::AudioModulationParameters{1, 0.5, 0.7, 0.5});
+    else if (fx_id == QStringLiteral("modulation")) add_unique(timeline::AudioModulationParameters{2, 3.0, 0.6, 0.5});
+    else if (fx_id == QStringLiteral("distortion")) add_unique(timeline::AudioDistortionParameters{});
+    else if (fx_id == QStringLiteral("stereo_width")) add_unique(timeline::AudioStereoParameters{1.4, 0.0, false});
+    else if (fx_id == QStringLiteral("stereo_fixer")) add_unique(timeline::AudioStereoParameters{1.0, 0.0, true});
+    else if (fx_id == QStringLiteral("pitch")) add_unique(timeline::AudioPitchParameters{});
+    else if (fx_id == QStringLiteral("vocal_channel")) {
+        add_unique(timeline::AudioDialogueCleanupParameters{});
+        add_unique(timeline::AudioEqualizerParameters{});
+        add_unique(timeline::AudioCompressorParameters{});
+    }
+}
+
 void AudioWorkspace::applyAudioFx(
     const QString& fx_id,
     std::optional<timeline::TrackId> track_id,
     std::optional<timeline::ClipId> clip_id) {
     if (clip_id.has_value() && *clip_id != 0 && *clip_id == selected_clip_id_) {
         auto chain = selected_clip_chain_;
-        timeline::AudioEffectInstance effect;
-        bool has_effect = true;
-        if (fx_id == QStringLiteral("studio_eq")) effect.parameters = timeline::AudioEqualizerParameters{};
-        else if (fx_id == QStringLiteral("multiband_compressor") || fx_id == QStringLiteral("limiter") || fx_id == QStringLiteral("soft_clipper")) effect.parameters = timeline::AudioCompressorParameters{};
-        else if (fx_id == QStringLiteral("de_esser") || fx_id == QStringLiteral("dialogue_processor")) effect.parameters = timeline::AudioDialogueCleanupParameters{};
-        else if (fx_id == QStringLiteral("noise_reduction")) effect.parameters = timeline::AudioNoiseReductionParameters{};
-        else if (fx_id == QStringLiteral("de_hummer")) effect.parameters = timeline::AudioRepairParameters{};
-        else has_effect = false;
-        if (has_effect) {
-            effect.enabled = true;
-            const bool exists = std::any_of(chain.begin(), chain.end(), [&effect](const auto& item) {
-                return item.parameters.index() == effect.parameters.index();
-            });
-            if (!exists) {
-                chain.push_back(std::move(effect));
-                emit clipAudioEffectsChanged(*clip_id, chain);
-            }
+        const auto before = chain.size();
+        appendEffectsForId(chain, fx_id);
+        if (chain.size() != before) {
+            emit clipAudioEffectsChanged(*clip_id, chain);
         }
         AudioEffectChainDialog dialog(
             translated("Clip audio effects — %1").arg(selected_clip_name_),
@@ -2165,26 +2188,10 @@ void AudioWorkspace::applyAudioFx(
     if (found == track_effects_rows_.end()) return;
 
     auto effects = found->effects;
-    timeline::AudioEffectInstance effect;
-    bool has_effect = true;
-    if (fx_id == QStringLiteral("studio_eq")) effect.parameters = timeline::AudioEqualizerParameters{};
-    else if (fx_id == QStringLiteral("multiband_compressor") || fx_id == QStringLiteral("limiter") || fx_id == QStringLiteral("soft_clipper")) effect.parameters = timeline::AudioCompressorParameters{};
-    else if (fx_id == QStringLiteral("de_esser") || fx_id == QStringLiteral("dialogue_processor")) effect.parameters = timeline::AudioDialogueCleanupParameters{};
-    else if (fx_id == QStringLiteral("noise_reduction")) effect.parameters = timeline::AudioNoiseReductionParameters{};
-    else if (fx_id == QStringLiteral("de_hummer")) effect.parameters = timeline::AudioRepairParameters{};
-    else has_effect = false;
-
-    if (has_effect) {
-        effect.enabled = true;
-        const bool exists = std::any_of(effects.begin(), effects.end(), [&effect](const auto& item) {
-            return item.parameters.index() == effect.parameters.index();
-        });
-        if (!exists) {
-            effects.push_back(std::move(effect));
-            if (timeline::validAudioEffectChain(effects)) {
-                emit trackAudioEffectsChanged(target_track, effects);
-            }
-        }
+    const auto before = effects.size();
+    appendEffectsForId(effects, fx_id);
+    if (effects.size() != before && timeline::validAudioEffectChain(effects)) {
+        emit trackAudioEffectsChanged(target_track, effects);
     }
 
     AudioEffectChainDialog dialog(
