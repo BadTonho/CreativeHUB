@@ -1,5 +1,7 @@
 # AGENTS.md - Project Rules
 
+[Português (pt-BR)](AGENTS.pt-BR.md) · English is authoritative if the versions differ.
+
 This file defines the project's working rules. It must be read before making any change to the repository.
 
 System, environment, and user instructions take priority over this document.
@@ -42,7 +44,7 @@ documents rather than duplicating them in these working rules.
 ## 3. Mandatory Principles
 
 - The project must be open source.
-- Project documentation must be written in English, including the README, guides, specifications, architectural decisions, and comments intended for users or contributors. A maintainer may explicitly request a Portuguese owner-only planning document; mark it as provisional and keep the other documentation in English unless separately requested.
+- Project documentation must always exist in English, which is the canonical language, and must also be provided in the language the user is conversing in when that language is not English. See [Documentation Language](#documentation-language).
 - The software must be lightweight, efficient, and responsive.
 - Performance, memory usage, and startup time are important requirements.
 - Support for Windows, macOS, and Linux must be considered from the beginning.
@@ -51,6 +53,17 @@ documents rather than duplicating them in these working rules.
 - Project formats and internal interfaces should be documented whenever possible.
 - Third-party dependencies, licenses, codecs, and assets must be tracked.
 - Do not use proprietary code, assets, trademarks, or resources without proper authorization.
+
+### Documentation Language
+
+- **English is mandatory and canonical.** Every documentation file (README, guides, specifications, architectural decisions, shortcut guides, validation notes, and comments intended for users or contributors) must exist in English. Commit messages and PR descriptions are also written in English.
+- **Companion translation.** When the user is conversing with the agent in a language other than English (for example Portuguese), every documentation file created or changed in that work must also be provided in that language, in the same change. Store the translation next to the English file as `<NAME>.<locale>.md`, using the language tag (for example `SHORTCUTS.pt-BR.md` beside `SHORTCUTS.md`). Add a link between the two versions at the top of each file.
+- **English wins.** If the versions disagree, the English file is authoritative. Update both whenever either changes; never leave one stale.
+- **Existing files.** Documents that predate this rule receive their companion the next time they are changed, unless the maintainer requests a bulk translation. Do not translate unrelated files as a side effect.
+- **No translation needed** when the user converses in English, for code comments, or for identifiers, log messages, and user-interface strings (the latter follow [translations and language packs](docs/TRANSLATIONS_AND_LANGUAGE_PACKS.md)).
+- **Changelogs stay English-only** at `Changelog/<application-id>/<version>.md`. The Hub's changelog reader loads files from that folder by version, so do not add translated siblings there until the reader supports locales.
+- **Owner-only notes.** A Portuguese planning or analysis document the maintainer explicitly asks to keep private is a different case: mark it provisional, keep it out of Git by listing it in `.gitignore` (as `docs/LOCAL_PROJECT_ANALYSIS_2026-10-10.pt-BR.md` is), and do not treat it as the official translation.
+- **Conversation language.** Reply to the user in the language they write in. This does not change the language of code identifiers.
 
 ## 4. Architecture
 
@@ -182,15 +195,10 @@ regression coverage from every still-supported version.
   gates and documentation-only checks in `docs/REGRESSION_POLICY.md`.
 - Use static analysis, sanitizers, fuzzing, and profiling when appropriate for the chosen technology.
 - Handle media errors, corrupted files, and resource shortages without unexpectedly terminating the application.
-- Every application and failure-prone module must maintain an actionable error log so problems can be diagnosed and corrected.
-- Every unexpected, technical, or operational error must be logged before or
-  while it is reported to the user. Intentional control-flow outcomes and
-  expected user actions, such as cancelling a dialog, importing a duplicate,
-  or trying to add a clip while the timeline is occupied, are not errors and
-  must not be written as error entries.
-- Error entries should include the timestamp, severity, subsystem, operation, human-readable cause, relevant error code, and useful context such as a file path or identifier when available.
-- User-facing error messages may remain concise, but the detailed cause must be written to the local log before or while the error is reported.
-- Logs must never contain passwords, tokens, private keys, or unnecessary sensitive personal data, and should support bounded size or rotation when persistent.
+- Log every unexpected technical or operational error before or while
+  reporting it to the user. Intentional control-flow outcomes and expected user
+  actions, such as cancelling a dialog, are not errors. Never log passwords,
+  tokens, or private keys. See [Error Logging](docs/ERROR_LOGGING.md).
 - Consider automatic project recovery and autosave from an early stage.
 
 ## 9. Decision Process
@@ -225,71 +233,22 @@ Important decisions must be recorded in the documentation, indicating whether th
   unrelated applications or the whole suite without need.
 - Do not create or push release tags (`v<year>.<minor>.<patch>`) or publish a
   GitHub Release without explicit maintainer authorization. A tag push triggers
-  `.github/workflows/release.yml`, which builds the Windows installers and
-  Linux packages and attaches them to a draft release; the maintainer reviews
-  and publishes it manually. Keep `release.yml`, `packaging/windows/`, and
-  `packaging/linux/` documentation aligned when the release flow changes.
-- On Windows, the canonical development build root for all four applications
-  is `.\build\apps\`, with one subdirectory per
-  application ID: `hub`, `video-editor`, `image-editor`, and `motion-editor`.
-  For a multi-configuration generator, executable outputs belong under
-  `.\build\apps\<application-id>\<Configuration>\`. Keep all four app
-  outputs in this tree. Auxiliary trees such as
-  `build/<feature>-ninja`, test, benchmark, install, or staging directories
-  must not be used or reported as the runnable app output. Never copy an
-  executable from an auxiliary tree into `build/apps` to disguise a failed
-  canonical build; fix the output configuration or report the build failure.
-- Before building an application for the user to run, identify the executable
-  path used by their actual launch method, such as the Hub, a Visual Studio
-  launch profile, a shortcut, or a directly launched executable. Do not assume
-  that a README example, a test build directory, or a temporary build tree is
-  the executable the user is running. The Windows development output root is
-  fixed above; inspect the launcher configuration to identify the correct app
-  and configuration within it, and do not ask the user to repeat the output
-  root. If the launch path cannot be determined from repository configuration
-  or the running process, ask only which launch method they use before
-  building. Build that application and configuration at its expected output
-  path; do not silently copy an
-  executable from another build tree. After building, verify the full output
-  path and modification time and report the exact path. Do not claim the user's
-  app is updated unless the output matches the executable they launch.
+  the release workflow. See [Release Process](docs/RELEASE_PROCESS.md).
+- On Windows, the canonical development build root is `.\build\apps\`, with
+  executables under `.\build\apps\<application-id>\<Configuration>\`. Never
+  copy an executable from an auxiliary build tree into it to disguise a failed
+  build. Before building for the user to run, identify the executable they
+  actually launch; after building, verify and report its exact path and
+  modification time, and do not claim their app is updated unless it matches.
+  See [Build Output and Launch Path](docs/BUILD_OUTPUT_AND_LAUNCH.md).
 - Treat documentation as part of the implementation. Keep it aligned with the current code, architecture, behavior, and decisions, and update every affected document in the same change whenever code, UI, behavior, an API, a data format, build configuration, dependency, or project status changes. Verify the updated documentation against the implementation before considering the work complete.
 - Update the documentation whenever an architectural decision is made.
-- Maintain application changelogs only in version-specific files at
-  `Changelog/<application-id>/<version>.md`, using the release catalog IDs:
-  `hub`, `video-editor`, `image-editor`, and `motion-editor`. Update the
-  corresponding file as each feature, improvement, fix, removal, compatibility
-  change, or significant build/dependency/distribution maintenance is
-  implemented. Include the entry in the same change and, when committing is
-  authorized, the same commit as the implementation. This is a completion and
-  commit requirement even when the application's version metadata is unchanged.
-  Purely editorial documentation corrections do not require changelog entries.
-- During development, accumulate changes in the version-specific file for the
-  intended next release, as designated by the maintainer or repository release
-  planning. Reuse that file; for example, changes intended for 0.1.1 belong in
-  `Changelog/<application-id>/0.1.1.md` while the executable may still report
-  0.1.0. Mark the file `Unreleased` until publication. Do not create
-  `UNRELEASED.md` or another generic file in place of a version-specific
-  changelog. A changelog filename or status does not authorize a release or an
-  application version change. When the intended release version changes,
-  consolidate its pending entries into the chosen version's file.
-- Keep application version metadata unchanged during ordinary development.
-  Advance it only as part of maintainer-authorized release preparation, before
-  compiling release artifacts, and verify that each application's executable,
-  installer, and update-catalog entry agree. The suite release version remains
-  independent of application versions. Document/protocol schema versions are
-  separate and may advance when required by a validated compatibility change.
-- The initial 0.1.0 baseline is an explicit historical exception: no retroactive
-  changelog is required for it. Every subsequent version, including prereleases,
-  must have its version-specific changelog when prepared or documented. If a
-  later published release lacks one, reconstruct it from available release
-  evidence without changing version metadata merely to add documentation.
-  Record changes since that application's previous published version. For
-  shared-library changes, update the changelogs of applications whose delivered
-  behavior or relevant maintenance is affected. Write entries in English. If a
-  release has no user-visible changes, state that and summarize its maintenance
-  or distribution changes. Preserve published release history when accumulating
-  work for a later version.
+- Record every feature, improvement, fix, removal, or compatibility change in
+  the version-specific changelog `Changelog/<application-id>/<version>.md`, in
+  English, in the same change as the implementation (and the same commit when
+  committing is authorized). Do not change application version metadata outside
+  maintainer-authorized release preparation. See
+  [Changelog and Versioning](docs/CHANGELOG_AND_VERSIONING.md).
 - Document user-facing keyboard shortcuts in the corresponding application's
   guide, such as `docs/video-editor/SHORTCUTS.md` or
   `docs/image-editor/SHORTCUTS.md`. Create `docs/<application-id>/SHORTCUTS.md`
@@ -312,3 +271,52 @@ Before staging files for publication, creating a commit, opening a pull request,
 - If there is any suspicious file or uncertainty about publishing it, stop and ask for guidance before continuing.
 
 Do not commit or push automatically. These actions require explicit user authorization.
+
+## 11. Branches, CI, Commits, and Autonomy
+
+These rules govern AI agents working in the maintainer's checkout. External contributors are not restricted by them: they follow [CONTRIBUTING.md](CONTRIBUTING.md) and may use a fork, topic branches, and pull requests as usual.
+
+### Branches (agents in the maintainer's checkout)
+
+- Work on the current branch (usually `main`). Do not create a branch per task or change on your own.
+- Before committing, check the current branch. If it holds the maintainer's own in-progress work, ask which branch to use instead of creating one.
+- Create or switch branches when the maintainer asks, or after asking them first.
+
+### Continuous integration
+
+- `.github/workflows/ci.yml` is manual-only (`workflow_dispatch`) to keep Actions usage low. Do not add automatic push or pull-request triggers without maintainer approval.
+- Do not dispatch CI unless asked. Prefer one consolidated run on `main` with `platforms=all` over several partial runs.
+- A release tag still requires a successful CI run for its commit.
+
+### Commits and pull requests
+
+- Use Conventional Commits: `type(scope): subject`, where `type` is `feat`, `fix`, `docs`, `refactor`, `test`, `build`, `ci`, or `chore`, and `scope` is an application ID (`hub`, `video-editor`, `image-editor`, `motion-editor`), a `libs/` module, or `docs`. Write the subject in English, in the imperative mood.
+- Keep each commit focused. Include the implementation, its tests, the affected documentation, and the changelog entry together.
+- Never push or open a pull request unless asked.
+
+### Autonomy boundaries
+
+| Allowed without asking | Ask first |
+| --- | --- |
+| Read, search, and edit files to implement the request | Commit, push, open a pull request |
+| Build and test the affected application and its consumers | Create or switch a branch |
+| Update affected documentation, changelog, and shortcut guides | Create a tag, publish a release, or change version metadata |
+| Add regression tests for changed behavior | Add a dependency, generate installers, or dispatch CI |
+| | Delete, reset, or overwrite existing work |
+
+Anything not listed that is hard to reverse or visible outside the working tree also requires approval.
+
+## 12. Definition of Done
+
+A change is complete only when every applicable item holds:
+
+- Behavior is implemented and the affected application and consumers build.
+- Regression coverage exists and passes, per [`docs/REGRESSION_POLICY.md`](docs/REGRESSION_POLICY.md); manual checks are documented where automation is impractical.
+- Errors introduced or touched are logged as described in section 8.
+- Affected documentation is updated in English and, when required, in the user's language (see [Documentation Language](#documentation-language)).
+- The changelog entry is added in `Changelog/<application-id>/<version>.md`.
+- Keyboard shortcut guides are updated when shortcuts changed.
+- For a build the user will run, the exact executable path and modification time are verified and reported (section 10).
+- The Git and security review in section 10 was done before any commit was proposed.
+
+For build and dependency details, see [build and dependencies](docs/video-editor/architecture/BUILD_AND_DEPENDENCIES.md).

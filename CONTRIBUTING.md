@@ -1,5 +1,7 @@
 # Contributing
 
+[Português (pt-BR)](CONTRIBUTING.pt-BR.md) · English is authoritative if the versions differ.
+
 Thanks for considering a contribution. The project is an open-source, cross-platform creative suite; contributions should preserve its modular application boundaries and keep documented behavior aligned with the implementation.
 
 ## Before changing files
@@ -13,7 +15,7 @@ Thanks for considering a contribution. The project is an open-source, cross-plat
 - Keep application-owned workflows and document formats in their application; put reusable capabilities in `libs/` only when their contracts and consumers are genuinely shared.
 - Add or update regression coverage for changed behavior and public boundaries. Follow [Regression Policy](docs/REGRESSION_POLICY.md) and the affected application's feature-to-verification index.
 - Run focused builds and checks for the affected application and its consumers. Document manual checks when full-application behavior cannot be automated reliably.
-- Keep project documentation in English. Update affected scope, architecture, format, validation, and user guides in the same change. Document user-facing keyboard shortcut changes in the application's shortcut guide.
+- Keep project documentation in English, which is canonical. When the change is authored in another language, also add a companion `<NAME>.<locale>.md` next to each English file (see [Documentation Language](AGENTS.md#documentation-language)); [Portuguese version](CONTRIBUTING.pt-BR.md). Update affected scope, architecture, format, validation, and user guides in the same change. Document user-facing keyboard shortcut changes in the application's shortcut guide.
 - Track third-party dependencies, licenses, codecs, and assets. Do not contribute proprietary code or assets without authorization.
 
 ## Pull requests and releases

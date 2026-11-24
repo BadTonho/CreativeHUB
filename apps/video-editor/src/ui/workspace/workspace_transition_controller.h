@@ -33,6 +33,7 @@ public:
         QDockWidget* preview = nullptr;
         QDockWidget* timeline = nullptr;
         QDockWidget* render_settings = nullptr;
+        QDockWidget* audio_effects = nullptr;
     };
 
     struct Selectors {
@@ -60,7 +61,7 @@ protected:
     bool eventFilter(QObject* watched, QEvent* event) override;
 
 private:
-    [[nodiscard]] std::array<QDockWidget*, 9> dockWidgets() const noexcept;
+    [[nodiscard]] std::array<QDockWidget*, 10> dockWidgets() const noexcept;
     void updateSelectors(WorkspacePageId page);
     void applyPage(WorkspacePageId page);
     void applyQueuedPage();
@@ -77,7 +78,7 @@ private:
     QByteArray dock_layout_before_render_;
     QByteArray dock_layout_before_audio_;
     QByteArray dock_layout_before_color_;
-    std::array<bool, 9> dock_visibility_before_render_{};
+    std::array<bool, 10> dock_visibility_before_render_{};
     bool has_render_dock_visibility_snapshot_ = false;
     bool render_settings_resize_pending_ = false;
     bool preparing_for_close_ = false;

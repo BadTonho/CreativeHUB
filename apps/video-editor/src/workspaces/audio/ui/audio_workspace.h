@@ -32,6 +32,7 @@ public:
     void createPanels(QWidget* parent);
     [[nodiscard]] QWidget* meterPage() const noexcept { return meter_page_; }
     [[nodiscard]] QWidget* mixerPanel() const noexcept { return mixer_panel_; }
+    [[nodiscard]] QWidget* effectsPanel() const noexcept { return fx_browser_panel_; }
     void refreshTracks(
         const std::vector<timeline::TimelineTrack>& tracks,
         const std::vector<timeline::AudioBus>& buses,
@@ -142,10 +143,12 @@ private:
     std::vector<timeline::AudioEffectInstance> selected_clip_chain_;
     QWidget* meter_page_ = nullptr;
     QWidget* mixer_panel_ = nullptr;
+    QWidget* fx_browser_panel_ = nullptr;
+    QWidget* clip_fx_drawer_ = nullptr;
     QHBoxLayout* meter_layout_ = nullptr;
     QVBoxLayout* mixer_layout_ = nullptr;
-    QVBoxLayout* bus_mixer_layout_ = nullptr;
-    QVBoxLayout* track_mixer_layout_ = nullptr;
+    QHBoxLayout* bus_mixer_layout_ = nullptr;
+    QHBoxLayout* track_mixer_layout_ = nullptr;
     QVBoxLayout* track_effects_layout_ = nullptr;
     QProgressBar* master_meter_ = nullptr;
     QProgressBar* mixer_master_meter_ = nullptr;

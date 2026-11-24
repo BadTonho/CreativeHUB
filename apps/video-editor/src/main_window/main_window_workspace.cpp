@@ -719,6 +719,15 @@ void MainWindow::createWorkspace() {
     render_settings_dock_->setWidget(render_workspace_->settingsPanel());
     render_settings_dock_->hide();
 
+    audio_effects_dock_ = createDock(
+        "Audio FX",
+        "audioEffectsDock",
+        new QWidget(this));
+    audio_effects_dock_->setAllowedAreas(
+        Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
+    addDockWidget(Qt::LeftDockWidgetArea, audio_effects_dock_);
+    audio_effects_dock_->hide();
+
     workspace_transition_controller_ =
         new ui::WorkspaceTransitionController(
             workspace_host_,
@@ -731,7 +740,8 @@ void MainWindow::createWorkspace() {
                 inspector_dock_,
                 preview_dock_,
                 timeline_dock_,
-                render_settings_dock_},
+                render_settings_dock_,
+                audio_effects_dock_},
             {
                 edit_workspace_button_,
                 fusion_workspace_button_,
@@ -745,6 +755,10 @@ void MainWindow::createWorkspace() {
         if (audio_workspace_ == nullptr || workspace_host_ == nullptr ||
             audio_workspace_->meterPage() != nullptr) return;
         audio_workspace_->createPanels(this);
+        if (audio_effects_dock_ != nullptr &&
+            audio_workspace_->effectsPanel() != nullptr) {
+            audio_effects_dock_->setWidget(audio_workspace_->effectsPanel());
+        }
         refreshAudioSelection();
         audio_workspace_->refreshTracks(timeline_model_.tracks(),
             timeline_model_.audioBuses(), timeline_model_.masterAudioMix());

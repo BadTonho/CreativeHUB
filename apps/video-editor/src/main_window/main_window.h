@@ -400,6 +400,7 @@ private:
     QDockWidget* inspector_dock_ = nullptr;
     QDockWidget* timeline_dock_ = nullptr;
     QDockWidget* render_settings_dock_ = nullptr;
+    QDockWidget* audio_effects_dock_ = nullptr;
     QToolButton* media_pool_expand_button_ = nullptr;
     QToolButton* inspector_expand_button_ = nullptr;
     QByteArray workspace_expansion_restore_layout_state_;

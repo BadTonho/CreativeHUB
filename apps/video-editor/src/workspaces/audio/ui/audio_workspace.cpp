@@ -9,6 +9,8 @@
 #include <QDialogButtonBox>
 #include <QDoubleSpinBox>
 #include <QFormLayout>
+#include <QFrame>
+#include <QGridLayout>
 #include <QGroupBox>
 #include <QHBoxLayout>
 #include <QInputDialog>
@@ -16,6 +18,8 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
+#include <QPainter>
+#include <QPaintEvent>
 #include <QProgressBar>
 #include <QPushButton>
 #include <QScrollArea>
@@ -47,18 +51,154 @@ QString panText(int percent) {
         QStringLiteral(" ") + QString::number(std::abs(percent)) + QStringLiteral("%");
 }
 
-QProgressBar* createMeter(QWidget* parent, const char* object_name) {
+QProgressBar* createMeter(QWidget* parent, const char* object_name, int width = 10) {
     auto* meter = new QProgressBar(parent);
     meter->setObjectName(object_name);
     meter->setRange(0, 100);
     meter->setValue(0);
     meter->setOrientation(Qt::Vertical);
     meter->setTextVisible(false);
-    meter->setFixedWidth(22);
+    meter->setFixedWidth(width);
     meter->setStyleSheet(
-        "QProgressBar { background: #172028; border: 1px solid #344451; }"
-        "QProgressBar::chunk { background: #39ad77; }");
+        "QProgressBar { background: #0e1014; border: 1px solid #262a33; border-radius: 1px; }"
+        "QProgressBar::chunk { background: qlineargradient(x1:0, y1:1, x2:0, y2:0, "
+        "stop:0 #27ae60, stop:0.65 #2ecc71, stop:0.85 #e6b422, stop:1.0 #e74c3c); }");
     return meter;
+}
+
+class DbScaleWidget final : public QWidget {
+public:
+    explicit DbScaleWidget(bool show_labels, QWidget* parent = nullptr)
+        : QWidget(parent), show_labels_(show_labels) {
+        setFixedWidth(show_labels_ ? 22 : 8);
+        setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Expanding);
+    }
+
+protected:
+    void paintEvent(QPaintEvent*) override {
+        QPainter p(this);
+        p.setRenderHint(QPainter::Antialiasing, false);
+        const int h = height();
+        if (h < 24) return;
+        QFont f = font();
+        f.setPixelSize(8);
+        p.setFont(f);
+        static constexpr const char* kLabels[] = {"0", "-5", "-10", "-15", "-20", "-30", "-40", "-50"};
+        static constexpr double kPos[] = {0.03, 0.14, 0.26, 0.38, 0.50, 0.66, 0.82, 0.96};
+        for (int i = 0; i < 8; ++i) {
+            const int y = static_cast<int>(kPos[i] * (h - 1));
+            p.setPen(QColor("#3c424f"));
+            p.drawLine(width() - 4, y, width() - 1, y);
+            if (show_labels_) {
+                p.setPen(QColor("#6d7585"));
+                p.drawText(0, y - 5, width() - 5, 10, Qt::AlignRight | Qt::AlignVCenter,
+                           QString::fromLatin1(kLabels[i]));
+            }
+        }
+    }
+
+private:
+    bool show_labels_ = false;
+};
+
+class MiniCurveWidget final : public QWidget {
+public:
+    enum class Kind { Dynamics, Eq };
+    explicit MiniCurveWidget(Kind kind, QWidget* parent = nullptr)
+        : QWidget(parent), kind_(kind) {
+        setFixedHeight(kind_ == Kind::Dynamics ? 38 : 26);
+        setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    }
+
+protected:
+    void paintEvent(QPaintEvent*) override {
+        QPainter p(this);
+        p.fillRect(rect(), QColor("#0f1115"));
+        p.setPen(QColor("#232730"));
+        p.drawRect(rect().adjusted(0, 0, -1, -1));
+        const int w = width();
+        const int h = height();
+        p.setPen(QColor("#1a1d24"));
+        p.drawLine(w / 2, 1, w / 2, h - 2);
+        p.drawLine(1, h / 2, w - 2, h / 2);
+
+        p.setRenderHint(QPainter::Antialiasing, true);
+        if (kind_ == Kind::Dynamics) {
+            p.setPen(QPen(QColor("#9cb048"), 1.3));
+            p.drawLine(QPointF(2, h - 2), QPointF(w - 2, 2));
+        } else {
+            p.setPen(QPen(QColor("#3bb2c7"), 1.4));
+            p.drawLine(QPointF(2, h / 2.0), QPointF(w - 2, h / 2.0));
+        }
+    }
+
+private:
+    Kind kind_;
+};
+
+class LoudnessScaleWidget final : public QWidget {
+public:
+    explicit LoudnessScaleWidget(QWidget* parent = nullptr) : QWidget(parent) {
+        setMinimumHeight(88);
+        setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+    }
+
+protected:
+    void paintEvent(QPaintEvent*) override {
+        QPainter p(this);
+        p.fillRect(rect(), QColor("#121418"));
+        p.setPen(QColor("#262a33"));
+        p.drawRect(rect().adjusted(0, 0, -1, -1));
+        const int w = width();
+        const int h = height();
+        const int bar_w = 8;
+        const int left_x = w / 2 - 18;
+        const int right_x = w / 2 + 10;
+        p.fillRect(left_x, 16, bar_w, h - 24, QColor("#0b0c0f"));
+        p.fillRect(right_x, 16, bar_w, h - 24, QColor("#0b0c0f"));
+        p.setPen(QColor("#252932"));
+        p.drawRect(left_x, 16, bar_w, h - 24);
+        p.drawRect(right_x, 16, bar_w, h - 24);
+
+        QFont f = font();
+        f.setPixelSize(9);
+        p.setFont(f);
+        p.setPen(QColor("#8e96a6"));
+        p.drawText(left_x - 2, 3, 14, 12, Qt::AlignCenter, QStringLiteral("M"));
+        p.drawText(right_x - 2, 3, 14, 12, Qt::AlignCenter, QStringLiteral("I"));
+
+        f.setPixelSize(8);
+        p.setFont(f);
+        p.setPen(QColor("#676f7e"));
+        p.drawText(w / 2 - 8, 16, 16, 10, Qt::AlignCenter, QStringLiteral("+9"));
+        p.drawText(w / 2 - 8, h / 2, 16, 10, Qt::AlignCenter, QStringLiteral("0"));
+        p.drawText(w / 2 - 10, h - 18, 20, 10, Qt::AlignCenter, QStringLiteral("-18"));
+    }
+};
+
+QWidget* createMeterSlot(QWidget* parent, const QString& badge, const QString& title,
+                         QProgressBar* meter, bool show_scale) {
+    auto* card = new QFrame(parent);
+    card->setObjectName("audioMeterSlot");
+    card->setFixedWidth(show_scale ? 56 : 38);
+    auto* layout = new QVBoxLayout(card);
+    layout->setContentsMargins(3, 4, 3, 4);
+    layout->setSpacing(3);
+    auto* badge_label = new QLabel(badge, card);
+    badge_label->setObjectName("audioMeterBadge");
+    badge_label->setAlignment(Qt::AlignCenter);
+    badge_label->setToolTip(title);
+    layout->addWidget(badge_label);
+
+    auto* body = new QHBoxLayout;
+    body->setContentsMargins(0, 0, 0, 0);
+    body->setSpacing(2);
+    if (show_scale) {
+        body->addWidget(new DbScaleWidget(true, card));
+    }
+    body->addWidget(meter, 1, Qt::AlignHCenter);
+    layout->addLayout(body, 1);
+    return card;
 }
 
 void setGainSlider(QSlider* slider, QLabel* label, double gain) {
@@ -78,6 +218,14 @@ void setPanSlider(QSlider* slider, QLabel* label, double pan) {
 }
 
 QSlider* createGainSlider(QWidget* parent, const char* object_name) {
+    auto* slider = new QSlider(Qt::Vertical, parent);
+    slider->setObjectName(object_name);
+    slider->setRange(0, 200);
+    slider->setMinimumHeight(105);
+    return slider;
+}
+
+QSlider* createSendGainSlider(QWidget* parent, const char* object_name) {
     auto* slider = new QSlider(Qt::Horizontal, parent);
     slider->setObjectName(object_name);
     slider->setRange(0, 200);
@@ -125,49 +273,555 @@ AudioWorkspace::AudioWorkspace(QObject* parent) : QObject(parent) {}
 void AudioWorkspace::createPanels(QWidget* parent) {
     meter_page_ = new QWidget(parent);
     meter_page_->setObjectName("audioMeterPage");
+    meter_page_->setStyleSheet(QStringLiteral(R"(
+        QWidget#audioMeterPage { background: #16181c; color: #cfd6e0; }
+        QFrame#audioTopBar, QFrame#audioTransportBar {
+            background: #1b1d22; border-bottom: 1px solid #282c34;
+        }
+        QFrame#audioTransportBar {
+            border-bottom: none; border-top: 1px solid #282c34;
+        }
+        QWidget#audioFxBrowser {
+            background: #181a1f; border-right: 1px solid #282c34;
+        }
+        QFrame#audioMeterSlot, QFrame#audioControlRoomCard, QFrame#audioLoudnessCard {
+            background: #191b20; border: 1px solid #272b33; border-radius: 3px;
+        }
+        QLabel#audioMeterBadge {
+            background: #232730; color: #b7c0ce; border-radius: 2px;
+            font-size: 10px; font-weight: 600; padding: 2px 3px;
+        }
+        QLabel#audioSectionTitle {
+            color: #9ba5b5; font-size: 11px; font-weight: 600;
+        }
+        QLabel#audioTimecodeDisplay {
+            color: #d8dee9; font-family: Consolas, "Courier New", monospace;
+            font-size: 15px; font-weight: 600; letter-spacing: 1px;
+        }
+        QWidget#audioMeterPage QPushButton {
+            background: #232730; color: #cfd6e0; border: 1px solid #323743;
+            border-radius: 3px; padding: 3px 8px; font-size: 11px;
+        }
+        QWidget#audioMeterPage QPushButton:hover { background: #2c313c; }
+        QWidget#audioMeterPage QPushButton:checked {
+            background: #285685; border-color: #4f88c2; color: #ffffff;
+        }
+        QWidget#audioMeterPage QListWidget {
+            background: #14161a; color: #c4ccd8; border: none; outline: 0; font-size: 11px;
+        }
+        QWidget#audioMeterPage QListWidget::item {
+            padding: 5px 8px; border-bottom: 1px solid #1e2128;
+        }
+        QWidget#audioMeterPage QListWidget::item:selected {
+            background: #263344; color: #ffffff;
+        }
+        QWidget#audioMeterPage QScrollArea { background: #14161a; border: none; }
+    )"));
+
     auto* meter_outer = new QVBoxLayout(meter_page_);
-    meter_outer->setContentsMargins(12, 12, 12, 12);
-    meter_outer->addWidget(new QLabel(translated("Audio levels"), meter_page_));
+    meter_outer->setContentsMargins(0, 0, 0, 0);
+    meter_outer->setSpacing(0);
+
+    // Top studio bar
+    auto* top_bar = new QFrame(meter_page_);
+    top_bar->setObjectName("audioTopBar");
+    top_bar->setFixedHeight(32);
+    auto* top_bar_layout = new QHBoxLayout(top_bar);
+    top_bar_layout->setContentsMargins(8, 3, 8, 3);
+    top_bar_layout->setSpacing(6);
+    auto* meters_title = new QLabel(translated("Meters"), top_bar);
+    meters_title->setObjectName("audioSectionTitle");
+    top_bar_layout->addWidget(meters_title);
+    top_bar_layout->addStretch(1);
+    auto* dim_pill = new QPushButton(QStringLiteral("DIM"), top_bar);
+    dim_pill->setCheckable(true);
+    dim_pill->setFixedWidth(40);
+    top_bar_layout->addWidget(dim_pill);
+    meter_outer->addWidget(top_bar);
+
+    // Main horizontal body: Meter bridge | Control Room & Loudness
+    auto* body_layout = new QHBoxLayout;
+    body_layout->setContentsMargins(0, 0, 0, 0);
+    body_layout->setSpacing(0);
+
+    // Standalone Audio FX Browser Panel (hosted in its own dock)
+    fx_browser_panel_ = new QWidget(parent);
+    fx_browser_panel_->setObjectName("audioFxBrowser");
+    fx_browser_panel_->setStyleSheet(QStringLiteral(R"(
+        QWidget#audioFxBrowser { background: #181a1f; color: #cfd6e0; }
+        QFrame#audioFxTopBar {
+            background: #1b1d22; border-bottom: 1px solid #282c34;
+        }
+        QWidget#audioFxSidebar {
+            background: #16181c; border-right: 1px solid #282c34;
+        }
+        QLabel#audioFxSectionTitle {
+            color: #b7c0ce; font-size: 11px; font-weight: 600;
+        }
+        QLabel#audioFxCategory {
+            color: #8f98a8; font-size: 11px; padding: 3px 6px;
+        }
+        QLabel#audioFxCategoryActive {
+            background: #232730; color: #e2e8f0; font-size: 11px;
+            font-weight: 600; padding: 3px 6px; border-radius: 2px;
+        }
+        QLineEdit#audioFxSearch {
+            background: #121418; color: #d8dee9; border: 1px solid #2b2f3a;
+            border-radius: 2px; padding: 2px 6px; font-size: 11px;
+        }
+        QFrame#audioFxCard {
+            background: #1c1e24; border: 1px solid #2a2e38; border-radius: 2px;
+        }
+        QFrame#audioFxCard:hover {
+            background: #242832; border-color: #3a404e;
+        }
+        QLabel#audioFxIcon {
+            background: #15171c; color: #7c8798; border-right: 1px solid #2a2e38;
+            font-size: 10px; font-weight: 700;
+        }
+        QLabel#audioFxCardName {
+            color: #cfd6e0; font-size: 11px; padding-left: 6px;
+        }
+    )"));
+    auto* fx_outer = new QVBoxLayout(fx_browser_panel_);
+    fx_outer->setContentsMargins(0, 0, 0, 0);
+    fx_outer->setSpacing(0);
+
+    auto* fx_top_bar = new QFrame(fx_browser_panel_);
+    fx_top_bar->setObjectName("audioFxTopBar");
+    fx_top_bar->setFixedHeight(30);
+    auto* fx_top_layout = new QHBoxLayout(fx_top_bar);
+    fx_top_layout->setContentsMargins(8, 3, 8, 3);
+    fx_top_layout->setSpacing(6);
+    auto* fx_header = new QLabel(translated("Audio FX"), fx_top_bar);
+    fx_header->setObjectName("audioFxSectionTitle");
+    fx_top_layout->addWidget(fx_header);
+    fx_top_layout->addStretch(1);
+    auto* fx_search = new QLineEdit(fx_top_bar);
+    fx_search->setObjectName("audioFxSearch");
+    fx_search->setPlaceholderText(translated("Search..."));
+    fx_search->setMaximumWidth(150);
+    fx_top_layout->addWidget(fx_search);
+    fx_outer->addWidget(fx_top_bar);
+
+    auto* fx_body = new QHBoxLayout;
+    fx_body->setContentsMargins(0, 0, 0, 0);
+    fx_body->setSpacing(0);
+
+    auto* fx_sidebar = new QWidget(fx_browser_panel_);
+    fx_sidebar->setObjectName("audioFxSidebar");
+    fx_sidebar->setFixedWidth(134);
+    auto* fx_side_layout = new QVBoxLayout(fx_sidebar);
+    fx_side_layout->setContentsMargins(6, 8, 6, 8);
+    fx_side_layout->setSpacing(3);
+    auto* cat_toolbox = new QLabel(QStringLiteral("v  Toolbox"), fx_sidebar);
+    cat_toolbox->setObjectName("audioFxCategory");
+    fx_side_layout->addWidget(cat_toolbox);
+    auto* cat_trans = new QLabel(QStringLiteral("    Audio Transitions"), fx_sidebar);
+    cat_trans->setObjectName("audioFxCategory");
+    fx_side_layout->addWidget(cat_trans);
+    auto* cat_audio_fx = new QLabel(QStringLiteral("v  Audio FX"), fx_sidebar);
+    cat_audio_fx->setObjectName("audioFxCategoryActive");
+    fx_side_layout->addWidget(cat_audio_fx);
+    auto* cat_builtin = new QLabel(QStringLiteral("    Built-in FX"), fx_sidebar);
+    cat_builtin->setObjectName("audioFxCategory");
+    fx_side_layout->addWidget(cat_builtin);
+    auto* cat_vst = new QLabel(QStringLiteral("    VST Effects"), fx_sidebar);
+    cat_vst->setObjectName("audioFxCategory");
+    fx_side_layout->addWidget(cat_vst);
+    fx_side_layout->addStretch(1);
+    fx_body->addWidget(fx_sidebar);
+
+    class ResponsiveFxScrollArea final : public QScrollArea {
+    public:
+        explicit ResponsiveFxScrollArea(QWidget* parent = nullptr) : QScrollArea(parent) {
+            setWidgetResizable(true);
+            setFrameShape(QFrame::NoFrame);
+            setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+            setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+        }
+        QGridLayout* grid = nullptr;
+        std::vector<std::pair<QString, QFrame*>> cards;
+        QString filter;
+        int current_cols = 0;
+
+        void reflow(bool force = false) {
+            if (grid == nullptr) return;
+            const int avail = viewport() ? viewport()->width() : width();
+            const int cols = (avail >= 320) ? 2 : 1;
+            if (!force && cols == current_cols) return;
+            current_cols = cols;
+            while (auto* item = grid->takeAt(0)) {
+                delete item;
+            }
+            int visible_idx = 0;
+            const QString q = filter.trimmed();
+            for (const auto& entry : cards) {
+                const bool show = q.isEmpty() || entry.first.contains(q, Qt::CaseInsensitive);
+                entry.second->setVisible(show);
+                if (show) {
+                    grid->addWidget(entry.second, visible_idx / cols, visible_idx % cols);
+                    ++visible_idx;
+                }
+            }
+            grid->setColumnStretch(0, 1);
+            grid->setColumnStretch(1, cols == 2 ? 1 : 0);
+        }
+
+    protected:
+        void resizeEvent(QResizeEvent* event) override {
+            QScrollArea::resizeEvent(event);
+            reflow(false);
+        }
+    };
+
+    auto* fx_scroll = new ResponsiveFxScrollArea(fx_browser_panel_);
+    fx_scroll->setStyleSheet(QStringLiteral("QScrollArea { background: #14161a; border: none; }"));
+    auto* fx_content = new QWidget(fx_scroll);
+    fx_content->setObjectName("audioFxContent");
+    fx_content->setStyleSheet(QStringLiteral("QWidget#audioFxContent { background: #14161a; }"));
+    auto* fx_content_layout = new QVBoxLayout(fx_content);
+    fx_content_layout->setContentsMargins(8, 8, 8, 8);
+    fx_content_layout->setSpacing(6);
+
+    auto* builtin_title = new QLabel(translated("Built-in FX"), fx_content);
+    builtin_title->setObjectName("audioFxSectionTitle");
+    fx_content_layout->addWidget(builtin_title);
+
+    auto* fx_grid = new QGridLayout;
+    fx_grid->setContentsMargins(0, 0, 0, 0);
+    fx_grid->setSpacing(5);
+    fx_scroll->grid = fx_grid;
+
+    struct FxEntry { const char* badge; const char* name; };
+    static constexpr FxEntry kStudioFx[] = {
+        {"FX", "Chain FX"}, {"CH", "Chorus"},
+        {"SS", "De-Esser"}, {"MM", "De-Hummer"},
+        {"DL", "Delay"}, {"DP", "Dialogue Processor"},
+        {"DS", "Distortion"}, {"EC", "Echo"},
+        {"EQ", "Studio EQ"}, {"FL", "Flanger"},
+        {"FS", "Foley Sampler"}, {"FA", "Frequency Analyzer"},
+        {"GN", "Gain"}, {"LF", "LFE Filter"},
+        {"LM", "Limiter"}, {"LU", "Loudness Meter"},
+        {"MT", "Meter"}, {"MD", "Modulation"},
+        {"MN", "Monitor"}, {"MB", "Multiband Compressor"},
+        {"NR", "Noise Reduction"}, {"PM", "Phase Meter"},
+        {"PT", "Pitch"}, {"RV", "Reverb"},
+        {"SC", "Soft Clipper"}, {"SF", "Stereo Fixer"},
+        {"SW", "Stereo Width"}, {"SA", "Surround Analyzer"},
+        {"VC", "Vocal Channel"}
+    };
+    for (const auto& entry : kStudioFx) {
+        auto* card = new QFrame(fx_content);
+        card->setObjectName("audioFxCard");
+        card->setFixedHeight(26);
+        card->setMinimumWidth(0);
+        auto* card_layout = new QHBoxLayout(card);
+        card_layout->setContentsMargins(0, 0, 6, 0);
+        card_layout->setSpacing(0);
+        auto* icon = new QLabel(QString::fromLatin1(entry.badge), card);
+        icon->setObjectName("audioFxIcon");
+        icon->setFixedWidth(30);
+        icon->setAlignment(Qt::AlignCenter);
+        auto* name = new QLabel(QString::fromLatin1(entry.name), card);
+        name->setObjectName("audioFxCardName");
+        name->setMinimumWidth(0);
+        card_layout->addWidget(icon);
+        card_layout->addWidget(name, 1);
+        fx_scroll->cards.emplace_back(QString::fromLatin1(entry.name), card);
+    }
+    fx_scroll->reflow(true);
+    fx_content_layout->addLayout(fx_grid);
+    fx_content_layout->addStretch(1);
+    fx_scroll->setWidget(fx_content);
+    fx_body->addWidget(fx_scroll, 1);
+    fx_outer->addLayout(fx_body, 1);
+
+    connect(fx_search, &QLineEdit::textChanged, fx_scroll, [fx_scroll](const QString& text) {
+        fx_scroll->filter = text;
+        fx_scroll->reflow(true);
+    });
+
+    // Center meter bank
     auto* meter_scroll = new QScrollArea(meter_page_);
     meter_scroll->setWidgetResizable(true);
+    meter_scroll->setFrameShape(QFrame::NoFrame);
     auto* meter_content = new QWidget(meter_scroll);
+    meter_content->setStyleSheet(QStringLiteral("background: #14161a;"));
     meter_layout_ = new QHBoxLayout(meter_content);
+    meter_layout_->setContentsMargins(8, 8, 8, 8);
+    meter_layout_->setSpacing(4);
     meter_layout_->setAlignment(Qt::AlignLeft);
     meter_scroll->setWidget(meter_content);
-    meter_outer->addWidget(meter_scroll, 1);
+    body_layout->addWidget(meter_scroll, 1);
 
-    auto* master_card = new QGroupBox(translated("Master"), meter_content);
-    auto* master_layout = new QVBoxLayout(master_card);
-    master_meter_ = createMeter(master_card, "audioOutputMeter");
-    master_layout->addWidget(master_meter_, 1, Qt::AlignHCenter);
-    meter_layout_->addWidget(master_card);
+    // Right studio monitoring bay: Master + Control Room + Loudness
+    auto* monitor_bay = new QWidget(meter_page_);
+    monitor_bay->setStyleSheet(QStringLiteral("background: #16181c; border-left: 1px solid #282c34;"));
+    auto* monitor_layout = new QHBoxLayout(monitor_bay);
+    monitor_layout->setContentsMargins(6, 8, 8, 8);
+    monitor_layout->setSpacing(6);
 
-    mixer_panel_ = new QScrollArea(parent);
+    master_meter_ = createMeter(monitor_bay, "audioOutputMeter", 12);
+    auto* master_slot = createMeterSlot(
+        monitor_bay, QStringLiteral("M"), translated("Master"), master_meter_, true);
+    monitor_layout->addWidget(master_slot);
+
+    auto* control_room = new QFrame(monitor_bay);
+    control_room->setObjectName("audioControlRoomCard");
+    control_room->setFixedWidth(74);
+    auto* cr_layout = new QVBoxLayout(control_room);
+    cr_layout->setContentsMargins(6, 6, 6, 6);
+    cr_layout->setSpacing(4);
+    auto* cr_title = new QLabel(translated("Control Room"), control_room);
+    cr_title->setObjectName("audioSectionTitle");
+    cr_title->setAlignment(Qt::AlignCenter);
+    cr_title->setWordWrap(true);
+    cr_layout->addWidget(cr_title);
+    auto* tp_label = new QLabel(QStringLiteral("TP  -inf"), control_room);
+    tp_label->setStyleSheet(QStringLiteral("color: #4f94d4; font-size: 10px; font-weight: 600;"));
+    tp_label->setAlignment(Qt::AlignCenter);
+    cr_layout->addWidget(tp_label);
+    auto* cr_bar_row = new QHBoxLayout;
+    cr_bar_row->setSpacing(2);
+    cr_bar_row->addWidget(new DbScaleWidget(true, control_room));
+    auto* cr_meter = createMeter(control_room, "audioControlRoomMeter", 8);
+    cr_bar_row->addWidget(cr_meter);
+    cr_layout->addLayout(cr_bar_row, 1);
+    monitor_layout->addWidget(control_room);
+
+    auto* loudness_card = new QFrame(monitor_bay);
+    loudness_card->setObjectName("audioLoudnessCard");
+    loudness_card->setFixedWidth(164);
+    auto* ld_layout = new QVBoxLayout(loudness_card);
+    ld_layout->setContentsMargins(6, 6, 6, 6);
+    ld_layout->setSpacing(4);
+    auto* ld_header = new QHBoxLayout;
+    auto* ld_title = new QLabel(translated("Loudness"), loudness_card);
+    ld_title->setObjectName("audioSectionTitle");
+    auto* ld_std = new QLabel(QStringLiteral("BS.1770-1 [LU]"), loudness_card);
+    ld_std->setStyleSheet(QStringLiteral("color: #798294; font-size: 9px;"));
+    ld_header->addWidget(ld_title);
+    ld_header->addStretch(1);
+    ld_header->addWidget(ld_std);
+    ld_layout->addLayout(ld_header);
+
+    auto* ld_body = new QHBoxLayout;
+    ld_body->setSpacing(6);
+    ld_body->addWidget(new LoudnessScaleWidget(loudness_card), 1);
+    auto* ld_stats = new QVBoxLayout;
+    ld_stats->setSpacing(3);
+    for (const char* stat : {"Short\n--", "Short Max\n--", "Range\n--", "Integrated\n--"}) {
+        auto* s = new QLabel(QString::fromLatin1(stat), loudness_card);
+        s->setStyleSheet(QStringLiteral("color: #8f98a8; font-size: 9px;"));
+        ld_stats->addWidget(s);
+    }
+    ld_stats->addStretch(1);
+    ld_body->addLayout(ld_stats);
+    ld_layout->addLayout(ld_body, 1);
+
+    auto* ld_btns = new QHBoxLayout;
+    ld_btns->setSpacing(4);
+    auto* ld_pause = new QPushButton(translated("Pause"), loudness_card);
+    auto* ld_reset = new QPushButton(translated("Reset"), loudness_card);
+    ld_btns->addWidget(ld_pause);
+    ld_btns->addWidget(ld_reset);
+    ld_layout->addLayout(ld_btns);
+    monitor_layout->addWidget(loudness_card);
+
+    body_layout->addWidget(monitor_bay);
+    meter_outer->addLayout(body_layout, 1);
+
+    // Bottom transport / timecode bar
+    auto* transport_bar = new QFrame(meter_page_);
+    transport_bar->setObjectName("audioTransportBar");
+    transport_bar->setFixedHeight(30);
+    auto* tr_layout = new QHBoxLayout(transport_bar);
+    tr_layout->setContentsMargins(10, 3, 10, 3);
+    tr_layout->setSpacing(12);
+    auto* tc_label = new QLabel(QStringLiteral("00:00:00:00"), transport_bar);
+    tc_label->setObjectName("audioTimecodeDisplay");
+    tr_layout->addWidget(tc_label);
+    auto* tl_pill = new QLabel(translated("Timeline 1"), transport_bar);
+    tl_pill->setStyleSheet(QStringLiteral(
+        "background: #22252d; color: #aeb6c4; border: 1px solid #303540; "
+        "border-radius: 3px; padding: 2px 8px; font-size: 11px;"));
+    tr_layout->addWidget(tl_pill);
+    tr_layout->addStretch(1);
+    auto* bus_route_hint = new QLabel(QStringLiteral("Master  •  48 kHz"), transport_bar);
+    bus_route_hint->setStyleSheet(QStringLiteral("color: #7c8596; font-size: 10px;"));
+    tr_layout->addWidget(bus_route_hint);
+    meter_outer->addWidget(transport_bar);
+
+    // Console Mixer Panel (right dock)
+    mixer_panel_ = new QWidget(parent);
     mixer_panel_->setObjectName("audioMixerPanel");
-    auto* mixer_scroll = static_cast<QScrollArea*>(mixer_panel_);
-    mixer_scroll->setWidgetResizable(true);
-    auto* mixer_content = new QWidget(mixer_scroll);
-    mixer_layout_ = new QVBoxLayout(mixer_content);
-    mixer_layout_->setAlignment(Qt::AlignTop);
-    mixer_layout_->addWidget(new QLabel(translated("Mixer"), mixer_content));
+    mixer_panel_->setStyleSheet(QStringLiteral(R"(
+        QWidget#audioMixerPanel { background: #16181c; color: #cfd6e0; }
+        QFrame#audioMixerHeader {
+            background: #1b1d22; border-bottom: 1px solid #282c34;
+        }
+        QFrame#audioTrackMixerCard, QFrame#audioBusMixerCard, QFrame#audioOutputMixerCard {
+            background: #191b20; border: 1px solid #282c34; border-radius: 3px;
+        }
+        QLabel#audioStripName {
+            color: #d8dee9; font-size: 11px; font-weight: 600;
+        }
+        QLabel#audioStripSubLabel {
+            color: #7e8796; font-size: 9px;
+        }
+        QLabel#audioGainReadout {
+            color: #c5ccd8; font-family: Consolas, "Courier New", monospace;
+            font-size: 10px; background: #111317; border: 1px solid #262a33;
+            border-radius: 2px; padding: 1px 3px;
+        }
+        QWidget#audioMixerPanel QPushButton,
+        QWidget#audioMixerPanel QComboBox {
+            background: #232730; color: #cfd6e0; border: 1px solid #323743;
+            border-radius: 2px; padding: 2px 5px; font-size: 10px;
+        }
+        QWidget#audioMixerPanel QPushButton:hover { background: #2d323e; }
+        QCheckBox#audioTrackMute, QCheckBox#audioBusMute, QCheckBox#audioMasterMute,
+        QCheckBox#audioTrackSolo, QCheckBox#audioBusSolo {
+            background: #252830; color: #b7c0ce; border: 1px solid #353a46;
+            border-radius: 2px; padding: 2px 5px; font-size: 10px; font-weight: 700;
+            min-width: 22px; min-height: 18px;
+        }
+        QCheckBox#audioTrackMute::indicator, QCheckBox#audioBusMute::indicator,
+        QCheckBox#audioMasterMute::indicator, QCheckBox#audioTrackSolo::indicator,
+        QCheckBox#audioBusSolo::indicator {
+            width: 0px; height: 0px;
+        }
+        QCheckBox#audioTrackMute:checked, QCheckBox#audioBusMute:checked,
+        QCheckBox#audioMasterMute:checked {
+            background: #a83232; border-color: #d14b4b; color: #ffffff;
+        }
+        QCheckBox#audioTrackSolo:checked, QCheckBox#audioBusSolo:checked {
+            background: #b8821c; border-color: #e0a736; color: #ffffff;
+        }
+        QSlider::groove:vertical {
+            background: #0d0f13; border: 1px solid #252932; width: 4px; border-radius: 2px;
+        }
+        QSlider::handle:vertical {
+            background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                stop:0 #778091, stop:0.5 #4b525f, stop:1 #383d47);
+            border: 1px solid #8f98a8; height: 12px; width: 16px;
+            margin: 0 -7px; border-radius: 2px;
+        }
+        QSlider::groove:horizontal {
+            background: #0d0f13; border: 1px solid #252932; height: 4px; border-radius: 2px;
+        }
+        QSlider::handle:horizontal {
+            background: #778091; border: 1px solid #8f98a8;
+            width: 8px; height: 10px; margin: -4px 0; border-radius: 2px;
+        }
+    )"));
 
-    auto* output_card = new QGroupBox(translated("Master"), mixer_content);
+    mixer_layout_ = new QVBoxLayout(mixer_panel_);
+    mixer_layout_->setContentsMargins(0, 0, 0, 0);
+    mixer_layout_->setSpacing(0);
+
+    // Mixer Header
+    auto* mixer_header = new QFrame(mixer_panel_);
+    mixer_header->setObjectName("audioMixerHeader");
+    mixer_header->setFixedHeight(32);
+    auto* mixer_header_layout = new QHBoxLayout(mixer_header);
+    mixer_header_layout->setContentsMargins(8, 3, 8, 3);
+    mixer_header_layout->setSpacing(6);
+    auto* mixer_title = new QLabel(translated("Mixer"), mixer_header);
+    mixer_title->setObjectName("audioSectionTitle");
+    mixer_header_layout->addWidget(mixer_title);
+    mixer_header_layout->addStretch(1);
+    auto* clip_fx_toggle = new QPushButton(translated("Clip / Isolation"), mixer_header);
+    clip_fx_toggle->setCheckable(true);
+    clip_fx_toggle->setChecked(false);
+    mixer_header_layout->addWidget(clip_fx_toggle);
+    add_bus_button_ = new QPushButton(translated("Add bus"), mixer_header);
+    add_bus_button_->setObjectName("audioAddBus");
+    mixer_header_layout->addWidget(add_bus_button_);
+    mixer_layout_->addWidget(mixer_header);
+
+    connect(add_bus_button_, &QPushButton::clicked, this, [this] {
+        bool accepted = false;
+        const auto name = QInputDialog::getText(
+            mixer_panel_, translated("Add bus"), translated("Bus name"),
+            QLineEdit::Normal, translated("Submix"), &accepted);
+        if (accepted && !name.trimmed().isEmpty())
+            emit createBusRequested(name.trimmed());
+    });
+
+    // Horizontal Console Strip Area
+    auto* console_scroll = new QScrollArea(mixer_panel_);
+    console_scroll->setWidgetResizable(true);
+    console_scroll->setFrameShape(QFrame::NoFrame);
+    console_scroll->setStyleSheet(QStringLiteral("background: #14161a; border: none;"));
+    auto* console_content = new QWidget(console_scroll);
+    console_content->setStyleSheet(QStringLiteral("background: #14161a;"));
+    auto* console_row = new QHBoxLayout(console_content);
+    console_row->setContentsMargins(6, 6, 6, 6);
+    console_row->setSpacing(4);
+    console_row->setAlignment(Qt::AlignLeft);
+
+    track_mixer_layout_ = new QHBoxLayout;
+    track_mixer_layout_->setContentsMargins(0, 0, 0, 0);
+    track_mixer_layout_->setSpacing(4);
+    console_row->addLayout(track_mixer_layout_);
+
+    bus_mixer_layout_ = new QHBoxLayout;
+    bus_mixer_layout_->setContentsMargins(0, 0, 0, 0);
+    bus_mixer_layout_->setSpacing(4);
+    console_row->addLayout(bus_mixer_layout_);
+
+    // Master Channel Strip
+    auto* output_card = new QFrame(console_content);
     output_card->setObjectName("audioOutputMixerCard");
+    output_card->setFixedWidth(92);
     auto* output_layout = new QVBoxLayout(output_card);
-    mixer_master_meter_ = new QProgressBar(output_card);
-    mixer_master_meter_->setObjectName("audioOutputMixerMeter");
-    mixer_master_meter_->setRange(0, 100);
-    mixer_master_meter_->setValue(0);
-    mixer_master_meter_->setTextVisible(false);
-    output_layout->addWidget(mixer_master_meter_);
-    master_gain_ = createGainSlider(output_card, "audioMasterGain");
-    output_layout->addWidget(master_gain_);
-    master_gain_value_ = new QLabel(gainText(100), output_card);
-    output_layout->addWidget(master_gain_value_);
-    master_mute_ = new QCheckBox(translated("Mute"), output_card);
+    output_layout->setContentsMargins(5, 5, 5, 6);
+    output_layout->setSpacing(4);
+
+    auto* master_accent = new QFrame(output_card);
+    master_accent->setFixedHeight(3);
+    master_accent->setStyleSheet(QStringLiteral("background: #39ad77; border-radius: 1px;"));
+    output_layout->addWidget(master_accent);
+
+    auto* master_name = new QLabel(translated("Master"), output_card);
+    master_name->setObjectName("audioStripName");
+    master_name->setAlignment(Qt::AlignCenter);
+    output_layout->addWidget(master_name);
+
+    auto* master_order = new QLabel(QStringLiteral("FX  DY  EQ"), output_card);
+    master_order->setObjectName("audioStripSubLabel");
+    master_order->setAlignment(Qt::AlignCenter);
+    output_layout->addWidget(master_order);
+
+    output_layout->addWidget(new MiniCurveWidget(MiniCurveWidget::Kind::Dynamics, output_card));
+    output_layout->addWidget(new MiniCurveWidget(MiniCurveWidget::Kind::Eq, output_card));
+
+    master_mute_ = new QCheckBox(QStringLiteral("M"), output_card);
     master_mute_->setObjectName("audioMasterMute");
-    output_layout->addWidget(master_mute_);
-    mixer_layout_->addWidget(output_card);
+    master_mute_->setToolTip(translated("Mute"));
+    output_layout->addWidget(master_mute_, 0, Qt::AlignCenter);
+
+    master_gain_value_ = new QLabel(gainText(100), output_card);
+    master_gain_value_->setObjectName("audioGainReadout");
+    master_gain_value_->setAlignment(Qt::AlignCenter);
+    output_layout->addWidget(master_gain_value_);
+
+    auto* master_fader_row = new QHBoxLayout;
+    master_fader_row->setSpacing(3);
+    master_gain_ = createGainSlider(output_card, "audioMasterGain");
+    master_fader_row->addWidget(master_gain_);
+    master_fader_row->addWidget(new DbScaleWidget(false, output_card));
+    mixer_master_meter_ = createMeter(output_card, "audioOutputMixerMeter", 10);
+    master_fader_row->addWidget(mixer_master_meter_);
+    output_layout->addLayout(master_fader_row, 1);
+
+    console_row->addWidget(output_card);
+    console_row->addStretch(1);
+    console_scroll->setWidget(console_content);
+    mixer_layout_->addWidget(console_scroll, 1);
+
     connect(master_gain_, &QSlider::sliderPressed, this,
             &AudioWorkspace::gainEditStarted);
     connect(master_gain_, &QSlider::valueChanged, this, [this](int value) {
@@ -180,51 +834,48 @@ void AudioWorkspace::createPanels(QWidget* parent) {
         emit masterMixChanged(master_gain_->value() / 100.0, muted);
     });
 
-    auto* bus_section = new QWidget(mixer_content);
-    auto* bus_section_layout = new QVBoxLayout(bus_section);
-    bus_section_layout->setContentsMargins(0, 0, 0, 0);
-    auto* bus_header = new QHBoxLayout;
-    bus_header->addWidget(new QLabel(translated("Submix buses"), bus_section));
-    add_bus_button_ = new QPushButton(translated("Add bus"), bus_section);
-    add_bus_button_->setObjectName("audioAddBus");
-    bus_header->addWidget(add_bus_button_);
-    bus_section_layout->addLayout(bus_header);
-    bus_mixer_layout_ = new QVBoxLayout;
-    bus_section_layout->addLayout(bus_mixer_layout_);
-    mixer_layout_->addWidget(bus_section);
-    connect(add_bus_button_, &QPushButton::clicked, this, [this] {
-        bool accepted = false;
-        const auto name = QInputDialog::getText(
-            mixer_panel_, translated("Add bus"), translated("Bus name"),
-            QLineEdit::Normal, translated("Submix"), &accepted);
-        if (accepted && !name.trimmed().isEmpty())
-            emit createBusRequested(name.trimmed());
-    });
+    // Collapsible Clip & Track FX / Voice Isolation Drawer
+    clip_fx_drawer_ = new QWidget(mixer_panel_);
+    clip_fx_drawer_->setObjectName("audioClipFxDrawer");
+    clip_fx_drawer_->setStyleSheet(QStringLiteral(
+        "QWidget#audioClipFxDrawer { background: #181a1f; border-top: 1px solid #282c34; }"));
+    auto* drawer_scroll = new QScrollArea(clip_fx_drawer_);
+    drawer_scroll->setWidgetResizable(true);
+    drawer_scroll->setFrameShape(QFrame::NoFrame);
+    drawer_scroll->setMaximumHeight(190);
+    auto* drawer_content = new QWidget(drawer_scroll);
+    auto* drawer_layout = new QVBoxLayout(drawer_content);
+    drawer_layout->setContentsMargins(8, 6, 8, 6);
+    drawer_layout->setSpacing(6);
 
-    auto* tracks_section = new QWidget(mixer_content);
-    auto* tracks_section_layout = new QVBoxLayout(tracks_section);
-    tracks_section_layout->setContentsMargins(0, 0, 0, 0);
-    tracks_section_layout->addWidget(new QLabel(translated("Audio tracks"), tracks_section));
-    track_mixer_layout_ = new QVBoxLayout;
-    tracks_section_layout->addLayout(track_mixer_layout_);
-    mixer_layout_->addWidget(tracks_section);
-
-    selected_clip_effects_ = new QPushButton(translated("Select an audio clip to edit its effects"), mixer_content);
-    selected_clip_effects_->setObjectName("audioSelectedClipEffects"); selected_clip_effects_->setEnabled(false);
-    mixer_layout_->addWidget(selected_clip_effects_);
+    selected_clip_effects_ = new QPushButton(
+        translated("Select an audio clip to edit its effects"), drawer_content);
+    selected_clip_effects_->setObjectName("audioSelectedClipEffects");
+    selected_clip_effects_->setEnabled(false);
+    drawer_layout->addWidget(selected_clip_effects_);
     connect(selected_clip_effects_, &QPushButton::clicked, this, [this] {
         if (selected_clip_id_ == 0) return;
         const auto id = selected_clip_id_;
-        AudioEffectChainDialog dialog(translated("Clip audio effects — %1").arg(selected_clip_name_), selected_clip_chain_, mixer_panel_);
-        if (dialog.exec() == QDialog::Accepted) emit clipAudioEffectsChanged(id, dialog.effects());
+        AudioEffectChainDialog dialog(
+            translated("Clip audio effects — %1").arg(selected_clip_name_),
+            selected_clip_chain_, mixer_panel_);
+        if (dialog.exec() == QDialog::Accepted)
+            emit clipAudioEffectsChanged(id, dialog.effects());
     });
-    selected_clip_isolation_ = new VoiceIsolationPanel(mixer_content);
+
+    selected_clip_isolation_ = new VoiceIsolationPanel(drawer_content);
     selected_clip_isolation_->setObjectName("audioSelectedClipIsolation");
-    selected_clip_isolation_->setEnabled(selected_clip_id_ != 0); mixer_layout_->addWidget(selected_clip_isolation_);
-    selected_clip_isolation_->apply = [this](auto settings) { if (selected_clip_id_) emit voiceIsolationChanged(true, selected_clip_id_, std::move(settings)); };
-    selected_clip_isolation_->regenerate = [this] { if (selected_clip_id_) emit voiceIsolationRegenerate(true, selected_clip_id_); };
+    selected_clip_isolation_->setEnabled(selected_clip_id_ != 0);
+    drawer_layout->addWidget(selected_clip_isolation_);
+    selected_clip_isolation_->apply = [this](auto settings) {
+        if (selected_clip_id_) emit voiceIsolationChanged(true, selected_clip_id_, std::move(settings));
+    };
+    selected_clip_isolation_->regenerate = [this] {
+        if (selected_clip_id_) emit voiceIsolationRegenerate(true, selected_clip_id_);
+    };
     selected_clip_isolation_->cancel = [this] { emit voiceIsolationCancel(); };
-    auto* effects_section = new QWidget(mixer_content);
+
+    auto* effects_section = new QWidget(drawer_content);
     effects_section->setObjectName("audioTrackEffectsSection");
     auto* effects_section_layout = new QVBoxLayout(effects_section);
     effects_section_layout->setContentsMargins(0, 0, 0, 0);
@@ -232,8 +883,15 @@ void AudioWorkspace::createPanels(QWidget* parent) {
         new QLabel(translated("Track audio effects"), effects_section));
     track_effects_layout_ = new QVBoxLayout;
     effects_section_layout->addLayout(track_effects_layout_);
-    mixer_layout_->addWidget(effects_section);
-    mixer_scroll->setWidget(mixer_content);
+    drawer_layout->addWidget(effects_section);
+
+    drawer_scroll->setWidget(drawer_content);
+    auto* drawer_outer = new QVBoxLayout(clip_fx_drawer_);
+    drawer_outer->setContentsMargins(0, 0, 0, 0);
+    drawer_outer->addWidget(drawer_scroll);
+    clip_fx_drawer_->setVisible(false);
+    mixer_layout_->addWidget(clip_fx_drawer_);
+    connect(clip_fx_toggle, &QPushButton::toggled, clip_fx_drawer_, &QWidget::setVisible);
 }
 
 void AudioWorkspace::refreshTracks(
@@ -259,58 +917,110 @@ void AudioWorkspace::refreshTracks(
             delete strip.mixer_card;
         }
         strips_.clear();
+        int track_idx = 0;
         for (const auto* track : audio_tracks) {
+            ++track_idx;
             Strip strip;
             strip.id = track->track_id;
-            strip.meter_card = new QGroupBox(meter_page_);
-            strip.meter_card->setObjectName("audioTrackMeterCard");
-            auto* meter_layout = new QVBoxLayout(strip.meter_card);
-            strip.meter_name = new QLabel(strip.meter_card);
-            meter_layout->addWidget(strip.meter_name);
-            strip.meter = createMeter(strip.meter_card, "audioTrackMeter");
-            meter_layout->addWidget(strip.meter, 1, Qt::AlignHCenter);
+            strip.meter = createMeter(meter_page_, "audioTrackMeter", 10);
+            strip.meter_card = createMeterSlot(
+                meter_page_, QStringLiteral("A%1").arg(track_idx),
+                QString::fromUtf8(track->name.c_str()), strip.meter, track_idx == 1);
+            strip.meter_name = strip.meter_card->findChild<QLabel*>("audioMeterBadge");
             meter_layout_->addWidget(strip.meter_card);
 
-            strip.mixer_card = new QGroupBox(mixer_panel_);
+            strip.mixer_card = new QFrame(mixer_panel_);
             strip.mixer_card->setObjectName("audioTrackMixerCard");
+            strip.mixer_card->setFixedWidth(92);
             auto* layout = new QVBoxLayout(strip.mixer_card);
+            layout->setContentsMargins(5, 5, 5, 6);
+            layout->setSpacing(4);
+
+            auto* accent = new QFrame(strip.mixer_card);
+            accent->setFixedHeight(3);
+            accent->setStyleSheet(QStringLiteral("background: #3b82c4; border-radius: 1px;"));
+            layout->addWidget(accent);
+
             strip.mixer_name = new QLabel(strip.mixer_card);
+            strip.mixer_name->setObjectName("audioStripName");
+            strip.mixer_name->setAlignment(Qt::AlignCenter);
             layout->addWidget(strip.mixer_name);
-            strip.mixer_meter = createMeter(strip.mixer_card, "audioTrackMixerMeter");
-            strip.mixer_meter->setOrientation(Qt::Horizontal);
-            strip.mixer_meter->setFixedWidth(160);
-            layout->addWidget(strip.mixer_meter);
-            strip.gain = createGainSlider(strip.mixer_card, "audioTrackGain");
-            layout->addWidget(strip.gain);
-            strip.gain_value = new QLabel(strip.mixer_card);
-            layout->addWidget(strip.gain_value);
-            strip.pan = createPanSlider(strip.mixer_card, "audioTrackPan");
-            layout->addWidget(strip.pan);
-            strip.pan_value = new QLabel(strip.mixer_card);
-            layout->addWidget(strip.pan_value);
-            strip.mute = new QCheckBox(translated("Mute"), strip.mixer_card);
-            strip.mute->setObjectName("audioTrackMute");
-            strip.solo = new QCheckBox(translated("Solo"), strip.mixer_card);
-            strip.solo->setObjectName("audioTrackSolo");
-            auto* toggle_row = new QHBoxLayout;
-            toggle_row->addWidget(strip.mute);
-            toggle_row->addWidget(strip.solo);
-            layout->addLayout(toggle_row);
-            layout->addWidget(new QLabel(translated("Output"), strip.mixer_card));
+
             strip.output = new QComboBox(strip.mixer_card);
             strip.output->setObjectName("audioTrackOutput");
+            strip.output->setToolTip(translated("Output"));
             layout->addWidget(strip.output);
+
             auto* sends_header = new QHBoxLayout;
-            sends_header->addWidget(new QLabel(translated("Sends"), strip.mixer_card));
+            sends_header->setSpacing(2);
             strip.send_destination = new QComboBox(strip.mixer_card);
             strip.send_destination->setObjectName("audioTrackSendDestination");
+            strip.send_destination->setToolTip(translated("Sends"));
             sends_header->addWidget(strip.send_destination, 1);
-            strip.add_send = new QPushButton(translated("Add send"), strip.mixer_card);
+            strip.add_send = new QPushButton(QStringLiteral("+"), strip.mixer_card);
             strip.add_send->setObjectName("audioTrackAddSend");
+            strip.add_send->setFixedWidth(20);
+            strip.add_send->setToolTip(translated("Add send"));
             sends_header->addWidget(strip.add_send);
             layout->addLayout(sends_header);
             strip.sends_layout = new QVBoxLayout;
+            strip.sends_layout->setSpacing(2);
             layout->addLayout(strip.sends_layout);
+
+            auto* order_label = new QLabel(QStringLiteral("FX  DY  EQ"), strip.mixer_card);
+            order_label->setObjectName("audioStripSubLabel");
+            order_label->setAlignment(Qt::AlignCenter);
+            layout->addWidget(order_label);
+
+            auto* fx_btn = new QPushButton(QStringLiteral("FX"), strip.mixer_card);
+            fx_btn->setToolTip(translated("Track audio effects"));
+            layout->addWidget(fx_btn);
+            connect(fx_btn, &QPushButton::clicked, this, [this, id = strip.id] {
+                for (const auto& row : track_effects_rows_) {
+                    if (row.id == id && row.edit != nullptr) {
+                        row.edit->click();
+                        break;
+                    }
+                }
+            });
+
+            layout->addWidget(new MiniCurveWidget(MiniCurveWidget::Kind::Dynamics, strip.mixer_card));
+            layout->addWidget(new MiniCurveWidget(MiniCurveWidget::Kind::Eq, strip.mixer_card));
+
+            strip.pan = createPanSlider(strip.mixer_card, "audioTrackPan");
+            layout->addWidget(strip.pan);
+            strip.pan_value = new QLabel(strip.mixer_card);
+            strip.pan_value->setObjectName("audioStripSubLabel");
+            strip.pan_value->setAlignment(Qt::AlignCenter);
+            layout->addWidget(strip.pan_value);
+
+            strip.mute = new QCheckBox(QStringLiteral("M"), strip.mixer_card);
+            strip.mute->setObjectName("audioTrackMute");
+            strip.mute->setToolTip(translated("Mute"));
+            strip.solo = new QCheckBox(QStringLiteral("S"), strip.mixer_card);
+            strip.solo->setObjectName("audioTrackSolo");
+            strip.solo->setToolTip(translated("Solo"));
+            auto* toggle_row = new QHBoxLayout;
+            toggle_row->setSpacing(4);
+            toggle_row->addStretch(1);
+            toggle_row->addWidget(strip.mute);
+            toggle_row->addWidget(strip.solo);
+            toggle_row->addStretch(1);
+            layout->addLayout(toggle_row);
+
+            strip.gain_value = new QLabel(strip.mixer_card);
+            strip.gain_value->setObjectName("audioGainReadout");
+            strip.gain_value->setAlignment(Qt::AlignCenter);
+            layout->addWidget(strip.gain_value);
+
+            auto* fader_row = new QHBoxLayout;
+            fader_row->setSpacing(3);
+            strip.gain = createGainSlider(strip.mixer_card, "audioTrackGain");
+            fader_row->addWidget(strip.gain);
+            fader_row->addWidget(new DbScaleWidget(false, strip.mixer_card));
+            strip.mixer_meter = createMeter(strip.mixer_card, "audioTrackMixerMeter", 10);
+            fader_row->addWidget(strip.mixer_meter);
+            layout->addLayout(fader_row, 1);
 
             connect(strip.gain, &QSlider::sliderPressed, this,
                     &AudioWorkspace::gainEditStarted);
@@ -393,50 +1103,89 @@ void AudioWorkspace::refreshTracks(
         for (auto& strip : bus_strips_) delete strip.meter_card;
         clearLayout(bus_mixer_layout_);
         bus_strips_.clear();
+        int bus_idx = 0;
         for (const auto* bus : audio_buses) {
+            ++bus_idx;
             BusStrip strip;
             strip.id = bus->bus_id;
-            strip.meter_card = new QGroupBox(meter_page_);
-            auto* meter_layout = new QVBoxLayout(strip.meter_card);
-            strip.meter_name = new QLabel(strip.meter_card);
-            meter_layout->addWidget(strip.meter_name);
-            strip.meter = createMeter(strip.meter_card, "audioBusMeter");
-            meter_layout->addWidget(strip.meter, 1, Qt::AlignHCenter);
+            strip.meter = createMeter(meter_page_, "audioBusMeter", 10);
+            strip.meter_card = createMeterSlot(
+                meter_page_, QStringLiteral("B%1").arg(bus_idx),
+                QString::fromUtf8(bus->name.c_str()), strip.meter, false);
+            strip.meter_name = strip.meter_card->findChild<QLabel*>("audioMeterBadge");
             meter_layout_->addWidget(strip.meter_card);
 
-            strip.mixer_card = new QGroupBox(mixer_panel_);
+            strip.mixer_card = new QFrame(mixer_panel_);
             strip.mixer_card->setObjectName("audioBusMixerCard");
+            strip.mixer_card->setFixedWidth(92);
             auto* layout = new QVBoxLayout(strip.mixer_card);
+            layout->setContentsMargins(5, 5, 5, 6);
+            layout->setSpacing(4);
+
+            auto* accent = new QFrame(strip.mixer_card);
+            accent->setFixedHeight(3);
+            accent->setStyleSheet(QStringLiteral("background: #c97a2b; border-radius: 1px;"));
+            layout->addWidget(accent);
+
             strip.mixer_name = new QLabel(strip.mixer_card);
+            strip.mixer_name->setObjectName("audioStripName");
+            strip.mixer_name->setAlignment(Qt::AlignCenter);
             layout->addWidget(strip.mixer_name);
-            strip.mixer_meter = createMeter(strip.mixer_card, "audioBusMixerMeter");
-            strip.mixer_meter->setOrientation(Qt::Horizontal);
-            strip.mixer_meter->setFixedWidth(160);
-            layout->addWidget(strip.mixer_meter);
-            strip.gain = createGainSlider(strip.mixer_card, "audioBusGain");
-            layout->addWidget(strip.gain);
-            strip.gain_value = new QLabel(strip.mixer_card);
-            layout->addWidget(strip.gain_value);
+
+            auto* order_label = new QLabel(QStringLiteral("FX  DY  EQ"), strip.mixer_card);
+            order_label->setObjectName("audioStripSubLabel");
+            order_label->setAlignment(Qt::AlignCenter);
+            layout->addWidget(order_label);
+
+            layout->addWidget(new MiniCurveWidget(MiniCurveWidget::Kind::Dynamics, strip.mixer_card));
+            layout->addWidget(new MiniCurveWidget(MiniCurveWidget::Kind::Eq, strip.mixer_card));
+
             strip.pan = createPanSlider(strip.mixer_card, "audioBusPan");
             layout->addWidget(strip.pan);
             strip.pan_value = new QLabel(strip.mixer_card);
+            strip.pan_value->setObjectName("audioStripSubLabel");
+            strip.pan_value->setAlignment(Qt::AlignCenter);
             layout->addWidget(strip.pan_value);
+
             auto* toggle_row = new QHBoxLayout;
-            strip.mute = new QCheckBox(translated("Mute"), strip.mixer_card);
+            toggle_row->setSpacing(4);
+            strip.mute = new QCheckBox(QStringLiteral("M"), strip.mixer_card);
             strip.mute->setObjectName("audioBusMute");
-            strip.solo = new QCheckBox(translated("Solo"), strip.mixer_card);
+            strip.mute->setToolTip(translated("Mute"));
+            strip.solo = new QCheckBox(QStringLiteral("S"), strip.mixer_card);
             strip.solo->setObjectName("audioBusSolo");
+            strip.solo->setToolTip(translated("Solo"));
+            toggle_row->addStretch(1);
             toggle_row->addWidget(strip.mute);
             toggle_row->addWidget(strip.solo);
+            toggle_row->addStretch(1);
             layout->addLayout(toggle_row);
+
             auto* actions = new QHBoxLayout;
-            auto* rename = new QPushButton(translated("Rename"), strip.mixer_card);
+            actions->setSpacing(3);
+            auto* rename = new QPushButton(QStringLiteral("Ren"), strip.mixer_card);
             rename->setObjectName("audioBusRename");
-            auto* remove = new QPushButton(translated("Remove"), strip.mixer_card);
+            rename->setToolTip(translated("Rename"));
+            auto* remove = new QPushButton(QStringLiteral("×"), strip.mixer_card);
             remove->setObjectName("audioBusRemove");
+            remove->setToolTip(translated("Remove"));
             actions->addWidget(rename);
             actions->addWidget(remove);
             layout->addLayout(actions);
+
+            strip.gain_value = new QLabel(strip.mixer_card);
+            strip.gain_value->setObjectName("audioGainReadout");
+            strip.gain_value->setAlignment(Qt::AlignCenter);
+            layout->addWidget(strip.gain_value);
+
+            auto* fader_row = new QHBoxLayout;
+            fader_row->setSpacing(3);
+            strip.gain = createGainSlider(strip.mixer_card, "audioBusGain");
+            fader_row->addWidget(strip.gain);
+            fader_row->addWidget(new DbScaleWidget(false, strip.mixer_card));
+            strip.mixer_meter = createMeter(strip.mixer_card, "audioBusMixerMeter", 10);
+            fader_row->addWidget(strip.mixer_meter);
+            layout->addLayout(fader_row, 1);
             connect(strip.gain, &QSlider::sliderPressed, this,
                     &AudioWorkspace::gainEditStarted);
             connect(strip.gain, &QSlider::valueChanged, this,
@@ -495,7 +1244,7 @@ void AudioWorkspace::refreshTracks(
         auto found = std::find_if(strips_.begin(), strips_.end(),
             [track](const Strip& strip) { return strip.id == track->track_id; });
         if (found == strips_.end()) continue;
-        found->meter_name->setText(QString::fromUtf8(track->name.c_str()));
+        found->meter_name->setToolTip(QString::fromUtf8(track->name.c_str()));
         found->mixer_name->setText(QString::fromUtf8(track->name.c_str()));
         setGainSlider(found->gain, found->gain_value, track->audio_gain);
         setPanSlider(found->pan, found->pan_value, track->audio_pan);
@@ -592,9 +1341,8 @@ void AudioWorkspace::refreshTracks(
             [&bus](const BusStrip& strip) { return strip.id == bus.bus_id; });
         if (found == bus_strips_.end()) continue;
         const auto name = QString::fromUtf8(bus.name.c_str());
-        found->meter_name->setText(name);
+        found->meter_name->setToolTip(name);
         found->mixer_name->setText(name);
-        static_cast<QGroupBox*>(found->mixer_card)->setTitle(name);
         setGainSlider(found->gain, found->gain_value, bus.audio_gain);
         setPanSlider(found->pan, found->pan_value, bus.audio_pan);
         { const QSignalBlocker blocker(found->mute); found->mute->setChecked(bus.audio_muted); }
@@ -641,7 +1389,7 @@ void AudioWorkspace::rebuildTrackSendRows(
             row.destination->setObjectName("audioTrackSendBus");
             fillBusCombo(row.destination, buses, send.destination_bus_id);
             row.destination->removeItem(0);
-            row.gain = createGainSlider(row.widget, "audioTrackSendGain");
+            row.gain = createSendGainSlider(row.widget, "audioTrackSendGain");
             row.gain->setRange(0, 200);
             row.gain_value = new QLabel(row.widget);
             row.gain_value->setMinimumWidth(48);

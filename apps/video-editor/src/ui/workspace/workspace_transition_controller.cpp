@@ -63,7 +63,8 @@ WorkspaceTransitionController::WorkspaceTransitionController(
         });
     }
     for (auto* dock : dockWidgets()) {
-        if (dock == nullptr || dock == docks_.render_settings) continue;
+        if (dock == nullptr || dock == docks_.render_settings ||
+            dock == docks_.audio_effects) continue;
         connect(dock, &QDockWidget::visibilityChanged, this, [this](bool) {
             if (workspace_host_ != nullptr)
                 workspace_host_->refreshCentralWorkspaceVisibility();
@@ -426,7 +427,7 @@ void WorkspaceTransitionController::applyQueuedPage() {
     }
 }
 
-std::array<QDockWidget*, 9>
+std::array<QDockWidget*, 10>
 WorkspaceTransitionController::dockWidgets() const noexcept {
     return {
         docks_.bins,
@@ -437,7 +438,8 @@ WorkspaceTransitionController::dockWidgets() const noexcept {
         docks_.inspector,
         docks_.preview,
         docks_.timeline,
-        docks_.render_settings};
+        docks_.render_settings,
+        docks_.audio_effects};
 }
 
 void WorkspaceTransitionController::updateSelectors(WorkspacePageId page) {
@@ -472,7 +474,8 @@ void WorkspaceTransitionController::enterAudioLayout() {
                        docks_.favorites, docks_.effects}) {
         if (dock != nullptr) dock->hide();
     }
-    for (auto* dock : {docks_.preview, docks_.inspector, docks_.timeline}) {
+    for (auto* dock : {docks_.audio_effects, docks_.preview,
+                       docks_.inspector, docks_.timeline}) {
         if (dock != nullptr) dock->show();
     }
     if (docks_.render_settings != nullptr) docks_.render_settings->hide();
@@ -484,6 +487,7 @@ void WorkspaceTransitionController::leaveAudioLayout() {
     if (main_window != nullptr && !dock_layout_before_audio_.isEmpty()) {
         main_window->restoreState(dock_layout_before_audio_, 9);
     }
+    if (docks_.audio_effects != nullptr) docks_.audio_effects->hide();
     dock_layout_before_audio_.clear();
 }
 
